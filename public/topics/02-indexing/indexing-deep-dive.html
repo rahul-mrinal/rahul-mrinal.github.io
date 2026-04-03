@@ -1,0 +1,1373 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Indexing - Deep Dive</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js" onload="renderMathInElement(document.body, {
+    delimiters: [
+      {left: '$$', right: '$$', display: true},
+      {left: '\\[', right: '\\]', display: true},
+      {left: '$', right: '$', display: false},
+      {left: '\\(', right: '\\)', display: false}
+    ],
+    throwOnError: false
+  });"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../playground.css" />
+</head>
+
+<body>
+<div class="topbar">
+  <a href="/" class="topbar-brand">
+    <div class="topbar-logo">RM</div>
+    <span class="topbar-label">Rahul Mrinal</span>
+  </a>
+  <a href="/" class="topbar-back">
+    ← Back to Portfolio
+  </a>
+</div>
+
+
+  <div class="hero">
+    <div class="container">
+      <h1>Indexing: Deep Dive</h1>
+      <p>From brute-force scanning to inverted indexes, chunking strategies, and field types - everything you need to
+        know</p>
+    </div>
+  </div>
+
+  <nav class="toc">
+    <div class="toc-inner">
+      <a href="#s1">What is Indexing?</a>
+      <a href="#s2">Inverted Index</a>
+      <a href="#s3">Chunking</a>
+      <a href="#s4">Metadata</a>
+      <a href="#s5">Field Types</a>
+      <a href="#s6">Index Ops</a>
+      <a href="#s7">Practical</a>
+    </div>
+  </nav>
+
+  <div class="container">
+
+    <!-- ===== SECTION 1: WHAT IS INDEXING? ===== -->
+    <section id="s1">
+      <h2><span class="num">01</span> What is Indexing?</h2>
+      <p>Imagine you have 10 million documents and a user types a query. You <em>could</em> open every single document,
+        read every single word, and check for matches. But that's insane. <strong>Indexing</strong> is the process of
+        building data structures <em>ahead of time</em> so that queries can be answered in milliseconds instead of
+        hours.</p>
+
+      <div class="analogy">
+        <div class="icon">📖</div>
+        <p><strong>Analogy:</strong> Think of the index at the back of a textbook. When you want to learn about "binary
+          search," you don't read the entire 800-page book. You flip to the index, find "binary search → page 247," and
+          go directly there. A search index does the same thing for every word across millions of documents.</p>
+      </div>
+
+      <h3>The brute-force disaster</h3>
+      <p>Without an index, you must scan every document for every query. The time complexity is:</p>
+
+      <div class="formula-box">
+        $$\color{#ff6b6b}{T_{\text{brute}}} = \mathcal{O}(\color{#ffd93d}{N} \times \color{#6c63ff}{M})$$
+        <div class="label">
+          \(\color{#ffd93d}{N}\) = number of documents &nbsp;&bull;&nbsp;
+          \(\color{#6c63ff}{M}\) = average tokens per document
+        </div>
+      </div>
+
+      <div class="card card-red">
+        <strong>How bad is this?</strong>
+        <p class="dim">If you have 10 million documents averaging 1,000 tokens each, every query scans <strong>10
+            billion tokens</strong>. At 1 GHz processing speed, that's ~10 seconds per query. With 100 queries/second,
+          you'd need 1,000 servers just for brute force.</p>
+      </div>
+
+      <h3>With an index</h3>
+      <p>An index pre-processes all documents into a lookup structure. Now a query for "binary search" just looks up
+        those terms in the index and immediately gets back a list of matching documents:</p>
+
+      <div class="formula-box">
+        $$\color{#00c9a7}{T_{\text{indexed}}} = \mathcal{O}(\color{#6c63ff}{|q|} \times \color{#ffd93d}{\overline{L}})$$
+        <div class="label">
+          \(\color{#6c63ff}{|q|}\) = number of query terms &nbsp;&bull;&nbsp;
+          \(\color{#ffd93d}{\overline{L}}\) = average posting list length (documents containing the term)
+        </div>
+      </div>
+
+      <div class="card card-green">
+        <strong>The speedup is enormous.</strong>
+        <p class="dim">Instead of scanning 10 billion tokens, you look up 2-3 query terms in a hash map and intersect
+          posting lists with maybe 50,000 entries each. That's <strong>microseconds</strong>, not seconds. A reduction
+          of 5-6 orders of magnitude.</p>
+      </div>
+
+      <h3>Types of indexes in search</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Index Type</th>
+            <th>What It Stores</th>
+            <th>Used For</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Inverted Index</strong></td>
+            <td>Term → list of documents</td>
+            <td>Full-text keyword search (BM25)</td>
+          </tr>
+          <tr>
+            <td><strong>Vector Index</strong></td>
+            <td>Document → dense embedding</td>
+            <td>Semantic / similarity search (ANN)</td>
+          </tr>
+          <tr>
+            <td><strong>Columnar Index</strong></td>
+            <td>Field → sorted values</td>
+            <td>Filtering, faceting, sorting</td>
+          </tr>
+          <tr>
+            <td><strong>Geospatial Index</strong></td>
+            <td>Coordinates → regions</td>
+            <td>Location-based queries</td>
+          </tr>
+          <tr>
+            <td><strong>B-Tree / LSM</strong></td>
+            <td>Key → value</td>
+            <td>Exact key lookups, range queries</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <p>In this masterclass, we'll focus on the <strong>inverted index</strong> (the backbone of search) and how
+        documents are prepared, chunked, and stored for retrieval.</p>
+    </section>
+
+    <!-- ===== SECTION 2: INVERTED INDEX ===== -->
+    <section id="s2">
+      <h2><span class="num">02</span> The Inverted Index</h2>
+      <p>The inverted index is the single most important data structure in information retrieval. It's what makes
+        Google, Elasticsearch, and every search engine fast.</p>
+
+      <h3>Forward index vs. inverted index</h3>
+      <p>A <strong>forward index</strong> maps <em>documents to terms</em>. An <strong>inverted index</strong> flips
+        this - it maps <em>terms to documents</em>.</p>
+
+      <div class="grid-2">
+        <div class="card card-red">
+          <strong>Forward Index</strong>
+          <p class="dim" style="margin-bottom:12px;">Document → terms it contains</p>
+          <div style="font-family:'JetBrains Mono',monospace; font-size:0.83rem; line-height:1.9;">
+            <div><span style="color:var(--accent3)">Doc 1</span> → [the, <span style="color:var(--accent4)">cat</span>,
+              sat, on, the, <span style="color:var(--accent4)">mat</span>]</div>
+            <div><span style="color:var(--accent3)">Doc 2</span> → [the, <span style="color:var(--accent4)">dog</span>,
+              sat, on, the, <span style="color:var(--accent4)">cat</span>]</div>
+            <div><span style="color:var(--accent3)">Doc 3</span> → [the, <span style="color:var(--accent4)">cat</span>,
+              and, the, <span style="color:var(--accent4)">dog</span>]</div>
+          </div>
+          <p class="dim" style="margin-top:12px; font-size:0.85rem;">To find "cat" → must scan ALL docs. Slow!</p>
+        </div>
+        <div class="card card-green">
+          <strong>Inverted Index</strong>
+          <p class="dim" style="margin-bottom:12px;">Term → documents containing it</p>
+          <div style="font-family:'JetBrains Mono',monospace; font-size:0.83rem; line-height:1.9;">
+            <div><span style="color:var(--accent2)">"cat"</span> → [Doc 1, Doc 2, Doc 3]</div>
+            <div><span style="color:var(--accent2)">"dog"</span> → [Doc 2, Doc 3]</div>
+            <div><span style="color:var(--accent2)">"mat"</span> → [Doc 1]</div>
+            <div><span style="color:var(--accent2)">"sat"</span> → [Doc 1, Doc 2]</div>
+          </div>
+          <p class="dim" style="margin-top:12px; font-size:0.85rem;">To find "cat" → instant lookup. Fast!</p>
+        </div>
+      </div>
+
+      <h3>How it's built - step by step</h3>
+      <div class="step-flow">
+        <div class="step-pill" style="border-color:var(--accent);color:var(--accent);">1. Tokenize</div>
+        <div class="step-arrow">→</div>
+        <div class="step-pill" style="border-color:var(--accent2);color:var(--accent2);">2. Normalize</div>
+        <div class="step-arrow">→</div>
+        <div class="step-pill" style="border-color:var(--accent4);color:var(--accent4);">3. Build Posting Lists</div>
+        <div class="step-arrow">→</div>
+        <div class="step-pill" style="border-color:var(--accent3);color:var(--accent3);">4. Store & Compress</div>
+      </div>
+
+      <div class="card card-accent">
+        <strong>Step 1: Tokenize</strong>
+        <p class="dim">Split the raw text into individual tokens (words). Handle punctuation, hyphens, special
+          characters.</p>
+        <pre><code><span class="str">"Machine Learning is AMAZING!"</span>  →  [<span class="str">"Machine"</span>, <span class="str">"Learning"</span>, <span class="str">"is"</span>, <span class="str">"AMAZING"</span>]</code></pre>
+      </div>
+
+      <div class="card card-green">
+        <strong>Step 2: Normalize</strong>
+        <p class="dim">Lowercase, stem/lemmatize, remove stop words. This ensures "Running" and "run" map to the same
+          entry.</p>
+        <pre><code>[<span class="str">"Machine"</span>, <span class="str">"Learning"</span>, <span class="str">"is"</span>, <span class="str">"AMAZING"</span>]
+  → lowercase → [<span class="str">"machine"</span>, <span class="str">"learning"</span>, <span class="str">"is"</span>, <span class="str">"amazing"</span>]
+  → remove stops → [<span class="str">"machine"</span>, <span class="str">"learning"</span>, <span class="str">"amazing"</span>]</code></pre>
+      </div>
+
+      <div class="card card-yellow">
+        <strong>Step 3: Build Posting Lists</strong>
+        <p class="dim">For each unique term, record which document it appeared in and how many times (term frequency).
+          Optionally record positions for phrase queries.</p>
+      </div>
+
+      <h3>Posting list anatomy</h3>
+      <p>Each term in the inverted index points to a <strong>posting list</strong> - an ordered list of document
+        references:</p>
+
+      <div class="visual-diagram">
+        <div class="diagram-title">Inverted Index with Term Frequencies</div>
+        <div class="idx-row">
+          <span class="idx-term">machine</span>
+          <span class="idx-arrow">→</span>
+          <div class="idx-posting">
+            <span class="idx-doc"><span class="doc-id">D1</span><span class="tf-badge">tf:3</span></span>
+            <span class="idx-doc"><span class="doc-id">D4</span><span class="tf-badge">tf:1</span></span>
+            <span class="idx-doc"><span class="doc-id">D7</span><span class="tf-badge">tf:5</span></span>
+          </div>
+        </div>
+        <div class="idx-row">
+          <span class="idx-term">learning</span>
+          <span class="idx-arrow">→</span>
+          <div class="idx-posting">
+            <span class="idx-doc"><span class="doc-id">D1</span><span class="tf-badge">tf:2</span></span>
+            <span class="idx-doc"><span class="doc-id">D3</span><span class="tf-badge">tf:1</span></span>
+            <span class="idx-doc"><span class="doc-id">D7</span><span class="tf-badge">tf:4</span></span>
+            <span class="idx-doc"><span class="doc-id">D9</span><span class="tf-badge">tf:1</span></span>
+          </div>
+        </div>
+        <div class="idx-row">
+          <span class="idx-term">neural</span>
+          <span class="idx-arrow">→</span>
+          <div class="idx-posting">
+            <span class="idx-doc"><span class="doc-id">D3</span><span class="tf-badge">tf:2</span></span>
+          </div>
+        </div>
+      </div>
+
+      <h3>Positional indexes for phrase queries</h3>
+      <p>If a user searches for <code>"machine learning"</code> (in quotes - a phrase query), we need to know not just
+        <em>which</em> documents contain both words, but <em>where</em> they appear. A positional index stores token
+        positions:</p>
+
+      <div class="visual-diagram">
+        <div class="diagram-title">Positional Inverted Index</div>
+        <div class="idx-row">
+          <span class="idx-term">machine</span>
+          <span class="idx-arrow">→</span>
+          <div class="idx-posting">
+            <span class="idx-doc"><span class="doc-id">D1</span>: pos [<span style="color:var(--accent4)">0</span>,
+              <span style="color:var(--accent4)">14</span>, <span style="color:var(--accent4)">28</span>]</span>
+            <span class="idx-doc"><span class="doc-id">D4</span>: pos [<span
+                style="color:var(--accent4)">7</span>]</span>
+          </div>
+        </div>
+        <div class="idx-row">
+          <span class="idx-term">learning</span>
+          <span class="idx-arrow">→</span>
+          <div class="idx-posting">
+            <span class="idx-doc"><span class="doc-id">D1</span>: pos [<span style="color:var(--accent4)">1</span>,
+              <span style="color:var(--accent4)">15</span>]</span>
+            <span class="idx-doc"><span class="doc-id">D4</span>: pos [<span
+                style="color:var(--accent4)">8</span>]</span>
+          </div>
+        </div>
+      </div>
+
+      <p>To verify the phrase <code>"machine learning"</code>, we check: does any document have <code>machine</code> at
+        position <em>p</em> and <code>learning</code> at position <em>p+1</em>? In D1, positions 0 and 1 match. In D4,
+        positions 7 and 8 match. Both documents contain the exact phrase.</p>
+
+      <h3>Interactive: Build an Inverted Index</h3>
+      <p>Type documents below (one per line) and watch the inverted index build live:</p>
+
+      <div class="playground">
+        <h4>Live Inverted Index Builder</h4>
+        <div style="margin-bottom:16px;">
+          <label style="font-size:0.85rem; font-weight:600; display:block; margin-bottom:6px;">Documents (one per
+            line)</label>
+          <textarea id="idx-docs-input" class="demo-input" rows="5" placeholder="Type documents here...">The cat sat on the mat
+The dog chased the cat
+The cat and the dog are friends</textarea>
+        </div>
+        <div style="margin-bottom:12px;">
+          <label style="display:flex; align-items:center; gap:8px; font-size:0.85rem; cursor:pointer;">
+            <input type="checkbox" id="idx-show-positions" style="accent-color:var(--accent);">
+            Show positions (positional index)
+          </label>
+        </div>
+        <div style="margin-bottom:12px;">
+          <label style="display:flex; align-items:center; gap:8px; font-size:0.85rem; cursor:pointer;">
+            <input type="checkbox" id="idx-remove-stops" style="accent-color:var(--accent);">
+            Remove stop words (the, a, an, is, on, and, are, in, of, to, it, for, with)
+          </label>
+        </div>
+        <div id="idx-output"></div>
+        <div id="idx-stats" class="result-box" style="display:none;"></div>
+      </div>
+    </section>
+
+    <!-- ===== SECTION 3: DOCUMENT CHUNKING ===== -->
+    <section id="s3">
+      <h2><span class="num">03</span> Document Chunking</h2>
+      <p>Most real-world documents are far too long to index as a single unit. A 50-page PDF, a long blog post, a legal
+        contract - these need to be broken into smaller pieces called <strong>chunks</strong> before indexing.</p>
+
+      <h3>Why we chunk</h3>
+      <div class="grid-2">
+        <div class="card card-accent">
+          <strong>Token limits</strong>
+          <p class="dim">Embedding models (for vector search) have max token limits (512, 8192, etc.). A 20,000-word
+            document simply can't be embedded as one unit.</p>
+        </div>
+        <div class="card card-green">
+          <strong>Relevance dilution</strong>
+          <p class="dim">If a document has one relevant paragraph buried in 50 pages of unrelated text, the overall
+            document score gets diluted. Smaller chunks let that one paragraph shine.</p>
+        </div>
+        <div class="card card-yellow">
+          <strong>Better retrieval precision</strong>
+          <p class="dim">Returning a specific chunk lets the reader (or LLM) find the exact answer faster than returning
+            an entire 50-page document.</p>
+        </div>
+        <div class="card card-red">
+          <strong>Memory & speed</strong>
+          <p class="dim">Processing smaller chunks is faster and uses less memory at query time. Especially important
+            for reranking and LLM context windows.</p>
+        </div>
+      </div>
+
+      <h3>Chunking strategies</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Strategy</th>
+            <th>How It Works</th>
+            <th>Pros</th>
+            <th>Cons</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Fixed-size</strong></td>
+            <td>Split every N characters/tokens</td>
+            <td>Simple, predictable chunk sizes</td>
+            <td>Cuts mid-sentence, breaks context</td>
+          </tr>
+          <tr>
+            <td><strong>Sentence-based</strong></td>
+            <td>Split on sentence boundaries</td>
+            <td>Preserves sentence meaning</td>
+            <td>Uneven sizes, some sentences are tiny</td>
+          </tr>
+          <tr>
+            <td><strong>Paragraph-based</strong></td>
+            <td>Split on double newlines / paragraphs</td>
+            <td>Preserves topical coherence</td>
+            <td>Huge variance in paragraph size</td>
+          </tr>
+          <tr>
+            <td><strong>Semantic</strong></td>
+            <td>Use embeddings to detect topic shifts</td>
+            <td>Best semantic coherence</td>
+            <td>Expensive, requires embedding model</td>
+          </tr>
+          <tr>
+            <td><strong>Recursive</strong></td>
+            <td>Try paragraph → sentence → fixed-size fallback</td>
+            <td>Best of all worlds</td>
+            <td>More complex implementation</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Overlap between chunks</h3>
+      <p>When you split text at a boundary, context at the edges is lost. <strong>Overlap</strong> solves this by
+        including some text from the previous chunk at the start of the next chunk:</p>
+
+      <div class="visual-diagram">
+        <div class="diagram-title">Chunking with Overlap (chunk_size=100, overlap=20)</div>
+        <div class="chunk-viz">
+          <div class="chunk-block">
+            <div class="chunk-label">Chunk 1 (chars 0–100)</div>
+            <span style="color:var(--text)">The quick brown fox jumps over the lazy dog. Machine learning is a subset of
+              artificial intelligence...</span>
+          </div>
+          <div class="chunk-block">
+            <div class="chunk-label">Chunk 2 (chars 80–180)</div>
+            <span class="overlap-indicator">overlap</span>
+            <span style="color:var(--text)">...artificial intelligence that enables computers to learn from data without
+              being explicitly...</span>
+          </div>
+          <div class="chunk-block">
+            <div class="chunk-label">Chunk 3 (chars 160–260)</div>
+            <span class="overlap-indicator">overlap</span>
+            <span style="color:var(--text)">...being explicitly programmed. Deep learning is a further subset that uses
+              neural networks with...</span>
+          </div>
+        </div>
+      </div>
+
+      <h3>Chunk size tradeoffs</h3>
+      <div class="grid-2">
+        <div class="card card-red">
+          <strong>Too small (< 100 tokens)</strong>
+              <p class="dim">Chunks lack context. "It increased by 50%" - what increased? The chunk doesn't know.
+                Embeddings are poor because there's not enough signal. Lots of chunks = slower retrieval.</p>
+        </div>
+        <div class="card card-red">
+          <strong>Too large (> 2000 tokens)</strong>
+          <p class="dim">Relevance dilution returns. A chunk covers multiple topics, so BM25/vector scores are averaged
+            across unrelated content. May exceed embedding model limits.</p>
+        </div>
+      </div>
+
+      <div class="card card-green">
+        <strong>Sweet spot: 200–800 tokens</strong>
+        <p class="dim">Most practitioners find chunks of 200-800 tokens work best. This is roughly 1-4 paragraphs -
+          enough context to be meaningful, small enough to be precise. Common defaults: 512 tokens for embedding models,
+          256-500 for BM25.</p>
+      </div>
+
+      <h3>Interactive: Chunking Demo</h3>
+      <p>Paste text below and experiment with different chunking strategies and sizes:</p>
+
+      <div class="playground">
+        <h4>Document Chunking Visualizer</h4>
+        <div style="margin-bottom:16px;">
+          <label style="font-size:0.85rem; font-weight:600; display:block; margin-bottom:6px;">Paste your text</label>
+          <textarea id="chunk-text-input" class="demo-input"
+            rows="8">Machine learning is a branch of artificial intelligence that focuses on building systems that learn from data. Instead of being explicitly programmed, these systems improve their performance through experience.
+
+Supervised learning is a type of machine learning where the model is trained on labeled data. The algorithm learns a mapping from inputs to outputs by studying example input-output pairs. Common algorithms include linear regression, decision trees, and neural networks.
+
+Unsupervised learning, on the other hand, deals with unlabeled data. The algorithm tries to find hidden patterns or structures in the data without any guidance. Clustering and dimensionality reduction are popular unsupervised techniques.
+
+Reinforcement learning is yet another paradigm where an agent learns by interacting with an environment. The agent receives rewards or penalties for its actions and learns to maximize cumulative reward over time. This approach has been successfully applied to game playing, robotics, and autonomous driving.</textarea>
+        </div>
+
+        <div class="slider-group">
+          <div class="slider-item">
+            <label><span>Strategy</span></label>
+            <select id="chunk-strategy" class="demo-select" style="width:100%; margin-top:4px;">
+              <option value="fixed">Fixed-size (characters)</option>
+              <option value="sentence">Sentence-based</option>
+              <option value="paragraph" selected>Paragraph-based</option>
+            </select>
+          </div>
+          <div class="slider-item">
+            <label><span>Chunk size (chars)</span><span id="chunk-size-val">300</span></label>
+            <input type="range" id="chunk-size" min="50" max="1000" step="25" value="300" />
+          </div>
+        </div>
+        <div class="slider-group">
+          <div class="slider-item">
+            <label><span>Overlap (chars)</span><span id="chunk-overlap-val">50</span></label>
+            <input type="range" id="chunk-overlap" min="0" max="200" step="10" value="50" />
+          </div>
+          <div class="slider-item">
+            <label><span>Max chunks per sentence group</span><span id="chunk-max-sentences-val">3</span></label>
+            <input type="range" id="chunk-max-sentences" min="1" max="10" step="1" value="3" />
+          </div>
+        </div>
+
+        <button class="demo-btn" onclick="runChunking()">Chunk It</button>
+
+        <div id="chunk-output" class="doc-results"></div>
+        <div id="chunk-stats" class="result-box" style="display:none;"></div>
+      </div>
+    </section>
+
+    <!-- ===== SECTION 4: METADATA & FIELDS ===== -->
+    <section id="s4">
+      <h2><span class="num">04</span> Metadata & Fields</h2>
+      <p>Documents aren't just blobs of text. They have <strong>metadata</strong> - structured attributes like category,
+        date, author, price, or tags. How you store and index these alongside the text content is critical for building
+        useful search.</p>
+
+      <h3>What is metadata?</h3>
+      <div class="analogy">
+        <div class="icon">🏷️</div>
+        <p><strong>Analogy:</strong> Metadata is like the label on a jar. The text content is the stuff inside the jar
+          (the actual food). The label tells you the brand, price, expiration date, and ingredients - you don't need to
+          taste the food to filter by these attributes. Similarly, metadata lets you filter, sort, and facet without
+          full-text searching the content.</p>
+      </div>
+
+      <h3>Use case: eCommerce product</h3>
+      <p>Here's how a product document looks with metadata fields in a search engine like Elasticsearch:</p>
+
+      <div class="meta-doc">
+        <span class="meta-bracket">{</span><br>
+        &nbsp;&nbsp;<span class="meta-key">"title"</span>: <span class="meta-str">"Sony WH-1000XM5 Wireless
+          Headphones"</span>,<br>
+        &nbsp;&nbsp;<span class="meta-key">"description"</span>: <span class="meta-str">"Industry-leading noise
+          canceling headphones with Auto NC Optimizer, crystal-clear hands-free calling, and up to 30 hours of battery
+          life..."</span>,<br>
+        &nbsp;&nbsp;<span class="meta-key">"price"</span>: <span class="meta-num">348.00</span>,<br>
+        &nbsp;&nbsp;<span class="meta-key">"category"</span>: <span class="meta-str">"Electronics > Audio >
+          Headphones"</span>,<br>
+        &nbsp;&nbsp;<span class="meta-key">"brand"</span>: <span class="meta-str">"Sony"</span>,<br>
+        &nbsp;&nbsp;<span class="meta-key">"rating"</span>: <span class="meta-num">4.7</span>,<br>
+        &nbsp;&nbsp;<span class="meta-key">"in_stock"</span>: <span style="color:var(--accent2)">true</span>,<br>
+        &nbsp;&nbsp;<span class="meta-key">"tags"</span>: [<span class="meta-str">"wireless"</span>, <span
+          class="meta-str">"bluetooth"</span>, <span class="meta-str">"noise-canceling"</span>],<br>
+        &nbsp;&nbsp;<span class="meta-key">"created_at"</span>: <span class="meta-str">"2024-05-15T10:30:00Z"</span><br>
+        <span class="meta-bracket">}</span>
+      </div>
+
+      <h3>How metadata fields are stored</h3>
+      <p>Metadata fields are stored separately from full-text content in a search index. Each field type has its own
+        optimized storage:</p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Field</th>
+            <th>Storage</th>
+            <th>Operations Supported</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>title</code></td>
+            <td>Inverted index (analyzed)</td>
+            <td>Full-text search, BM25 scoring</td>
+          </tr>
+          <tr>
+            <td><code>description</code></td>
+            <td>Inverted index (analyzed)</td>
+            <td>Full-text search, BM25 scoring</td>
+          </tr>
+          <tr>
+            <td><code>price</code></td>
+            <td>BKD tree (numeric)</td>
+            <td>Range queries, sorting, aggregations</td>
+          </tr>
+          <tr>
+            <td><code>category</code></td>
+            <td>Keyword index (not analyzed)</td>
+            <td>Exact match filtering, faceting</td>
+          </tr>
+          <tr>
+            <td><code>brand</code></td>
+            <td>Keyword index (not analyzed)</td>
+            <td>Exact match, aggregations</td>
+          </tr>
+          <tr>
+            <td><code>rating</code></td>
+            <td>BKD tree (numeric)</td>
+            <td>Range filtering, sorting</td>
+          </tr>
+          <tr>
+            <td><code>in_stock</code></td>
+            <td>Boolean field</td>
+            <td>Exact match filtering</td>
+          </tr>
+          <tr>
+            <td><code>tags</code></td>
+            <td>Keyword index (multi-value)</td>
+            <td>Exact match, facet counts</td>
+          </tr>
+          <tr>
+            <td><code>created_at</code></td>
+            <td>BKD tree (date)</td>
+            <td>Date range queries, sorting</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Filtered search vs. full-text search</h3>
+      <div class="grid-2">
+        <div class="card card-accent">
+          <strong>Full-text search</strong>
+          <p class="dim">User types free-form text. The engine tokenizes the query, looks up terms in the inverted
+            index, and scores documents by relevance (BM25).</p>
+          <pre><code><span class="cm">Query:</span> <span class="str">"wireless noise canceling headphones"</span>
+<span class="cm">→ Uses:</span> inverted index on title + description
+<span class="cm">→ Returns:</span> ranked by relevance score</code></pre>
+        </div>
+        <div class="card card-green">
+          <strong>Filtered search</strong>
+          <p class="dim">User selects structured constraints (price range, brand, category). The engine uses metadata
+            indexes for fast exact filtering - no scoring needed.</p>
+          <pre><code><span class="cm">Filter:</span> brand = <span class="str">"Sony"</span>
+         AND price &lt; <span class="num">400</span>
+         AND in_stock = <span class="kw">true</span>
+<span class="cm">→ Uses:</span> keyword + numeric indexes
+<span class="cm">→ Returns:</span> all matching docs (no ranking)</code></pre>
+        </div>
+      </div>
+
+      <div class="card card-yellow">
+        <strong>The real power: combining both</strong>
+        <p class="dim">In practice, search queries combine full-text and filters: "wireless headphones" with filters
+          brand=Sony, price &lt; $400, in_stock=true. The engine first applies the filter (cheap bitset operation), then
+          runs BM25 only on the filtered subset. This is dramatically faster than scoring all documents and filtering
+          afterward.</p>
+      </div>
+
+      <h3>Why metadata matters for RAG pipelines</h3>
+      <p>In Retrieval-Augmented Generation (RAG), metadata is crucial for:</p>
+      <div class="card card-accent">
+        <table class="vs-table">
+          <tr>
+            <td>Pre-filtering</td>
+            <td>Only retrieve chunks from specific sources, date ranges, or categories before running vector search</td>
+          </tr>
+          <tr>
+            <td>Source attribution</td>
+            <td>Every chunk carries its source document ID, page number, URL - essential for citations in LLM responses
+            </td>
+          </tr>
+          <tr>
+            <td>Access control</td>
+            <td>Metadata fields like <code>department</code> or <code>access_level</code> enable permission-based
+              retrieval</td>
+          </tr>
+          <tr>
+            <td>Freshness</td>
+            <td>Sort or filter by <code>updated_at</code> to prefer recent information over stale data</td>
+          </tr>
+        </table>
+      </div>
+    </section>
+
+    <!-- ===== SECTION 5: FIELD TYPES ===== -->
+    <section id="s5">
+      <h2><span class="num">05</span> Keyword Fields vs. Text Fields vs. Vector Fields</h2>
+      <p>Understanding the three fundamental field types is essential for designing search indexes. Each type is
+        optimized for a different kind of query.</p>
+
+      <div class="grid-2" style="grid-template-columns: 1fr 1fr 1fr;">
+        <div class="card card-accent">
+          <h3 style="margin-top:0; color:var(--accent);">Keyword</h3>
+          <p class="dim">Stored as-is, not analyzed. Used for exact matching, filtering, sorting, and aggregations.</p>
+          <div style="font-family:'JetBrains Mono',monospace; font-size:0.82rem; margin-top:8px;">
+            <div style="color:var(--text-dim);">Input:</div>
+            <div><span class="str">"New York City"</span></div>
+            <div style="color:var(--text-dim); margin-top:6px;">Indexed as:</div>
+            <div><span style="color:var(--accent)">New York City</span></div>
+            <div style="color:var(--text-dim); margin-top:6px;">Matches:</div>
+            <div style="color:var(--accent2)">✓</div> <span class="str">"New York City"</span>
+            <div style="color:var(--accent3)">✗</div> <span class="str">"new york"</span>
+            <div style="color:var(--accent3)">✗</div> <span class="str">"York"</span>
+          </div>
+        </div>
+        <div class="card card-green">
+          <h3 style="margin-top:0; color:var(--accent2);">Text (Analyzed)</h3>
+          <p class="dim">Tokenized, lowercased, stemmed. Used for full-text search with BM25 scoring.</p>
+          <div style="font-family:'JetBrains Mono',monospace; font-size:0.82rem; margin-top:8px;">
+            <div style="color:var(--text-dim);">Input:</div>
+            <div><span class="str">"New York City"</span></div>
+            <div style="color:var(--text-dim); margin-top:6px;">Indexed as:</div>
+            <div>[<span style="color:var(--accent2)">new</span>, <span style="color:var(--accent2)">york</span>, <span
+                style="color:var(--accent2)">city</span>]</div>
+            <div style="color:var(--text-dim); margin-top:6px;">Matches:</div>
+            <div style="color:var(--accent2)">✓</div> <span class="str">"new york"</span>
+            <div style="color:var(--accent2)">✓</div> <span class="str">"York"</span>
+            <div style="color:var(--accent2)">✓</div> <span class="str">"city"</span>
+          </div>
+        </div>
+        <div class="card card-yellow">
+          <h3 style="margin-top:0; color:var(--accent4);">Vector (Dense)</h3>
+          <p class="dim">Dense float array from embedding model. Used for semantic similarity via ANN search.</p>
+          <div style="font-family:'JetBrains Mono',monospace; font-size:0.82rem; margin-top:8px;">
+            <div style="color:var(--text-dim);">Input:</div>
+            <div><span class="str">"New York City"</span></div>
+            <div style="color:var(--text-dim); margin-top:6px;">Indexed as:</div>
+            <div>[<span style="color:var(--accent4)">0.12</span>, <span style="color:var(--accent4)">-0.87</span>, <span
+                style="color:var(--accent4)">0.34</span>, ...]</div>
+            <div style="color:var(--text-dim); margin-top:6px;">Matches:</div>
+            <div style="color:var(--accent2)">✓</div> <span class="str">"Big Apple"</span>
+            <div style="color:var(--accent2)">✓</div> <span class="str">"NYC"</span>
+            <div style="color:var(--accent2)">✓</div> <span class="str">"Manhattan"</span>
+          </div>
+        </div>
+      </div>
+
+      <h3>When to use which</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Aspect</th>
+            <th>Keyword</th>
+            <th>Text (Analyzed)</th>
+            <th>Vector</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Query type</strong></td>
+            <td>Exact match, filter, facet</td>
+            <td>Full-text search</td>
+            <td>Semantic similarity</td>
+          </tr>
+          <tr>
+            <td><strong>Scoring</strong></td>
+            <td>None (binary match)</td>
+            <td>BM25</td>
+            <td>Cosine / dot product</td>
+          </tr>
+          <tr>
+            <td><strong>Analysis</strong></td>
+            <td>None</td>
+            <td>Tokenize + normalize</td>
+            <td>Embedding model</td>
+          </tr>
+          <tr>
+            <td><strong>Storage cost</strong></td>
+            <td>Low</td>
+            <td>Medium</td>
+            <td>High (768-1536 floats/doc)</td>
+          </tr>
+          <tr>
+            <td><strong>Handles synonyms</strong></td>
+            <td>No</td>
+            <td>Only with synonym config</td>
+            <td>Yes (inherent)</td>
+          </tr>
+          <tr>
+            <td><strong>Aggregation</strong></td>
+            <td>Yes (facet counts)</td>
+            <td>No</td>
+            <td>No</td>
+          </tr>
+          <tr>
+            <td><strong>Sorting</strong></td>
+            <td>Yes</td>
+            <td>No (use keyword sub-field)</td>
+            <td>By similarity score</td>
+          </tr>
+          <tr>
+            <td><strong>Index structure</strong></td>
+            <td>Sorted doc values</td>
+            <td>Inverted index</td>
+            <td>HNSW / IVF graph</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Elasticsearch / OpenSearch mapping example</h3>
+      <p>Here's a real-world mapping showing all three field types in action:</p>
+
+      <pre><code><span class="kw">PUT</span> /products
+{
+  <span class="str">"mappings"</span>: {
+    <span class="str">"properties"</span>: {
+      <span class="cm">// TEXT field - analyzed, full-text searchable</span>
+      <span class="str">"title"</span>: {
+        <span class="str">"type"</span>: <span class="str">"text"</span>,
+        <span class="str">"analyzer"</span>: <span class="str">"standard"</span>,
+        <span class="str">"fields"</span>: {
+          <span class="cm">// Sub-field: keyword copy for sorting/aggs</span>
+          <span class="str">"keyword"</span>: { <span class="str">"type"</span>: <span class="str">"keyword"</span> }
+        }
+      },
+
+      <span class="cm">// TEXT field - analyzed for BM25 search</span>
+      <span class="str">"description"</span>: {
+        <span class="str">"type"</span>: <span class="str">"text"</span>,
+        <span class="str">"analyzer"</span>: <span class="str">"english"</span>
+      },
+
+      <span class="cm">// KEYWORD field - exact match only</span>
+      <span class="str">"brand"</span>:    { <span class="str">"type"</span>: <span class="str">"keyword"</span> },
+      <span class="str">"category"</span>: { <span class="str">"type"</span>: <span class="str">"keyword"</span> },
+      <span class="str">"tags"</span>:     { <span class="str">"type"</span>: <span class="str">"keyword"</span> },
+
+      <span class="cm">// NUMERIC fields - range queries, sorting</span>
+      <span class="str">"price"</span>:  { <span class="str">"type"</span>: <span class="str">"float"</span> },
+      <span class="str">"rating"</span>: { <span class="str">"type"</span>: <span class="str">"float"</span> },
+
+      <span class="cm">// BOOLEAN field - filtering</span>
+      <span class="str">"in_stock"</span>: { <span class="str">"type"</span>: <span class="str">"boolean"</span> },
+
+      <span class="cm">// DATE field - time-based filtering</span>
+      <span class="str">"created_at"</span>: { <span class="str">"type"</span>: <span class="str">"date"</span> },
+
+      <span class="cm">// VECTOR field - semantic search via embeddings</span>
+      <span class="str">"description_embedding"</span>: {
+        <span class="str">"type"</span>: <span class="str">"dense_vector"</span>,
+        <span class="str">"dims"</span>: <span class="num">768</span>,
+        <span class="str">"index"</span>: <span class="kw">true</span>,
+        <span class="str">"similarity"</span>: <span class="str">"cosine"</span>
+      }
+    }
+  }
+}</code></pre>
+
+      <div class="card card-green">
+        <strong>Key insight: multi-field mappings</strong>
+        <p class="dim">Notice that <code>title</code> has both a <code>text</code> type and a <code>keyword</code>
+          sub-field. This is a common pattern - the text version is used for full-text search, and the keyword version
+          is used for sorting and aggregations. Index the same data twice with different analyzers for different use
+          cases.</p>
+      </div>
+    </section>
+
+    <!-- ===== SECTION 6: INDEX OPERATIONS ===== -->
+    <section id="s6">
+      <h2><span class="num">06</span> Index Operations</h2>
+      <p>Creating an index is just the beginning. In production, you need to understand how documents flow in and out,
+        how the index stays fresh, and how to evolve the schema without downtime.</p>
+
+      <h3>Document lifecycle</h3>
+      <div class="step-flow">
+        <div class="step-pill" style="border-color:var(--accent2);color:var(--accent2);">Create Index</div>
+        <div class="step-arrow">→</div>
+        <div class="step-pill" style="border-color:var(--accent);color:var(--accent);">Index Documents</div>
+        <div class="step-arrow">→</div>
+        <div class="step-pill" style="border-color:var(--accent4);color:var(--accent4);">Search & Query</div>
+        <div class="step-arrow">→</div>
+        <div class="step-pill" style="border-color:var(--accent3);color:var(--accent3);">Update / Delete</div>
+      </div>
+
+      <h3>Refresh interval & near-real-time (NRT) search</h3>
+      <p>When you index a document, it doesn't become searchable immediately. Search engines use a buffer-and-flush
+        model:</p>
+
+      <div class="card card-accent">
+        <table class="vs-table">
+          <tr>
+            <td>In-memory buffer</td>
+            <td>New documents land in an in-memory buffer first. Not yet searchable.</td>
+          </tr>
+          <tr>
+            <td>Refresh</td>
+            <td>Periodically (default: every 1 second in Elasticsearch), the buffer is flushed to a new
+              <strong>segment</strong> on disk. Now the documents are searchable.</td>
+          </tr>
+          <tr>
+            <td>Flush / Commit</td>
+            <td>The translog is cleared and all data is safely persisted. Happens less frequently.</td>
+          </tr>
+        </table>
+      </div>
+
+      <div class="formula-box compact">
+        $$\text{Search latency after indexing} \approx \text{refresh\_interval} = \color{#00c9a7}{1\text{s (default)}}$$
+        <div class="label">Documents become searchable within ~1 second of indexing (NRT)</div>
+      </div>
+
+      <div class="card card-yellow">
+        <strong>Tuning refresh intervals</strong>
+        <p class="dim"><strong>Bulk indexing:</strong> Set <code>refresh_interval=-1</code> during bulk loads.
+          Refreshing after every batch wastes I/O. Do one final refresh when done.</p>
+        <p class="dim"><strong>Real-time dashboards:</strong> Keep 1s (default) for near-instant visibility.</p>
+        <p class="dim"><strong>Logs/metrics:</strong> Set to 30s or 60s - freshness matters less, throughput matters
+          more.</p>
+      </div>
+
+      <h3>Segment merging</h3>
+      <p>Each refresh creates a new <strong>segment</strong> - an immutable mini-index. Over time, you accumulate
+        hundreds of small segments. Searching across many segments is slow, so the engine periodically merges them:</p>
+
+      <div class="visual-diagram">
+        <div class="diagram-title">Segment Merge Process</div>
+        <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap; justify-content:center;">
+          <div style="display:flex; gap:4px;">
+            <div
+              style="background:rgba(108,99,255,0.15); border:1px solid var(--accent); border-radius:6px; padding:8px 12px; font-size:0.8rem; font-family:'JetBrains Mono',monospace;">
+              Seg 0<br><span style="color:var(--text-dim)">50 docs</span></div>
+            <div
+              style="background:rgba(108,99,255,0.15); border:1px solid var(--accent); border-radius:6px; padding:8px 12px; font-size:0.8rem; font-family:'JetBrains Mono',monospace;">
+              Seg 1<br><span style="color:var(--text-dim)">30 docs</span></div>
+            <div
+              style="background:rgba(108,99,255,0.15); border:1px solid var(--accent); border-radius:6px; padding:8px 12px; font-size:0.8rem; font-family:'JetBrains Mono',monospace;">
+              Seg 2<br><span style="color:var(--text-dim)">45 docs</span></div>
+            <div
+              style="background:rgba(108,99,255,0.15); border:1px solid var(--accent); border-radius:6px; padding:8px 12px; font-size:0.8rem; font-family:'JetBrains Mono',monospace;">
+              Seg 3<br><span style="color:var(--text-dim)">20 docs</span></div>
+          </div>
+          <span style="color:var(--accent4); font-size:1.5rem;">⟹</span>
+          <div
+            style="background:rgba(0,201,167,0.15); border:1px solid var(--accent2); border-radius:6px; padding:12px 20px; font-size:0.85rem; font-family:'JetBrains Mono',monospace;">
+            <strong style="color:var(--accent2);">Merged Segment</strong><br><span style="color:var(--text-dim)">145
+              docs</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card card-green">
+        <strong>Why segments are immutable</strong>
+        <p class="dim">Segments are never modified after creation - only merged into new segments. This means "deleting"
+          a document just marks it as deleted (a tombstone). The actual data is cleaned up during the next merge. This
+          immutability enables lock-free concurrent reads and makes crash recovery simple.</p>
+      </div>
+
+      <h3>Index aliases: zero-downtime reindexing</h3>
+      <p>What happens when you need to change the schema? You can't modify an existing mapping (e.g., change a field
+        from <code>text</code> to <code>keyword</code>). The solution: <strong>index aliases</strong>.</p>
+
+      <div class="step-flow">
+        <div class="step-pill" style="border-color:var(--accent);color:var(--accent);">1. Create new index (v2)</div>
+        <div class="step-arrow">→</div>
+        <div class="step-pill" style="border-color:var(--accent2);color:var(--accent2);">2. Reindex all docs into v2
+        </div>
+        <div class="step-arrow">→</div>
+        <div class="step-pill" style="border-color:var(--accent4);color:var(--accent4);">3. Swap alias atomically</div>
+        <div class="step-arrow">→</div>
+        <div class="step-pill" style="border-color:var(--accent3);color:var(--accent3);">4. Delete old index</div>
+      </div>
+
+      <pre><code><span class="cm">// Your app always queries the alias, never the index directly</span>
+<span class="kw">POST</span> /_aliases
+{
+  <span class="str">"actions"</span>: [
+    { <span class="str">"remove"</span>: { <span class="str">"index"</span>: <span class="str">"products_v1"</span>, <span class="str">"alias"</span>: <span class="str">"products"</span> } },
+    { <span class="str">"add"</span>:    { <span class="str">"index"</span>: <span class="str">"products_v2"</span>, <span class="str">"alias"</span>: <span class="str">"products"</span> } }
+  ]
+}
+<span class="cm">// This is ATOMIC - zero downtime, no missed queries</span></code></pre>
+
+      <h3>Schema evolution</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Change</th>
+            <th>Can You Do It In-Place?</th>
+            <th>Solution</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Add a new field</td>
+            <td style="color:var(--accent2)">Yes</td>
+            <td>Dynamic mapping adds it automatically</td>
+          </tr>
+          <tr>
+            <td>Change field type</td>
+            <td style="color:var(--accent3)">No</td>
+            <td>Reindex with alias swap</td>
+          </tr>
+          <tr>
+            <td>Change analyzer</td>
+            <td style="color:var(--accent3)">No</td>
+            <td>Reindex with alias swap</td>
+          </tr>
+          <tr>
+            <td>Delete a field</td>
+            <td style="color:var(--accent4)">Sort of</td>
+            <td>Field stays in mapping but reindex to reclaim space</td>
+          </tr>
+          <tr>
+            <td>Rename a field</td>
+            <td style="color:var(--accent3)">No</td>
+            <td>Add alias or reindex</td>
+          </tr>
+          <tr>
+            <td>Add sub-fields</td>
+            <td style="color:var(--accent2)">Yes</td>
+            <td>Update mapping, reindex existing docs</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ===== SECTION 7: PRACTICAL CONSIDERATIONS ===== -->
+    <section id="s7">
+      <h2><span class="num">07</span> Practical Considerations</h2>
+      <p>Designing indexes for production requires thinking about data volume, query patterns, and infrastructure. Here
+        are the guidelines that matter.</p>
+
+      <h3>Index size estimation</h3>
+      <p>A rough formula for estimating index size on disk:</p>
+
+      <div class="formula-box">
+        $$\color{#6c63ff}{\text{Index Size}} \approx \color{#ffd93d}{\text{Raw Data}} \times
+        \color{#00c9a7}{\text{Overhead Factor}}$$
+        <div class="label">
+          Overhead factor depends on field types: text ~1.5x, keyword ~1.1x, dense_vector ~4x (768-dim float32 =
+          3KB/doc)
+        </div>
+      </div>
+
+      <div class="card card-accent">
+        <strong>Example estimation</strong>
+        <table class="vs-table">
+          <tr>
+            <td>Raw documents</td>
+            <td>10 million products, ~2KB each = 20 GB raw</td>
+          </tr>
+          <tr>
+            <td>Text fields</td>
+            <td>title + description indexed and stored: ~30 GB</td>
+          </tr>
+          <tr>
+            <td>Keyword fields</td>
+            <td>brand, category, tags: ~3 GB</td>
+          </tr>
+          <tr>
+            <td>Numeric fields</td>
+            <td>price, rating: ~0.5 GB</td>
+          </tr>
+          <tr>
+            <td>Vector field (768d)</td>
+            <td>10M × 3KB = ~30 GB</td>
+          </tr>
+          <tr style="font-weight:700;">
+            <td style="color:var(--accent2)">Total estimate</td>
+            <td style="color:var(--accent2)">~63.5 GB (about 3.2x raw data)</td>
+          </tr>
+        </table>
+      </div>
+
+      <h3>Shard sizing guidelines</h3>
+      <p>In Elasticsearch/OpenSearch, each index is divided into <strong>shards</strong>. Shard sizing is one of the
+        most important production decisions:</p>
+
+      <div class="grid-2">
+        <div class="card card-red">
+          <strong>Too many small shards</strong>
+          <p class="dim">Each shard has overhead (memory for segment metadata, thread pools). 1,000 shards × 100MB each
+            = 100GB of data but enormous cluster overhead. The cluster master chokes managing metadata.</p>
+        </div>
+        <div class="card card-red">
+          <strong>Too few large shards</strong>
+          <p class="dim">A single 500GB shard takes forever to recover after a node failure. Reindexing is slow. No
+            parallelism for queries - one shard = one thread.</p>
+        </div>
+      </div>
+
+      <div class="card card-green">
+        <strong>The sweet spot</strong>
+        <table class="vs-table">
+          <tr>
+            <td>Shard size</td>
+            <td><strong>10–50 GB per shard</strong> (Elastic's official recommendation)</td>
+          </tr>
+          <tr>
+            <td>Shard count</td>
+            <td>Total data ÷ target shard size. For 200GB → 4-20 shards.</td>
+          </tr>
+          <tr>
+            <td>Shards per node</td>
+            <td>Keep under ~20 shards per GB of heap. With 32GB heap → max ~640 shards per node.</td>
+          </tr>
+          <tr>
+            <td>Replicas</td>
+            <td>1 replica (default) doubles storage but provides fault tolerance and read throughput.</td>
+          </tr>
+        </table>
+      </div>
+
+      <h3>One index vs. multiple indexes</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Pattern</th>
+            <th>When to Use</th>
+            <th>Example</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Single index</strong></td>
+            <td>Homogeneous data, same schema, queried together</td>
+            <td>All products in one <code>products</code> index</td>
+          </tr>
+          <tr>
+            <td><strong>Index per type</strong></td>
+            <td>Different schemas, rarely queried together</td>
+            <td><code>products</code>, <code>reviews</code>, <code>users</code></td>
+          </tr>
+          <tr>
+            <td><strong>Index per time period</strong></td>
+            <td>Time-series data with retention policies</td>
+            <td><code>logs-2024-01</code>, <code>logs-2024-02</code>, ...</td>
+          </tr>
+          <tr>
+            <td><strong>Index per tenant</strong></td>
+            <td>Multi-tenant SaaS with isolation needs</td>
+            <td><code>tenant-abc-products</code>, <code>tenant-xyz-products</code></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Time-series vs. catalog indexes</h3>
+      <div class="grid-2">
+        <div class="card card-accent">
+          <strong>Catalog indexes</strong>
+          <p class="dim">Products, users, articles. Documents are updated in place. Index is long-lived. Size grows
+            slowly. Schema is stable.</p>
+          <p class="dim"><strong>Strategy:</strong> Single index with aliases. Shard count set once. Use reindex + alias
+            swap for schema changes.</p>
+        </div>
+        <div class="card card-yellow">
+          <strong>Time-series indexes</strong>
+          <p class="dim">Logs, metrics, events. Documents are append-only (never updated). Data is time-partitioned. Old
+            data is deleted or archived.</p>
+          <p class="dim"><strong>Strategy:</strong> Index per time period (daily/weekly). Use ILM (Index Lifecycle
+            Management) to automatically rollover, warm, and delete old indexes.</p>
+        </div>
+      </div>
+
+      <div class="card card-green">
+        <strong>Quick decision framework</strong>
+        <table class="vs-table">
+          <tr>
+            <td>
+              < 1M docs</td>
+            <td>1 shard is fine. Don't overthink it.</td>
+          </tr>
+          <tr>
+            <td>1M–100M docs</td>
+            <td>Start with 2-5 primary shards. Add replicas for HA.</td>
+          </tr>
+          <tr>
+            <td>100M+ docs</td>
+            <td>Shard based on 30-50GB target size. Consider time-based indexes if applicable. Monitor heap and segment
+              counts.</td>
+          </tr>
+          <tr>
+            <td>Multi-field search</td>
+            <td>Use BM25F (field-boosted) with text + keyword sub-fields. Add vector field for hybrid search.</td>
+          </tr>
+        </table>
+      </div>
+
+      <h3>Quick Reference</h3>
+      <div class="card card-accent">
+        <p><strong>Q: What is an inverted index?</strong></p>
+        <p class="dim">A data structure that maps terms to the documents containing them - the reverse of a forward
+          index. It's what makes full-text search fast: O(1) term lookup instead of O(N) document scan.</p>
+        <p style="margin-top:16px;"><strong>Q: Why do we chunk documents?</strong></p>
+        <p class="dim">Token limits on embedding models, relevance dilution in long documents, faster retrieval, and
+          better precision when returning results to users or LLMs.</p>
+        <p style="margin-top:16px;"><strong>Q: Keyword field vs. text field?</strong></p>
+        <p class="dim">Keyword: stored verbatim, used for exact match/filter/sort/agg. Text: analyzed (tokenized,
+          lowercased, stemmed), used for full-text search with BM25 scoring.</p>
+        <p style="margin-top:16px;"><strong>Q: How does near-real-time search work?</strong></p>
+        <p class="dim">New documents go to an in-memory buffer, then flushed to a searchable segment every
+          refresh_interval (default 1 second). Not instant, but fast enough for most use cases.</p>
+        <p style="margin-top:16px;"><strong>Q: How do you handle schema changes without downtime?</strong></p>
+        <p class="dim">Index aliases. Create a new index with the new mapping, reindex all data, then atomically swap
+          the alias from old to new index. Your application code never changes - it always queries the alias.</p>
+      </div>
+    </section>
+
+  </div>
+
+  <div class="footer">
+    <p>Indexing: The foundation of every search system - from Elasticsearch and Apache Lucene to Pinecone and modern RAG
+      pipelines.</p>
+    <p style="margin-top:4px;">Master the fundamentals and every search technology becomes intuitive.</p>
+  </div>
+
+  <script>
+    // ======== Inverted Index Builder ========
+    function buildInvertedIndex() {
+      const text = document.getElementById('idx-docs-input').value.trim();
+      const showPositions = document.getElementById('idx-show-positions').checked;
+      const removeStops = document.getElementById('idx-remove-stops').checked;
+      const stopWords = new Set(['the', 'a', 'an', 'is', 'on', 'and', 'are', 'in', 'of', 'to', 'it', 'for', 'with', 'at', 'by', 'this', 'that', 'from', 'or', 'was', 'were', 'be', 'been', 'has', 'have', 'had', 'do', 'does', 'did', 'but', 'not', 'so', 'if', 'as', 'no', 'can', 'will', 'its']);
+
+      if (!text) {
+        document.getElementById('idx-output').innerHTML = '';
+        document.getElementById('idx-stats').style.display = 'none';
+        return;
+      }
+
+      const docs = text.split('\n').filter(l => l.trim());
+      const index = {};
+      let totalTokens = 0;
+
+      docs.forEach((doc, docIdx) => {
+        const tokens = doc.toLowerCase().replace(/[^\w\s]/g, '').split(/\s+/).filter(Boolean);
+        tokens.forEach((token, pos) => {
+          if (removeStops && stopWords.has(token)) return;
+          totalTokens++;
+          if (!index[token]) index[token] = {};
+          if (!index[token][docIdx]) index[token][docIdx] = { count: 0, positions: [] };
+          index[token][docIdx].count++;
+          index[token][docIdx].positions.push(pos);
+        });
+      });
+
+      const sorted = Object.entries(index).sort((a, b) => {
+        const aCount = Object.keys(a[1]).length;
+        const bCount = Object.keys(b[1]).length;
+        return bCount - aCount || a[0].localeCompare(b[0]);
+      });
+
+      let html = '<div class="visual-diagram"><div class="diagram-title">Generated Inverted Index</div>';
+      sorted.forEach(([term, postings]) => {
+        html += '<div class="idx-row"><span class="idx-term">' + term + '</span><span class="idx-arrow">→</span><div class="idx-posting">';
+        Object.entries(postings).forEach(([docId, info]) => {
+          let label = '<span class="doc-id">D' + (parseInt(docId) + 1) + '</span><span class="tf-badge">tf:' + info.count + '</span>';
+          if (showPositions) {
+            label += '<span style="color:var(--text-dim);font-size:0.75rem;margin-left:4px;">[' + info.positions.join(',') + ']</span>';
+          }
+          html += '<span class="idx-doc">' + label + '</span>';
+        });
+        html += '</div></div>';
+      });
+      html += '</div>';
+
+      document.getElementById('idx-output').innerHTML = html;
+
+      const statsEl = document.getElementById('idx-stats');
+      statsEl.style.display = 'block';
+      statsEl.innerHTML = '<div class="result-label">Index Statistics</div>' +
+        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-top:8px;">' +
+        '<div><span style="color:var(--text-dim);font-size:0.82rem;">Documents</span><br><span class="result-value" style="font-size:1.1rem;">' + docs.length + '</span></div>' +
+        '<div><span style="color:var(--text-dim);font-size:0.82rem;">Unique Terms</span><br><span class="result-value" style="font-size:1.1rem;">' + sorted.length + '</span></div>' +
+        '<div><span style="color:var(--text-dim);font-size:0.82rem;">Total Tokens</span><br><span class="result-value" style="font-size:1.1rem;">' + totalTokens + '</span></div>' +
+        '<div><span style="color:var(--text-dim);font-size:0.82rem;">Avg Posting Length</span><br><span class="result-value" style="font-size:1.1rem;">' + (sorted.length ? (sorted.reduce((s, e) => s + Object.keys(e[1]).length, 0) / sorted.length).toFixed(1) : 0) + '</span></div>' +
+        '</div>';
+    }
+
+    document.getElementById('idx-docs-input').addEventListener('input', buildInvertedIndex);
+    document.getElementById('idx-show-positions').addEventListener('change', buildInvertedIndex);
+    document.getElementById('idx-remove-stops').addEventListener('change', buildInvertedIndex);
+    buildInvertedIndex();
+
+    // ======== Chunking Demo ========
+    function splitSentences(text) {
+      const raw = text.match(/[^.!?]+[.!?]+[\s]*/g) || [text];
+      return raw.map(s => s.trim()).filter(Boolean);
+    }
+
+    function chunkFixed(text, size, overlap) {
+      const chunks = [];
+      let start = 0;
+      while (start < text.length) {
+        const end = Math.min(start + size, text.length);
+        chunks.push({
+          text: text.slice(start, end),
+          start: start,
+          end: end,
+          hasOverlap: start > 0 && overlap > 0
+        });
+        start += size - overlap;
+        if (start >= text.length) break;
+        if (size - overlap <= 0) break;
+      }
+      return chunks;
+    }
+
+    function chunkSentences(text, maxSentences, overlap) {
+      const sentences = splitSentences(text);
+      const chunks = [];
+      let i = 0;
+      const step = Math.max(1, maxSentences - Math.floor(overlap > 0 ? 1 : 0));
+      while (i < sentences.length) {
+        const group = sentences.slice(i, i + maxSentences);
+        chunks.push({
+          text: group.join(' '),
+          start: i,
+          end: i + group.length,
+          hasOverlap: i > 0 && overlap > 0
+        });
+        i += step;
+        if (i >= sentences.length) break;
+      }
+      return chunks;
+    }
+
+    function chunkParagraphs(text) {
+      return text.split(/\n\s*\n/).filter(p => p.trim()).map((p, i) => ({
+        text: p.trim(),
+        start: i,
+        end: i + 1,
+        hasOverlap: false
+      }));
+    }
+
+    function runChunking() {
+      const text = document.getElementById('chunk-text-input').value;
+      const strategy = document.getElementById('chunk-strategy').value;
+      const chunkSize = parseInt(document.getElementById('chunk-size').value);
+      const overlap = parseInt(document.getElementById('chunk-overlap').value);
+      const maxSentences = parseInt(document.getElementById('chunk-max-sentences').value);
+
+      let chunks = [];
+      if (strategy === 'fixed') {
+        chunks = chunkFixed(text, chunkSize, overlap);
+      } else if (strategy === 'sentence') {
+        chunks = chunkSentences(text, maxSentences, overlap);
+      } else {
+        chunks = chunkParagraphs(text);
+      }
+
+      const colors = ['var(--accent)', 'var(--accent2)', 'var(--accent3)', 'var(--accent4)'];
+      const bgColors = ['rgba(108,99,255,0.08)', 'rgba(0,201,167,0.08)', 'rgba(255,107,107,0.08)', 'rgba(255,217,61,0.08)'];
+
+      let html = '<div class="chunk-viz">';
+      chunks.forEach((chunk, i) => {
+        const color = colors[i % colors.length];
+        const bg = bgColors[i % bgColors.length];
+        const preview = chunk.text.length > 300 ? chunk.text.slice(0, 300) + '...' : chunk.text;
+        html += '<div class="chunk-block" style="background:' + bg + ';border-color:' + color + ';">';
+        html += '<div class="chunk-label" style="color:' + color + ';">Chunk ' + (i + 1) + ' (' + chunk.text.length + ' chars)</div>';
+        if (chunk.hasOverlap) html += '<span class="overlap-indicator">overlap from previous</span> ';
+        html += '<span style="color:var(--text);font-size:0.85rem;">' + escapeHtml(preview) + '</span>';
+        html += '</div>';
+      });
+      html += '</div>';
+
+      document.getElementById('chunk-output').innerHTML = html;
+
+      const sizes = chunks.map(c => c.text.length);
+      const avgSize = sizes.length ? (sizes.reduce((a, b) => a + b, 0) / sizes.length).toFixed(0) : 0;
+      const minSize = sizes.length ? Math.min(...sizes) : 0;
+      const maxSize = sizes.length ? Math.max(...sizes) : 0;
+
+      const statsEl = document.getElementById('chunk-stats');
+      statsEl.style.display = 'block';
+      statsEl.innerHTML = '<div class="result-label">Chunk Statistics</div>' +
+        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px;margin-top:8px;">' +
+        '<div><span style="color:var(--text-dim);font-size:0.82rem;">Chunks</span><br><span class="result-value" style="font-size:1.1rem;">' + chunks.length + '</span></div>' +
+        '<div><span style="color:var(--text-dim);font-size:0.82rem;">Avg Size</span><br><span class="result-value" style="font-size:1.1rem;">' + avgSize + '</span></div>' +
+        '<div><span style="color:var(--text-dim);font-size:0.82rem;">Min Size</span><br><span class="result-value" style="font-size:1.1rem;">' + minSize + '</span></div>' +
+        '<div><span style="color:var(--text-dim);font-size:0.82rem;">Max Size</span><br><span class="result-value" style="font-size:1.1rem;">' + maxSize + '</span></div>' +
+        '<div><span style="color:var(--text-dim);font-size:0.82rem;">Total Chars</span><br><span class="result-value" style="font-size:1.1rem;">' + text.length + '</span></div>' +
+        '</div>';
+    }
+
+    function escapeHtml(str) {
+      return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    document.getElementById('chunk-size').addEventListener('input', function () {
+      document.getElementById('chunk-size-val').textContent = this.value;
+      runChunking();
+    });
+    document.getElementById('chunk-overlap').addEventListener('input', function () {
+      document.getElementById('chunk-overlap-val').textContent = this.value;
+      runChunking();
+    });
+    document.getElementById('chunk-max-sentences').addEventListener('input', function () {
+      document.getElementById('chunk-max-sentences-val').textContent = this.value;
+      runChunking();
+    });
+    document.getElementById('chunk-strategy').addEventListener('change', runChunking);
+    document.getElementById('chunk-text-input').addEventListener('input', runChunking);
+    runChunking();
+
+    // ======== Active nav highlighting ========
+    const sections = document.querySelectorAll('section[id]');
+    const navLinks = document.querySelectorAll('.toc a');
+    window.addEventListener('scroll', () => {
+      let current = '';
+      sections.forEach(s => {
+        if (window.scrollY >= s.offsetTop - 120) current = s.id;
+      });
+      navLinks.forEach(a => {
+        a.classList.toggle('active', a.getAttribute('href') === '#' + current);
+      });
+    });
+  </script>
+</body>
+
+</html>

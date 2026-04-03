@@ -1,0 +1,2016 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Data Ingestion Pipelines for Search Systems - Masterclass</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js" onload="renderMathInElement(document.body, {
+    delimiters: [
+      {left: '$$', right: '$$', display: true},
+      {left: '\\[', right: '\\]', display: true},
+      {left: '$', right: '$', display: false},
+      {left: '\\(', right: '\\)', display: false}
+    ],
+    throwOnError: false
+  });"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../playground.css" />
+</head>
+
+<body>
+<div class="topbar">
+  <a href="/" class="topbar-brand">
+    <div class="topbar-logo">RM</div>
+    <span class="topbar-label">Rahul Mrinal</span>
+  </a>
+  <a href="/" class="topbar-back">
+    ← Back to Portfolio
+  </a>
+</div>
+
+
+  <div class="hero">
+    <div class="container">
+      <h1>Data Ingestion Pipelines</h1>
+      <p>The complete guide to building, scaling, and monitoring data pipelines for search systems</p>
+    </div>
+  </div>
+
+  <nav class="toc">
+    <div class="toc-inner">
+      <a href="#s1">Why Pipelines</a>
+      <a href="#s2">Batch vs Real-Time</a>
+      <a href="#s3">ETL Basics</a>
+      <a href="#s4">Structured Data</a>
+      <a href="#s5">Unstructured Data</a>
+      <a href="#s6">Index Updates</a>
+      <a href="#s7">Monitoring</a>
+      <a href="#s8">Scaling</a>
+    </div>
+  </nav>
+
+  <div class="container">
+
+    <!-- ===== SECTION 1: WHY DATA PIPELINES MATTER ===== -->
+    <section id="s1">
+      <h2><span class="num">01</span> Why Data Pipelines Matter for Search</h2>
+      <p>Your search system is only as good as the data it indexes. The most sophisticated ranking algorithm in the
+        world is useless if the data feeding it is stale, incomplete, or corrupt. The pipeline is the backbone of every
+        search system.</p>
+
+      <div class="analogy">
+        <div class="icon">🏗️</div>
+        <p><strong>Analogy:</strong> Think of a search engine like a restaurant. BM25 and vector search are the chefs -
+          they create the final experience. But the data pipeline is the entire supply chain: sourcing ingredients,
+          quality checking, prepping, and delivering them to the kitchen on time. If the supply chain breaks, the
+          restaurant closes - no matter how talented the chef is.</p>
+      </div>
+
+      <h3>The pipeline is the invisible backbone</h3>
+      <p>When users complain about search quality, the root cause is often not the ranking algorithm - it's the data
+        pipeline. Here's why:</p>
+
+      <div class="grid-2">
+        <div class="card card-red">
+          <strong>Stale Index = Bad Results</strong>
+          <p class="dim">A product was discontinued 3 hours ago but still shows up in search. A new article was
+            published but won't appear until the nightly batch runs. Users lose trust fast.</p>
+        </div>
+        <div class="card card-red">
+          <strong>Pipeline Failures = Search Outages</strong>
+          <p class="dim">If your indexing pipeline crashes silently and nobody notices for 12 hours, your search index
+            drifts further from reality with every passing minute. Partial failures are even worse - some documents
+            update, others don't.</p>
+        </div>
+        <div class="card card-red">
+          <strong>Bad Data In = Bad Results Out</strong>
+          <p class="dim">HTML tags in your text fields, null prices, duplicate records, broken encodings - these all
+            degrade search quality. The pipeline is where you catch and fix these.</p>
+        </div>
+        <div class="card card-red">
+          <strong>Schema Drift = Silent Corruption</strong>
+          <p class="dim">The upstream database added a new column, renamed a field, or changed a date format. If your
+            pipeline doesn't handle this, you'll index garbage - and might not even notice.</p>
+        </div>
+      </div>
+
+      <h3>The data pipeline lifecycle</h3>
+      <div class="arch-diagram">
+        <div class="diagram-title">End-to-End Search Pipeline</div>
+        <div class="arch-row">
+          <div class="arch-group">
+            <div class="arch-box source">Data Sources</div>
+            <div class="arch-label">DBs, APIs, Files, Events</div>
+          </div>
+          <div class="arch-arrow">→</div>
+          <div class="arch-group">
+            <div class="arch-box process">Extract</div>
+            <div class="arch-label">Pull raw data</div>
+          </div>
+          <div class="arch-arrow">→</div>
+          <div class="arch-group">
+            <div class="arch-box process">Transform</div>
+            <div class="arch-label">Clean, enrich, embed</div>
+          </div>
+          <div class="arch-arrow">→</div>
+          <div class="arch-group">
+            <div class="arch-box process">Load</div>
+            <div class="arch-label">Push to index</div>
+          </div>
+          <div class="arch-arrow">→</div>
+          <div class="arch-group">
+            <div class="arch-box store">Search Index</div>
+            <div class="arch-label">ES, Solr, Pinecone</div>
+          </div>
+        </div>
+        <div class="arch-arrow-down">↕</div>
+        <div class="arch-row">
+          <div class="arch-box neutral" style="min-width:300px;">Monitoring · Alerting · Data Quality Checks</div>
+        </div>
+      </div>
+
+      <div class="card card-green">
+        <strong>Key insight:</strong>
+        <p class="dim">When asked about search architecture, always start with the pipeline. Most candidates jump
+          straight to ranking algorithms. But production search systems spend 70-80% of engineering effort on data
+          ingestion, transformation, and monitoring - not the ranking layer. The pipeline is where the real complexity
+          lives.</p>
+      </div>
+
+      <h3>What makes search pipelines special</h3>
+      <p>Search pipelines have unique requirements compared to general data pipelines:</p>
+      <table>
+        <thead>
+          <tr>
+            <th>Requirement</th>
+            <th>Why it matters for search</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Low latency</strong></td>
+            <td>Users expect new data to be searchable within seconds or minutes, not hours</td>
+          </tr>
+          <tr>
+            <td><strong>Consistency</strong></td>
+            <td>Partial updates can cause ranking anomalies - a doc with half its fields is worse than no doc</td>
+          </tr>
+          <tr>
+            <td><strong>Idempotency</strong></td>
+            <td>Re-running the pipeline shouldn't create duplicate documents in the index</td>
+          </tr>
+          <tr>
+            <td><strong>Schema awareness</strong></td>
+            <td>Search engines have strict field type requirements - wrong types cause indexing failures</td>
+          </tr>
+          <tr>
+            <td><strong>Denormalization</strong></td>
+            <td>Search indexes are flat - you must join and denormalize relational data upfront</td>
+          </tr>
+          <tr>
+            <td><strong>Enrichment</strong></td>
+            <td>Raw data often needs NLP, embedding generation, entity extraction before indexing</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ===== SECTION 2: BATCH VS REAL-TIME ===== -->
+    <section id="s2">
+      <h2><span class="num">02</span> Batch vs Real-Time Ingestion</h2>
+      <p>The most fundamental architectural decision in any search pipeline: how frequently do you update your index?
+      </p>
+
+      <h3>Batch Ingestion</h3>
+      <p>Scheduled bulk reindexing at fixed intervals - nightly, hourly, or on-demand. The simplest approach and often
+        the right starting point.</p>
+
+      <div class="arch-diagram">
+        <div class="diagram-title">Batch Ingestion Architecture</div>
+        <div class="arch-row">
+          <div class="arch-bracket">
+            <div class="arch-bracket-label">Data Sources</div>
+            <div class="arch-box source" style="min-width:80px;">PostgreSQL</div>
+            <div class="arch-box source" style="min-width:80px;">MongoDB</div>
+            <div class="arch-box source" style="min-width:80px;">S3 Files</div>
+          </div>
+        </div>
+        <div class="arch-arrow-down">↓</div>
+        <div class="arch-row">
+          <div class="arch-group">
+            <div class="arch-box neutral">Scheduler (Cron / Airflow)</div>
+            <div class="arch-label">Triggers at fixed intervals</div>
+          </div>
+        </div>
+        <div class="arch-arrow-down">↓</div>
+        <div class="arch-row">
+          <div class="arch-group">
+            <div class="arch-box process">Batch ETL Job</div>
+            <div class="arch-label">Extract → Transform → Load</div>
+          </div>
+        </div>
+        <div class="arch-arrow-down">↓</div>
+        <div class="arch-row">
+          <div class="arch-group">
+            <div class="arch-box store">Build new index</div>
+            <div class="arch-label">Full reindex into fresh index</div>
+          </div>
+          <div class="arch-arrow">→</div>
+          <div class="arch-group">
+            <div class="arch-box store">Swap alias</div>
+            <div class="arch-label">Zero-downtime cutover</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card card-green">
+        <strong>Batch advantages:</strong>
+        <ul>
+          <li>Simple to build, test, and debug - one job, one run, one log</li>
+          <li>Consistency guaranteed - entire index is rebuilt from source of truth</li>
+          <li>Easy rollback - just point the alias back to the previous index</li>
+          <li>Can leverage powerful batch frameworks (Spark, dbt)</li>
+          <li>Lower infrastructure cost - no always-on streaming infra</li>
+        </ul>
+      </div>
+
+      <h3>Real-Time Ingestion</h3>
+      <p>Event-driven, near-instant updates. Every change in the source system triggers an index update within seconds.
+      </p>
+
+      <div class="arch-diagram">
+        <div class="diagram-title">Real-Time Ingestion Architecture</div>
+        <div class="arch-row">
+          <div class="arch-bracket">
+            <div class="arch-bracket-label">Change Events</div>
+            <div class="arch-box source" style="min-width:80px;">CDC (Debezium)</div>
+            <div class="arch-box source" style="min-width:80px;">App Events</div>
+            <div class="arch-box source" style="min-width:80px;">Webhooks</div>
+          </div>
+        </div>
+        <div class="arch-arrow-down">↓</div>
+        <div class="arch-row">
+          <div class="arch-group">
+            <div class="arch-box process">Message Broker (Kafka)</div>
+            <div class="arch-label">Buffering + ordering</div>
+          </div>
+        </div>
+        <div class="arch-arrow-down">↓</div>
+        <div class="arch-row">
+          <div class="arch-group">
+            <div class="arch-box process">Stream Processor</div>
+            <div class="arch-label">Flink / Kafka Streams</div>
+          </div>
+          <div class="arch-arrow">→</div>
+          <div class="arch-group">
+            <div class="arch-box error">Dead Letter Queue</div>
+            <div class="arch-label">Failed messages</div>
+          </div>
+        </div>
+        <div class="arch-arrow-down" style="margin-left: -80px;">↓</div>
+        <div class="arch-row">
+          <div class="arch-group">
+            <div class="arch-box store">Search Index (Upsert)</div>
+            <div class="arch-label">Update individual docs</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card card-accent">
+        <strong>Real-time advantages:</strong>
+        <ul>
+          <li>Near-instant freshness - changes visible in seconds</li>
+          <li>No expensive full reindexing - only changed documents are updated</li>
+          <li>Better user experience for time-sensitive data</li>
+          <li>Natural fit for event-driven architectures</li>
+        </ul>
+      </div>
+
+      <h3>The comparison</h3>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Dimension</th>
+            <th>Batch</th>
+            <th>Real-Time</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Latency</strong></td>
+            <td>Minutes to hours</td>
+            <td>Seconds to low minutes</td>
+          </tr>
+          <tr>
+            <td><strong>Complexity</strong></td>
+            <td><span class="tag tag-green">Low</span></td>
+            <td><span class="tag tag-red">High</span></td>
+          </tr>
+          <tr>
+            <td><strong>Consistency</strong></td>
+            <td><span class="tag tag-green">Strong</span> - full snapshot</td>
+            <td><span class="tag tag-yellow">Eventual</span> - may lag behind</td>
+          </tr>
+          <tr>
+            <td><strong>Error recovery</strong></td>
+            <td>Just re-run the batch</td>
+            <td>DLQ, retries, offset management</td>
+          </tr>
+          <tr>
+            <td><strong>Infrastructure cost</strong></td>
+            <td>Pay only during batch window</td>
+            <td>Always-on consumers + brokers</td>
+          </tr>
+          <tr>
+            <td><strong>Handles deletes</strong></td>
+            <td>Naturally - missing = deleted</td>
+            <td>Requires explicit delete events</td>
+          </tr>
+          <tr>
+            <td><strong>Data drift risk</strong></td>
+            <td>None - full rebuild each time</td>
+            <td>High - bugs can accumulate</td>
+          </tr>
+          <tr>
+            <td><strong>Best for</strong></td>
+            <td>Catalog, analytics, archival</td>
+            <td>E-commerce, news, social, chat</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Hybrid: The production-grade answer</h3>
+
+      <div class="analogy">
+        <div class="icon">🔄</div>
+        <p><strong>The real-world pattern:</strong> Almost every production search system uses a <strong>hybrid
+            approach</strong> - real-time for incremental updates (keeps the index fresh) plus periodic batch for full
+          reindex (catches anything the real-time stream missed and corrects drift). The batch acts as a "consistency
+          checkpoint" - like reconciling your bank statement monthly even though you track expenses daily.</p>
+      </div>
+
+      <div class="arch-diagram">
+        <div class="diagram-title">Hybrid Architecture (Production Pattern)</div>
+        <div class="arch-row" style="gap:24px;">
+          <div style="flex:1;">
+            <div style="text-align:center;margin-bottom:12px;">
+              <span class="tag tag-green" style="font-size:0.85rem;">Real-Time Path</span>
+            </div>
+            <div class="arch-row" style="flex-direction:column; gap:8px;">
+              <div class="arch-box source" style="min-width:100%;">CDC / Events</div>
+              <div class="arch-arrow-down">↓</div>
+              <div class="arch-box process" style="min-width:100%;">Kafka</div>
+              <div class="arch-arrow-down">↓</div>
+              <div class="arch-box process" style="min-width:100%;">Stream Workers</div>
+              <div class="arch-arrow-down">↓</div>
+              <div class="arch-box store" style="min-width:100%;">Upsert Docs</div>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;font-size:2rem;color:var(--text-dim);">+</div>
+          <div style="flex:1;">
+            <div style="text-align:center;margin-bottom:12px;">
+              <span class="tag tag-purple" style="font-size:0.85rem;">Batch Path</span>
+            </div>
+            <div class="arch-row" style="flex-direction:column; gap:8px;">
+              <div class="arch-box source" style="min-width:100%;">Source DB Snapshot</div>
+              <div class="arch-arrow-down">↓</div>
+              <div class="arch-box process" style="min-width:100%;">Airflow DAG</div>
+              <div class="arch-arrow-down">↓</div>
+              <div class="arch-box process" style="min-width:100%;">Spark / dbt</div>
+              <div class="arch-arrow-down">↓</div>
+              <div class="arch-box store" style="min-width:100%;">Full Reindex</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card card-yellow">
+        <strong>When to use what:</strong>
+        <table>
+          <thead>
+            <tr>
+              <th>Scenario</th>
+              <th>Approach</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>MVP or prototype</td>
+              <td><span class="tag tag-green">Batch only</span> - get it working, worry about latency later</td>
+            </tr>
+            <tr>
+              <td>E-commerce product search</td>
+              <td><span class="tag tag-purple">Hybrid</span> - real-time for price/stock, batch for catalog rebuild</td>
+            </tr>
+            <tr>
+              <td>News / social feed</td>
+              <td><span class="tag tag-red">Real-time heavy</span> - freshness is the primary value</td>
+            </tr>
+            <tr>
+              <td>Internal knowledge base</td>
+              <td><span class="tag tag-green">Batch</span> - docs change infrequently, hourly batch is fine</td>
+            </tr>
+            <tr>
+              <td>Marketplace (eBay-style)</td>
+              <td><span class="tag tag-purple">Hybrid</span> - listings go live immediately, nightly quality cleanup
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ===== SECTION 3: ETL BASICS ===== -->
+    <section id="s3">
+      <h2><span class="num">03</span> ETL Basics for Search</h2>
+      <p>ETL - Extract, Transform, Load - is the core pattern for getting data from source systems into your search
+        index. For search systems, each stage has specific concerns that differ from traditional data warehousing ETL.
+      </p>
+
+      <div class="arch-diagram">
+        <div class="diagram-title">ETL Pipeline Architecture for Search</div>
+        <div class="arch-row">
+          <div class="arch-bracket">
+            <div class="arch-bracket-label">Extract</div>
+            <div class="arch-box source" style="min-width:70px;font-size:0.78rem;">Database<br>(SQL query)</div>
+            <div class="arch-box source" style="min-width:70px;font-size:0.78rem;">REST API<br>(paginated)</div>
+            <div class="arch-box source" style="min-width:70px;font-size:0.78rem;">File Store<br>(S3 / GCS)</div>
+            <div class="arch-box source" style="min-width:70px;font-size:0.78rem;">Event Stream<br>(Kafka)</div>
+          </div>
+        </div>
+        <div class="arch-arrow-down">↓</div>
+        <div class="arch-row">
+          <div class="arch-bracket">
+            <div class="arch-bracket-label">Transform</div>
+            <div class="arch-box process" style="min-width:70px;font-size:0.78rem;">Clean &<br>Validate</div>
+            <div class="arch-box process" style="min-width:70px;font-size:0.78rem;">Normalize<br>& Enrich</div>
+            <div class="arch-box process" style="min-width:70px;font-size:0.78rem;">Generate<br>Embeddings</div>
+            <div class="arch-box process" style="min-width:70px;font-size:0.78rem;">Build<br>Doc Schema</div>
+          </div>
+        </div>
+        <div class="arch-arrow-down">↓</div>
+        <div class="arch-row">
+          <div class="arch-bracket">
+            <div class="arch-bracket-label">Load</div>
+            <div class="arch-box store" style="min-width:70px;font-size:0.78rem;">Batch<br>Bulk API</div>
+            <div class="arch-box store" style="min-width:70px;font-size:0.78rem;">Upsert<br>Single Doc</div>
+            <div class="arch-box store" style="min-width:70px;font-size:0.78rem;">Alias<br>Swap</div>
+          </div>
+        </div>
+        <div class="arch-arrow-down">↕</div>
+        <div class="arch-row">
+          <div class="arch-box error" style="min-width:200px;">Dead Letter Queue + Error Logs</div>
+          <div class="arch-arrow">←</div>
+          <div class="arch-box neutral" style="min-width:200px;">Monitoring & Alerting</div>
+        </div>
+      </div>
+
+      <h3>Extract: Getting the data out</h3>
+      <p>The extraction strategy depends on your source system. Each has different tradeoffs:</p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Source Type</th>
+            <th>Extraction Method</th>
+            <th>Considerations</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Relational DB</strong></td>
+            <td>SQL queries, CDC (Debezium), logical replication</td>
+            <td>Watch for lock contention on production DB. Use read replicas. CDC avoids full table scans.</td>
+          </tr>
+          <tr>
+            <td><strong>REST API</strong></td>
+            <td>Paginated GET requests, webhook subscriptions</td>
+            <td>Rate limiting, pagination cursors, API versioning. Webhooks preferred for real-time.</td>
+          </tr>
+          <tr>
+            <td><strong>File stores</strong></td>
+            <td>S3 listing + download, filesystem watch</td>
+            <td>Track processed files to avoid re-processing. Handle partial uploads.</td>
+          </tr>
+          <tr>
+            <td><strong>Event streams</strong></td>
+            <td>Kafka consumer, SQS polling</td>
+            <td>Consumer group management, offset tracking, exactly-once vs at-least-once.</td>
+          </tr>
+          <tr>
+            <td><strong>NoSQL (MongoDB)</strong></td>
+            <td>Change streams, periodic full export</td>
+            <td>Change streams are like CDC. Beware of oplog size limits.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="card card-accent">
+        <strong>CDC (Change Data Capture) - the gold standard for extraction</strong>
+        <p class="dim">Instead of repeatedly querying the database, CDC captures every INSERT, UPDATE, and DELETE as it
+          happens by reading the database's write-ahead log. Tools like <strong>Debezium</strong> stream these changes
+          into Kafka topics in real-time. This gives you:</p>
+        <ul>
+          <li class="dim">Zero impact on source database performance</li>
+          <li class="dim">Guaranteed capture of every change (no polling gaps)</li>
+          <li class="dim">Ordered event stream with before/after values</li>
+          <li class="dim">Natural fit for the real-time ingestion path</li>
+        </ul>
+      </div>
+
+      <h3>Transform: Making data search-ready</h3>
+      <p>Raw data is never directly indexable. The transform stage is where you shape it for search:</p>
+
+      <div class="grid-2">
+        <div class="card card-green">
+          <strong>Cleaning</strong>
+          <ul>
+            <li class="dim">Strip HTML tags, scripts, CSS</li>
+            <li class="dim">Fix broken Unicode/encoding</li>
+            <li class="dim">Remove null/empty fields</li>
+            <li class="dim">Deduplicate records</li>
+            <li class="dim">Validate required fields exist</li>
+          </ul>
+        </div>
+        <div class="card card-accent">
+          <strong>Normalizing</strong>
+          <ul>
+            <li class="dim">Standardize dates to ISO 8601</li>
+            <li class="dim">Normalize prices to cents (integers)</li>
+            <li class="dim">Lowercase and trim text fields</li>
+            <li class="dim">Canonicalize categories/tags</li>
+            <li class="dim">Map external IDs to internal IDs</li>
+          </ul>
+        </div>
+        <div class="card card-yellow">
+          <strong>Enriching</strong>
+          <ul>
+            <li class="dim">NER (named entity recognition)</li>
+            <li class="dim">Language detection</li>
+            <li class="dim">Sentiment analysis</li>
+            <li class="dim">Geo-coding addresses → lat/lon</li>
+            <li class="dim">Taxonomy classification</li>
+          </ul>
+        </div>
+        <div class="card card-red">
+          <strong>Embedding Generation</strong>
+          <ul>
+            <li class="dim">Dense vector embeddings for semantic search</li>
+            <li class="dim">Batch inference with GPU workers</li>
+            <li class="dim">Cache embeddings to avoid recomputation</li>
+            <li class="dim">Handle model versioning</li>
+            <li class="dim">Chunking strategies for long docs</li>
+          </ul>
+        </div>
+      </div>
+
+      <h3>Load: Pushing to the search index</h3>
+      <p>The load phase writes transformed documents into the search engine. Always use bulk operations when possible:
+      </p>
+
+      <pre><code><span class="cm"># Elasticsearch bulk indexing example</span>
+<span class="kw">from</span> elasticsearch <span class="kw">import</span> Elasticsearch
+<span class="kw">from</span> elasticsearch.helpers <span class="kw">import</span> bulk
+
+es = Elasticsearch([<span class="str">"http://localhost:9200"</span>])
+
+<span class="kw">def</span> <span class="fn">generate_actions</span>(documents):
+    <span class="kw">for</span> doc <span class="kw">in</span> documents:
+        <span class="kw">yield</span> {
+            <span class="str">"_index"</span>: <span class="str">"products-v2"</span>,
+            <span class="str">"_id"</span>: doc[<span class="str">"id"</span>],
+            <span class="str">"_source"</span>: {
+                <span class="str">"title"</span>: doc[<span class="str">"title"</span>],
+                <span class="str">"description"</span>: doc[<span class="str">"description"</span>],
+                <span class="str">"price_cents"</span>: doc[<span class="str">"price_cents"</span>],
+                <span class="str">"category"</span>: doc[<span class="str">"category"</span>],
+                <span class="str">"embedding"</span>: doc[<span class="str">"embedding"</span>],
+                <span class="str">"indexed_at"</span>: datetime.utcnow().isoformat(),
+            }
+        }
+
+success, errors = bulk(es, generate_actions(transformed_docs),
+                        chunk_size=<span class="num">500</span>, raise_on_error=<span class="kw">False</span>)
+<span class="fn">print</span>(f<span class="str">"Indexed {success}, errors: {len(errors)}"</span>)</code></pre>
+
+      <h3>Pipeline orchestration tools</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Tool</th>
+            <th>Type</th>
+            <th>Best For</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Apache Airflow</strong></td>
+            <td>Batch orchestrator</td>
+            <td>Complex DAGs with dependencies, scheduling, retries</td>
+          </tr>
+          <tr>
+            <td><strong>Apache Kafka</strong></td>
+            <td>Event streaming</td>
+            <td>Real-time data pipelines, event sourcing, buffering</td>
+          </tr>
+          <tr>
+            <td><strong>Apache Spark</strong></td>
+            <td>Batch processing</td>
+            <td>Large-scale data transformation, distributed computing</td>
+          </tr>
+          <tr>
+            <td><strong>dbt</strong></td>
+            <td>SQL transforms</td>
+            <td>Data modeling in the warehouse before indexing</td>
+          </tr>
+          <tr>
+            <td><strong>Kafka Connect</strong></td>
+            <td>Integration</td>
+            <td>Zero-code connectors between data systems</td>
+          </tr>
+          <tr>
+            <td><strong>Prefect / Dagster</strong></td>
+            <td>Modern orchestrators</td>
+            <td>Python-native, better DX than Airflow</td>
+          </tr>
+          <tr>
+            <td><strong>Apache Flink</strong></td>
+            <td>Stream processing</td>
+            <td>Complex event processing, windowed aggregations</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Error handling: Dead letter queues</h3>
+
+      <div class="analogy">
+        <div class="icon">💀</div>
+        <p><strong>Dead Letter Queue (DLQ):</strong> When a message fails to process after all retries, you don't lose
+          it - you route it to a special queue for later inspection. It's like a "return to sender" box at the post
+          office. You can investigate failures, fix the pipeline, and replay the messages.</p>
+      </div>
+
+      <div class="arch-diagram">
+        <div class="diagram-title">Error Handling Flow</div>
+        <div class="arch-row">
+          <div class="arch-group">
+            <div class="arch-box source">Incoming Message</div>
+          </div>
+          <div class="arch-arrow">→</div>
+          <div class="arch-group">
+            <div class="arch-box process">Process</div>
+          </div>
+          <div class="arch-arrow">→</div>
+          <div class="arch-group">
+            <div class="arch-box store">Success ✓</div>
+          </div>
+        </div>
+        <div style="text-align:center; margin: 4px 0;">
+          <span style="color:var(--text-dim); font-size:0.8rem;">↓ on failure</span>
+        </div>
+        <div class="arch-row">
+          <div class="arch-group">
+            <div class="arch-box neutral">Retry (3x with backoff)</div>
+          </div>
+          <div class="arch-arrow">→</div>
+          <div class="arch-group">
+            <div class="arch-box error">Dead Letter Queue</div>
+          </div>
+          <div class="arch-arrow">→</div>
+          <div class="arch-group">
+            <div class="arch-box neutral">Alert + Manual Review</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== SECTION 4: PROCESSING STRUCTURED DATA ===== -->
+    <section id="s4">
+      <h2><span class="num">04</span> Processing Structured Data</h2>
+      <p>Structured data - database records, product catalogs, user profiles - is the most common data source for search
+        systems. The main challenge is mapping relational schemas to flat search index documents.</p>
+
+      <h3>The denormalization problem</h3>
+      <p>Relational databases are normalized - data is split across tables to avoid duplication. But search indexes are
+        flat - each document must contain all the fields needed for search and display. This fundamental mismatch is the
+        core challenge.</p>
+
+      <div class="analogy">
+        <div class="icon">🗃️</div>
+        <p><strong>Analogy:</strong> A relational database is like a filing cabinet with cross-references - "for the
+          customer's address, see drawer 3, folder 7." A search index is like a stack of index cards - each card must be
+          self-contained with ALL the information you'd ever want to show or filter on. The pipeline's job is to
+          "flatten" the filing cabinet into self-contained cards.</p>
+      </div>
+
+      <div class="grid-2">
+        <div class="card card-red">
+          <strong>Relational (Source)</strong>
+          <pre><code style="font-size:0.78rem;"><span class="cm">-- 4 normalized tables</span>
+<span class="kw">products</span>: id, title, price, brand_id, cat_id
+<span class="kw">brands</span>: id, name, country
+<span class="kw">categories</span>: id, name, parent_id
+<span class="kw">reviews</span>: id, product_id, rating, text</code></pre>
+        </div>
+        <div class="card card-green">
+          <strong>Denormalized (Search Index)</strong>
+          <pre><code style="font-size:0.78rem;"><span class="cm">// Single flat document</span>
+{
+  <span class="str">"id"</span>: <span class="str">"prod_123"</span>,
+  <span class="str">"title"</span>: <span class="str">"Running Shoes"</span>,
+  <span class="str">"price_cents"</span>: <span class="num">12999</span>,
+  <span class="str">"brand_name"</span>: <span class="str">"Nike"</span>,
+  <span class="str">"brand_country"</span>: <span class="str">"US"</span>,
+  <span class="str">"category"</span>: <span class="str">"Footwear"</span>,
+  <span class="str">"category_path"</span>: <span class="str">"Apparel/Shoes/Running"</span>,
+  <span class="str">"avg_rating"</span>: <span class="num">4.3</span>,
+  <span class="str">"review_count"</span>: <span class="num">847</span>
+}</code></pre>
+        </div>
+      </div>
+
+      <h3>Schema mapping strategies</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Source Field</th>
+            <th>Transform</th>
+            <th>Index Field</th>
+            <th>Field Type</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>products.title</code></td>
+            <td>Lowercase, trim</td>
+            <td><code>title</code></td>
+            <td>text (analyzed)</td>
+          </tr>
+          <tr>
+            <td><code>products.price</code></td>
+            <td>× 100 → integer</td>
+            <td><code>price_cents</code></td>
+            <td>integer (for range filters)</td>
+          </tr>
+          <tr>
+            <td><code>products.created_at</code></td>
+            <td>Parse → ISO 8601</td>
+            <td><code>created_at</code></td>
+            <td>date</td>
+          </tr>
+          <tr>
+            <td><code>brands.name</code></td>
+            <td>JOIN on brand_id</td>
+            <td><code>brand_name</code></td>
+            <td>keyword (exact match)</td>
+          </tr>
+          <tr>
+            <td><code>categories.*</code></td>
+            <td>Recursive CTE → path</td>
+            <td><code>category_path</code></td>
+            <td>keyword (hierarchical)</td>
+          </tr>
+          <tr>
+            <td><code>AVG(reviews.rating)</code></td>
+            <td>Aggregate</td>
+            <td><code>avg_rating</code></td>
+            <td>float</td>
+          </tr>
+          <tr>
+            <td><code>COUNT(reviews)</code></td>
+            <td>Aggregate</td>
+            <td><code>review_count</code></td>
+            <td>integer</td>
+          </tr>
+          <tr>
+            <td><code>products.title + description</code></td>
+            <td>Embedding model</td>
+            <td><code>embedding</code></td>
+            <td>dense_vector</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Join strategies for search denormalization</h3>
+
+      <div class="card card-accent">
+        <strong>Strategy 1: Pre-join in SQL (recommended for batch)</strong>
+        <p class="dim">Write a single SQL query that JOINs all tables and produces the denormalized output. Run it as a
+          batch job.</p>
+        <pre><code><span class="kw">SELECT</span>
+  p.id,
+  p.title,
+  p.price * <span class="num">100</span> <span class="kw">AS</span> price_cents,
+  b.name <span class="kw">AS</span> brand_name,
+  b.country <span class="kw">AS</span> brand_country,
+  c.name <span class="kw">AS</span> category,
+  <span class="fn">AVG</span>(r.rating) <span class="kw">AS</span> avg_rating,
+  <span class="fn">COUNT</span>(r.id) <span class="kw">AS</span> review_count
+<span class="kw">FROM</span> products p
+<span class="kw">JOIN</span> brands b <span class="kw">ON</span> p.brand_id = b.id
+<span class="kw">JOIN</span> categories c <span class="kw">ON</span> p.category_id = c.id
+<span class="kw">LEFT JOIN</span> reviews r <span class="kw">ON</span> r.product_id = p.id
+<span class="kw">GROUP BY</span> p.id, p.title, p.price, b.name, b.country, c.name;</code></pre>
+      </div>
+
+      <div class="card card-green">
+        <strong>Strategy 2: Application-level enrichment (for real-time)</strong>
+        <p class="dim">When a product changes, fetch the product row, then separately look up brand, category, and
+          aggregate reviews in the application layer before indexing.</p>
+        <pre><code><span class="kw">async def</span> <span class="fn">build_search_doc</span>(product_id):
+    product = <span class="kw">await</span> db.fetch_one(<span class="str">"SELECT * FROM products WHERE id = $1"</span>, product_id)
+    brand = <span class="kw">await</span> db.fetch_one(<span class="str">"SELECT * FROM brands WHERE id = $1"</span>, product[<span class="str">"brand_id"</span>])
+    reviews = <span class="kw">await</span> db.fetch_one(
+        <span class="str">"SELECT AVG(rating) as avg_r, COUNT(*) as cnt FROM reviews WHERE product_id = $1"</span>,
+        product_id
+    )
+    <span class="kw">return</span> {
+        <span class="str">"id"</span>: product[<span class="str">"id"</span>],
+        <span class="str">"title"</span>: product[<span class="str">"title"</span>].strip().lower(),
+        <span class="str">"price_cents"</span>: <span class="fn">int</span>(product[<span class="str">"price"</span>] * <span class="num">100</span>),
+        <span class="str">"brand_name"</span>: brand[<span class="str">"name"</span>],
+        <span class="str">"avg_rating"</span>: <span class="fn">float</span>(reviews[<span class="str">"avg_r"</span>] <span class="kw">or</span> <span class="num">0</span>),
+        <span class="str">"review_count"</span>: reviews[<span class="str">"cnt"</span>],
+    }</code></pre>
+      </div>
+
+      <div class="card card-yellow">
+        <strong>Strategy 3: Materialized views (compromise)</strong>
+        <p class="dim">Create a materialized view in the database that pre-joins the data. Refresh it periodically and
+          read from it during indexing. This keeps the complex join logic in SQL but avoids the performance hit of
+          running it during every real-time update.</p>
+      </div>
+
+      <h3>Data normalization examples</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Raw Value</th>
+            <th>Problem</th>
+            <th>Normalized</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>"$129.99"</code></td>
+            <td>String, not numeric</td>
+            <td><code>12999</code> (cents integer)</td>
+          </tr>
+          <tr>
+            <td><code>"03/15/2024"</code></td>
+            <td>Ambiguous locale format</td>
+            <td><code>"2024-03-15T00:00:00Z"</code></td>
+          </tr>
+          <tr>
+            <td><code>"Electronics"</code> / <code>"electronics"</code> / <code>"ELECTRONICS"</code></td>
+            <td>Inconsistent casing</td>
+            <td><code>"electronics"</code></td>
+          </tr>
+          <tr>
+            <td><code>"In Stock"</code> / <code>"available"</code> / <code>"1"</code></td>
+            <td>Multiple representations</td>
+            <td><code>true</code> (boolean)</td>
+          </tr>
+          <tr>
+            <td><code>"New York, NY"</code> / <code>"NYC"</code></td>
+            <td>Multiple formats</td>
+            <td><code>{"city":"New York","state":"NY","geo":[40.71,-74.00]}</code></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="card card-green">
+        <strong>Pro tip - "cascading updates" question:</strong>
+        <p class="dim">When someone asks "what happens when a brand name changes?", the answer is: in a
+          denormalized search index, you must re-index every product belonging to that brand. This is the tradeoff of
+          denormalization: write amplification. In a batch system, no problem - the next full reindex picks it up. In
+          real-time, you need a mechanism to fan out: brand_update → find all products with that brand_id → re-index
+          each one. This is why hybrid architectures work well: real-time handles the common case (product updates),
+          batch handles the rare but expensive case (brand/category changes).</p>
+      </div>
+    </section>
+
+    <!-- ===== SECTION 5: PROCESSING UNSTRUCTURED DATA ===== -->
+    <section id="s5">
+      <h2><span class="num">05</span> Processing Unstructured Data</h2>
+      <p>Unstructured data - text documents, PDFs, emails, web pages - requires significantly more processing before it
+        can be indexed. The pipeline must extract text, clean it, chunk it, and often generate embeddings.</p>
+
+      <h3>The unstructured data pipeline</h3>
+
+      <div class="arch-diagram">
+        <div class="diagram-title">Unstructured Data Processing Pipeline</div>
+        <div class="arch-row">
+          <div class="arch-bracket">
+            <div class="arch-bracket-label">Raw Sources</div>
+            <div class="arch-box source" style="min-width:60px;font-size:0.75rem;">PDFs</div>
+            <div class="arch-box source" style="min-width:60px;font-size:0.75rem;">HTML</div>
+            <div class="arch-box source" style="min-width:60px;font-size:0.75rem;">DOCX</div>
+            <div class="arch-box source" style="min-width:60px;font-size:0.75rem;">Emails</div>
+            <div class="arch-box source" style="min-width:60px;font-size:0.75rem;">Images</div>
+          </div>
+        </div>
+        <div class="arch-arrow-down">↓</div>
+        <div class="arch-row">
+          <div class="arch-group">
+            <div class="arch-box process">Text Extraction</div>
+            <div class="arch-label">PDF parser, HTML stripper, OCR</div>
+          </div>
+        </div>
+        <div class="arch-arrow-down">↓</div>
+        <div class="arch-row">
+          <div class="arch-group">
+            <div class="arch-box process">Cleaning & Parsing</div>
+            <div class="arch-label">Remove boilerplate, fix encoding</div>
+          </div>
+        </div>
+        <div class="arch-arrow-down">↓</div>
+        <div class="arch-row">
+          <div class="arch-group">
+            <div class="arch-box process">Metadata Extraction</div>
+            <div class="arch-label">Title, author, date, language</div>
+          </div>
+          <div class="arch-arrow">→</div>
+          <div class="arch-group">
+            <div class="arch-box neutral">Structured Fields</div>
+          </div>
+        </div>
+        <div class="arch-arrow-down">↓</div>
+        <div class="arch-row">
+          <div class="arch-group">
+            <div class="arch-box process">Chunking</div>
+            <div class="arch-label">Split into search-sized passages</div>
+          </div>
+        </div>
+        <div class="arch-arrow-down">↓</div>
+        <div class="arch-row">
+          <div class="arch-group">
+            <div class="arch-box process"
+              style="border-color: rgba(255,107,107,0.4); background: rgba(255,107,107,0.15); color: var(--accent3);">
+              Embedding Generation</div>
+            <div class="arch-label">sentence-transformers, OpenAI, Cohere</div>
+          </div>
+        </div>
+        <div class="arch-arrow-down">↓</div>
+        <div class="arch-row">
+          <div class="arch-group">
+            <div class="arch-box store">Search Index (Keyword + Vector)</div>
+            <div class="arch-label">ES, Pinecone, Weaviate, Qdrant</div>
+          </div>
+        </div>
+      </div>
+
+      <h3>Text extraction by format</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Format</th>
+            <th>Tool / Library</th>
+            <th>Challenges</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>PDF</strong></td>
+            <td>PyMuPDF, pdfplumber, Unstructured.io</td>
+            <td>Tables, multi-column layouts, scanned images (need OCR)</td>
+          </tr>
+          <tr>
+            <td><strong>HTML</strong></td>
+            <td>BeautifulSoup, Trafilatura, Readability</td>
+            <td>Navigation chrome, ads, footers - extracting main content only</td>
+          </tr>
+          <tr>
+            <td><strong>DOCX</strong></td>
+            <td>python-docx, Unstructured.io</td>
+            <td>Complex formatting, embedded images, tracked changes</td>
+          </tr>
+          <tr>
+            <td><strong>Email (.eml)</strong></td>
+            <td>Python email stdlib, mailparser</td>
+            <td>MIME encoding, attachments, HTML vs plain text body</td>
+          </tr>
+          <tr>
+            <td><strong>Images</strong></td>
+            <td>Tesseract OCR, AWS Textract, Google Vision</td>
+            <td>Accuracy varies with quality, language, handwriting</td>
+          </tr>
+          <tr>
+            <td><strong>PowerPoint</strong></td>
+            <td>python-pptx</td>
+            <td>Slides as separate pages, speaker notes, embedded charts</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Chunking strategies for vector search</h3>
+      <p>When documents are too long for a single embedding (most embedding models have a 512-token limit), you must
+        split them into chunks. How you chunk dramatically affects retrieval quality.</p>
+
+      <div class="card card-accent">
+        <strong>Fixed-size chunking</strong>
+        <p class="dim">Split every N tokens with M token overlap. Simple but can cut sentences mid-thought.</p>
+        <pre><code><span class="kw">def</span> <span class="fn">fixed_chunks</span>(text, chunk_size=<span class="num">256</span>, overlap=<span class="num">64</span>):
+    tokens = text.split()
+    chunks = []
+    <span class="kw">for</span> i <span class="kw">in</span> range(<span class="num">0</span>, len(tokens), chunk_size - overlap):
+        chunk = <span class="str">" "</span>.join(tokens[i:i + chunk_size])
+        chunks.append(chunk)
+    <span class="kw">return</span> chunks</code></pre>
+      </div>
+
+      <div class="card card-green">
+        <strong>Semantic chunking</strong>
+        <p class="dim">Split at natural boundaries: paragraphs, section headers, sentence boundaries. Preserves meaning
+          but produces variable-length chunks.</p>
+      </div>
+
+      <div class="card card-yellow">
+        <strong>Recursive / hierarchical chunking (LangChain-style)</strong>
+        <p class="dim">Try splitting by <code>\n\n</code> (paragraphs) first. If chunks are still too big, split by
+          <code>\n</code> (lines). If still too big, split by sentences. Maintains as much context as possible.</p>
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Strategy</th>
+            <th>Chunk Size</th>
+            <th>Overlap</th>
+            <th>Pros</th>
+            <th>Cons</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Fixed-size</td>
+            <td>256–512 tokens</td>
+            <td>64–128 tokens</td>
+            <td>Simple, predictable</td>
+            <td>Can split mid-sentence</td>
+          </tr>
+          <tr>
+            <td>Sentence-based</td>
+            <td>3–5 sentences</td>
+            <td>1 sentence</td>
+            <td>Natural boundaries</td>
+            <td>Uneven sizes</td>
+          </tr>
+          <tr>
+            <td>Paragraph-based</td>
+            <td>1–3 paragraphs</td>
+            <td>Shared context</td>
+            <td>Preserves topic coherence</td>
+            <td>Very variable sizes</td>
+          </tr>
+          <tr>
+            <td>Recursive</td>
+            <td>Configurable max</td>
+            <td>Configurable</td>
+            <td>Best quality</td>
+            <td>More complex logic</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="formula-box">
+        $$\text{Chunk Overlap Ratio} = \frac{\text{overlap tokens}}{\text{chunk size}} \approx 0.1 - 0.25$$
+        <div class="label">Typical overlap ratios: 10-25% of chunk size to preserve context across boundaries</div>
+      </div>
+
+      <h3>Embedding generation at scale</h3>
+      <p>Generating embeddings is often the most expensive step in the pipeline - both in compute and latency.</p>
+
+      <pre><code><span class="cm"># Batch embedding generation with caching</span>
+<span class="kw">from</span> sentence_transformers <span class="kw">import</span> SentenceTransformer
+<span class="kw">import</span> hashlib, json, redis
+
+model = SentenceTransformer(<span class="str">"all-MiniLM-L6-v2"</span>)
+cache = redis.Redis()
+
+<span class="kw">def</span> <span class="fn">get_embedding</span>(text, model_version=<span class="str">"v1"</span>):
+    cache_key = f<span class="str">"emb:{model_version}:{hashlib.md5(text.encode()).hexdigest()}"</span>
+    cached = cache.get(cache_key)
+    <span class="kw">if</span> cached:
+        <span class="kw">return</span> json.loads(cached)
+
+    embedding = model.encode(text).tolist()
+    cache.set(cache_key, json.dumps(embedding), ex=<span class="num">86400</span> * <span class="num">7</span>)
+    <span class="kw">return</span> embedding
+
+<span class="kw">def</span> <span class="fn">batch_embed</span>(chunks, batch_size=<span class="num">64</span>):
+    results = []
+    <span class="kw">for</span> i <span class="kw">in</span> range(<span class="num">0</span>, len(chunks), batch_size):
+        batch = chunks[i:i + batch_size]
+        embeddings = model.encode(batch, batch_size=batch_size)
+        results.extend(embeddings)
+    <span class="kw">return</span> results</code></pre>
+
+      <div class="card card-green">
+        <strong>Metadata extraction matters</strong>
+        <p class="dim">For every unstructured document, extract as many structured metadata fields as possible. These
+          enable filtering and faceted search - users searching for "quarterly report" want to filter by date, author,
+          and department, not just full-text match.</p>
+        <table>
+          <thead>
+            <tr>
+              <th>Metadata Field</th>
+              <th>How to Extract</th>
+              <th>Search Use</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Title</td>
+              <td>HTML <code>&lt;title&gt;</code>, PDF metadata, first heading</td>
+              <td>Boost field for ranking</td>
+            </tr>
+            <tr>
+              <td>Author</td>
+              <td>Document metadata, email From header</td>
+              <td>Filter / facet</td>
+            </tr>
+            <tr>
+              <td>Date</td>
+              <td>File modified date, extracted from content</td>
+              <td>Sort by recency, decay functions</td>
+            </tr>
+            <tr>
+              <td>Language</td>
+              <td>langdetect, fasttext</td>
+              <td>Language-specific analyzers</td>
+            </tr>
+            <tr>
+              <td>File type</td>
+              <td>MIME type, extension</td>
+              <td>Filter (only PDFs, only emails)</td>
+            </tr>
+            <tr>
+              <td>Word count</td>
+              <td>len(text.split())</td>
+              <td>Filter out stubs / boilerplate</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ===== SECTION 6: INDEX UPDATE STRATEGIES ===== -->
+    <section id="s6">
+      <h2><span class="num">06</span> Index Update Strategies</h2>
+      <p>How you apply changes to your search index determines latency, consistency, and availability. This is one of
+        the most important operational decisions in search engineering.</p>
+
+      <h3>Full reindex vs partial update vs upsert</h3>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Strategy</th>
+            <th>Mechanism</th>
+            <th>Latency</th>
+            <th>Consistency</th>
+            <th>Complexity</th>
+            <th>When to Use</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Full Reindex</strong></td>
+            <td>Build entirely new index, swap alias</td>
+            <td><span class="tag tag-red">High</span></td>
+            <td><span class="tag tag-green">Perfect</span></td>
+            <td><span class="tag tag-green">Low</span></td>
+            <td>Schema changes, major data migration, periodic consistency fix</td>
+          </tr>
+          <tr>
+            <td><strong>Partial Update</strong></td>
+            <td>Update specific fields of existing docs</td>
+            <td><span class="tag tag-green">Low</span></td>
+            <td><span class="tag tag-yellow">Good</span></td>
+            <td><span class="tag tag-yellow">Medium</span></td>
+            <td>Price changes, stock updates, view counts</td>
+          </tr>
+          <tr>
+            <td><strong>Upsert</strong></td>
+            <td>Insert if new, update if exists</td>
+            <td><span class="tag tag-green">Low</span></td>
+            <td><span class="tag tag-yellow">Good</span></td>
+            <td><span class="tag tag-yellow">Medium</span></td>
+            <td>Real-time event processing, CDC streams</td>
+          </tr>
+          <tr>
+            <td><strong>Delete + Reinsert</strong></td>
+            <td>Remove old doc, add new version</td>
+            <td><span class="tag tag-green">Low</span></td>
+            <td><span class="tag tag-red">Risk of gap</span></td>
+            <td><span class="tag tag-green">Low</span></td>
+            <td>Simple systems, small indexes</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Zero-downtime reindexing with aliases</h3>
+      <p>The most important operational pattern in search. Never point your application directly at an index name -
+        always use an alias.</p>
+
+      <div class="arch-diagram">
+        <div class="diagram-title">Zero-Downtime Reindex with Aliases</div>
+        <div class="arch-row">
+          <div class="arch-group">
+            <div class="arch-box neutral">Application</div>
+            <div class="arch-label">Queries "products" alias</div>
+          </div>
+          <div class="arch-arrow">→</div>
+          <div class="arch-group">
+            <div class="arch-box store" style="border-color:var(--accent2); box-shadow: 0 0 0 2px rgba(0,201,167,0.3);">
+              Alias: "products"</div>
+          </div>
+        </div>
+        <div class="arch-arrow-down">↓ points to</div>
+        <div style="display:flex;justify-content:center;gap:40px;margin:12px 0;flex-wrap:wrap;">
+          <div class="arch-group">
+            <div class="arch-box source" style="opacity:0.5;">products-v1<br><span
+                style="font-size:0.7rem;">(previous)</span></div>
+            <div class="arch-label">Can delete after swap</div>
+          </div>
+          <div class="arch-group">
+            <div class="arch-box store" style="box-shadow: 0 0 0 2px rgba(255,217,61,0.3);">products-v2<br><span
+                style="font-size:0.7rem;">(LIVE)</span></div>
+            <div class="arch-label">Currently serving traffic</div>
+          </div>
+          <div class="arch-group">
+            <div class="arch-box process">products-v3<br><span style="font-size:0.7rem;">(building...)</span></div>
+            <div class="arch-label">Reindex in progress</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="timeline">
+        <div class="timeline-item">
+          <h4>Step 1: Create new index with updated mapping</h4>
+          <p><code>PUT /products-v3</code> with the new schema. The old index continues serving traffic undisturbed.</p>
+        </div>
+        <div class="timeline-item">
+          <h4>Step 2: Run full reindex into the new index</h4>
+          <p>The ETL pipeline writes all documents to <code>products-v3</code>. This can take minutes to hours.</p>
+        </div>
+        <div class="timeline-item">
+          <h4>Step 3: Validate the new index</h4>
+          <p>Run document count checks, sample queries, and data quality tests against <code>products-v3</code>.</p>
+        </div>
+        <div class="timeline-item" style="--accent: var(--accent2);">
+          <h4 style="color:var(--accent2);">Step 4: Atomic alias swap</h4>
+          <p>One API call: remove alias from <code>products-v2</code>, add to <code>products-v3</code>. Zero queries are
+            lost.</p>
+        </div>
+        <div class="timeline-item">
+          <h4>Step 5: Clean up old index</h4>
+          <p>Keep <code>products-v2</code> around briefly for rollback, then delete it to reclaim disk space.</p>
+        </div>
+      </div>
+
+      <pre><code><span class="cm"># Elasticsearch alias swap - atomic operation</span>
+POST /_aliases
+{
+  <span class="str">"actions"</span>: [
+    { <span class="str">"remove"</span>: { <span class="str">"index"</span>: <span class="str">"products-v2"</span>, <span class="str">"alias"</span>: <span class="str">"products"</span> }},
+    { <span class="str">"add"</span>:    { <span class="str">"index"</span>: <span class="str">"products-v3"</span>, <span class="str">"alias"</span>: <span class="str">"products"</span> }}
+  ]
+}</code></pre>
+
+      <h3>Optimistic concurrency control</h3>
+      <p>When multiple pipeline workers update the same document concurrently, you need to prevent stale writes from
+        overwriting fresh data.</p>
+
+      <div class="card card-accent">
+        <strong>Version-based concurrency</strong>
+        <p class="dim">Every document has a version number or sequence number. When you update, you specify "only apply
+          this update if the current version is X." If another writer already incremented the version, your update is
+          rejected and you must re-fetch and retry.</p>
+        <pre><code><span class="cm"># Elasticsearch: update with seq_no + primary_term</span>
+PUT /products/_doc/<span class="num">123</span>?if_seq_no=<span class="num">5</span>&if_primary_term=<span class="num">1</span>
+{
+  <span class="str">"title"</span>: <span class="str">"Updated Running Shoes"</span>,
+  <span class="str">"price_cents"</span>: <span class="num">14999</span>
+}
+<span class="cm">// Returns 409 Conflict if seq_no has changed</span></code></pre>
+      </div>
+
+      <h3>Handling deletions</h3>
+
+      <div class="grid-2">
+        <div class="card card-red">
+          <strong>Hard delete (risky)</strong>
+          <p class="dim">Immediately remove the document from the index. Problem: if a real-time update arrives for a
+            just-deleted doc, it might re-create it as a "zombie."</p>
+        </div>
+        <div class="card card-green">
+          <strong>Soft delete + cleanup (recommended)</strong>
+          <p class="dim">Mark documents as <code>deleted: true</code>, filter them out at query time, then periodically
+            run a cleanup job to actually remove them. This avoids race conditions between delete and update events.</p>
+        </div>
+      </div>
+
+      <h3>Refresh intervals and near-real-time search</h3>
+      <p>In Elasticsearch and Lucene, documents aren't searchable immediately after indexing. They become visible after
+        a "refresh" - which creates a new search segment.</p>
+
+      <div class="formula-box compact">
+        $$\text{Search Visibility Delay} = \text{Pipeline Latency} + \text{Refresh Interval}$$
+        <div class="label">Default ES refresh_interval is 1 second. Increase it during bulk indexing for better
+          throughput.</div>
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Refresh Interval</th>
+            <th>Throughput</th>
+            <th>Latency</th>
+            <th>Use Case</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>1s</code> (default)</td>
+            <td>Good</td>
+            <td>~1s visibility</td>
+            <td>Normal operations</td>
+          </tr>
+          <tr>
+            <td><code>30s</code></td>
+            <td>Better</td>
+            <td>~30s visibility</td>
+            <td>Heavy indexing workloads</td>
+          </tr>
+          <tr>
+            <td><code>-1</code> (disabled)</td>
+            <td>Best</td>
+            <td>Manual refresh only</td>
+            <td>Bulk reindex, then refresh once at the end</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ===== SECTION 7: MONITORING & RELIABILITY ===== -->
+    <section id="s7">
+      <h2><span class="num">07</span> Pipeline Monitoring & Reliability</h2>
+      <p>A pipeline that runs but produces bad data is worse than a pipeline that fails loudly. Monitoring is not
+        optional - it's a core part of the system design.</p>
+
+      <h3>The four pillars of pipeline monitoring</h3>
+
+      <div class="metric-grid">
+        <div class="metric-card">
+          <div class="metric-val" style="color: var(--accent);">Throughput</div>
+          <div class="metric-name">docs/sec indexed</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-val" style="color: var(--accent2);">Latency</div>
+          <div class="metric-name">source → searchable</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-val" style="color: var(--accent3);">Error Rate</div>
+          <div class="metric-name">% failed documents</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-val" style="color: var(--accent4);">Freshness</div>
+          <div class="metric-name">max age of any doc</div>
+        </div>
+      </div>
+
+      <h3>Data quality checks</h3>
+      <p>Run automated quality checks at every stage of the pipeline. A document that fails validation should never
+        reach the index.</p>
+
+      <div class="card card-accent">
+        <strong>Pre-load validation checklist</strong>
+        <table>
+          <thead>
+            <tr>
+              <th>Check</th>
+              <th>What it catches</th>
+              <th>Action on failure</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Required fields present</strong></td>
+              <td>Missing title, ID, or other required fields</td>
+              <td>Reject to DLQ</td>
+            </tr>
+            <tr>
+              <td><strong>Field type validation</strong></td>
+              <td>String in a numeric field, null dates</td>
+              <td>Reject to DLQ</td>
+            </tr>
+            <tr>
+              <td><strong>Value range checks</strong></td>
+              <td>Negative prices, dates in the year 9999</td>
+              <td>Reject to DLQ</td>
+            </tr>
+            <tr>
+              <td><strong>Text length bounds</strong></td>
+              <td>Empty descriptions, 10MB text blobs</td>
+              <td>Truncate or reject</td>
+            </tr>
+            <tr>
+              <td><strong>Duplicate detection</strong></td>
+              <td>Same document ID appearing twice in a batch</td>
+              <td>Keep latest version</td>
+            </tr>
+            <tr>
+              <td><strong>Schema compatibility</strong></td>
+              <td>New field not in index mapping</td>
+              <td>Add dynamic mapping or reject</td>
+            </tr>
+            <tr>
+              <td><strong>Encoding validation</strong></td>
+              <td>Broken UTF-8, mojibake</td>
+              <td>Clean or reject</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Post-load sanity checks</h3>
+      <pre><code><span class="kw">def</span> <span class="fn">post_reindex_validation</span>(es, new_index, old_index, threshold=<span class="num">0.95</span>):
+    new_count = es.count(index=new_index)[<span class="str">"count"</span>]
+    old_count = es.count(index=old_index)[<span class="str">"count"</span>]
+
+    ratio = new_count / old_count <span class="kw">if</span> old_count > <span class="num">0</span> <span class="kw">else</span> <span class="num">0</span>
+    <span class="kw">if</span> ratio < threshold:
+        <span class="kw">raise</span> <span class="fn">ValueError</span>(
+            f<span class="str">"Doc count dropped {(1-ratio)*100:.1f}%: "</span>
+            f<span class="str">"{old_count} → {new_count}. Aborting alias swap."</span>
+        )
+
+    <span class="cm"># Sample query test</span>
+    sample_queries = [<span class="str">"shoes"</span>, <span class="str">"laptop"</span>, <span class="str">"coffee maker"</span>]
+    <span class="kw">for</span> q <span class="kw">in</span> sample_queries:
+        results = es.search(index=new_index, query={<span class="str">"match"</span>: {<span class="str">"title"</span>: q}})
+        <span class="kw">if</span> results[<span class="str">"hits"</span>][<span class="str">"total"</span>][<span class="str">"value"</span>] == <span class="num">0</span>:
+            <span class="kw">raise</span> <span class="fn">ValueError</span>(f<span class="str">"Canary query '{q}' returned 0 results!"</span>)
+
+    <span class="kw">return</span> <span class="kw">True</span></code></pre>
+
+      <h3>Data freshness monitoring</h3>
+
+      <div class="card card-yellow">
+        <strong>Freshness SLA formula</strong>
+        <div class="formula-box compact" style="margin:12px 0 0;">
+          $$\text{Data Freshness} = t_{\text{now}} - \max\bigl(t_{\text{source\_updated}}\bigr)$$
+        </div>
+        <p class="dim" style="margin-top:12px;">Track the timestamp of the most recently indexed document. If the gap
+          between "now" and "most recent source update" exceeds your SLA, fire an alert. A stale pipeline might still be
+          "running" - just not processing new data.</p>
+      </div>
+
+      <h3>Alerting rules</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Alert</th>
+            <th>Condition</th>
+            <th>Severity</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Pipeline stopped</td>
+            <td>No documents indexed in last 10 minutes (real-time) or job didn't start (batch)</td>
+            <td><span class="tag tag-red">Critical</span></td>
+          </tr>
+          <tr>
+            <td>Error rate spike</td>
+            <td>DLQ messages > 1% of throughput</td>
+            <td><span class="tag tag-red">Critical</span></td>
+          </tr>
+          <tr>
+            <td>Doc count drop</td>
+            <td>New index has &lt;95% of previous index's doc count</td>
+            <td><span class="tag tag-red">Critical</span></td>
+          </tr>
+          <tr>
+            <td>Stale data</td>
+            <td>Freshness > 2x expected pipeline interval</td>
+            <td><span class="tag tag-yellow">Warning</span></td>
+          </tr>
+          <tr>
+            <td>Consumer lag</td>
+            <td>Kafka consumer lag > 100K messages</td>
+            <td><span class="tag tag-yellow">Warning</span></td>
+          </tr>
+          <tr>
+            <td>Slow processing</td>
+            <td>p99 latency per document > 5s</td>
+            <td><span class="tag tag-yellow">Warning</span></td>
+          </tr>
+          <tr>
+            <td>Schema drift</td>
+            <td>Unknown fields appearing in source data</td>
+            <td><span class="tag tag-purple">Info</span></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Idempotency and delivery semantics</h3>
+
+      <div class="analogy">
+        <div class="icon">🔑</div>
+        <p><strong>Idempotency:</strong> Processing the same message twice should produce the same result as processing
+          it once. This is critical because retries and at-least-once delivery are facts of life in distributed systems.
+          If your pipeline isn't idempotent, you'll get duplicate or corrupted documents.</p>
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Semantic</th>
+            <th>Guarantee</th>
+            <th>How to achieve</th>
+            <th>Tradeoff</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>At-most-once</strong></td>
+            <td>Messages may be lost, never duplicated</td>
+            <td>Commit offset before processing</td>
+            <td>Data loss risk - almost never acceptable for search</td>
+          </tr>
+          <tr>
+            <td><strong>At-least-once</strong></td>
+            <td>Messages never lost, may be duplicated</td>
+            <td>Commit offset after processing; retry on failure</td>
+            <td>Must handle duplicates - use document ID as idempotency key</td>
+          </tr>
+          <tr>
+            <td><strong>Exactly-once</strong></td>
+            <td>Messages processed exactly once</td>
+            <td>Transactional consumers + idempotent producers (Kafka transactions)</td>
+            <td>Higher latency, more complex infrastructure</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="card card-green">
+        <strong>Practical tip:</strong>
+        <p class="dim"><strong>At-least-once + idempotent writes</strong> is the sweet spot for search pipelines. Since
+          search engines use document IDs, upserting the same document twice is a no-op. You get the simplicity of
+          at-least-once with the correctness of exactly-once for free - as long as your transforms are deterministic
+          (same input always produces the same output).</p>
+      </div>
+
+      <h3>Retry strategies</h3>
+      <div class="card card-accent">
+        <strong>Exponential backoff with jitter</strong>
+        <div class="formula-box compact" style="margin:12px 0 0;">
+          $$\text{delay} = \min\bigl(\text{base} \times 2^{\text{attempt}} + \text{random}(0, \text{jitter}),\;
+          \text{max\_delay}\bigr)$$
+        </div>
+        <pre style="margin-top:12px;"><code><span class="kw">import</span> random, time
+
+<span class="kw">def</span> <span class="fn">retry_with_backoff</span>(fn, max_retries=<span class="num">5</span>, base=<span class="num">1</span>, max_delay=<span class="num">60</span>):
+    <span class="kw">for</span> attempt <span class="kw">in</span> range(max_retries):
+        <span class="kw">try</span>:
+            <span class="kw">return</span> fn()
+        <span class="kw">except</span> <span class="fn">Exception</span> <span class="kw">as</span> e:
+            <span class="kw">if</span> attempt == max_retries - <span class="num">1</span>:
+                send_to_dlq(e)
+                <span class="kw">raise</span>
+            delay = <span class="fn">min</span>(base * <span class="num">2</span> ** attempt + random.uniform(<span class="num">0</span>, <span class="num">1</span>), max_delay)
+            time.sleep(delay)</code></pre>
+      </div>
+    </section>
+
+    <!-- ===== SECTION 8: SCALING PIPELINES ===== -->
+    <section id="s8">
+      <h2><span class="num">08</span> Scaling Pipelines</h2>
+      <p>When your data grows from thousands to millions (or billions) of documents, every part of the pipeline needs to
+        scale. This section covers the key patterns and knobs.</p>
+
+      <h3>Partitioning and parallelism</h3>
+
+      <div class="analogy">
+        <div class="icon">🍕</div>
+        <p><strong>Analogy:</strong> Scaling a pipeline is like splitting a pizza order across multiple ovens. You can't
+          make one pizza faster by using a bigger oven (vertical scaling has limits), but you can cook 10 pizzas
+          simultaneously in 10 ovens (horizontal scaling). The "partition" is how you decide which pizza goes to which
+          oven - by topping type, by table number, etc.</p>
+      </div>
+
+      <div class="arch-diagram">
+        <div class="diagram-title">Parallel Processing with Kafka Partitions</div>
+        <div class="arch-row">
+          <div class="arch-group">
+            <div class="arch-box source" style="min-width:200px;">Kafka Topic: product-updates<br><span
+                style="font-size:0.72rem;">Partitions: P0, P1, P2, P3</span></div>
+          </div>
+        </div>
+        <div class="arch-arrow-down">↓</div>
+        <div class="arch-row" style="gap:12px;">
+          <div class="arch-group">
+            <div class="arch-box process" style="min-width:90px;">Worker 0<br><span style="font-size:0.72rem;">←
+                P0</span></div>
+          </div>
+          <div class="arch-group">
+            <div class="arch-box process" style="min-width:90px;">Worker 1<br><span style="font-size:0.72rem;">←
+                P1</span></div>
+          </div>
+          <div class="arch-group">
+            <div class="arch-box process" style="min-width:90px;">Worker 2<br><span style="font-size:0.72rem;">←
+                P2</span></div>
+          </div>
+          <div class="arch-group">
+            <div class="arch-box process" style="min-width:90px;">Worker 3<br><span style="font-size:0.72rem;">←
+                P3</span></div>
+          </div>
+        </div>
+        <div class="arch-arrow-down">↓</div>
+        <div class="arch-row">
+          <div class="arch-group">
+            <div class="arch-box store" style="min-width:200px;">Search Index<br><span style="font-size:0.72rem;">Bulk
+                API with batching</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card card-accent">
+        <strong>Partition key selection is critical</strong>
+        <p class="dim">The partition key determines which worker processes which messages - and guarantees ordering
+          within a partition.</p>
+        <table>
+          <thead>
+            <tr>
+              <th>Partition Key</th>
+              <th>Ordering Guarantee</th>
+              <th>Balance</th>
+              <th>Use Case</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>document_id</code></td>
+              <td>All updates for a doc → same partition → ordered</td>
+              <td><span class="tag tag-green">Good</span></td>
+              <td>Default choice for most search pipelines</td>
+            </tr>
+            <tr>
+              <td><code>tenant_id</code></td>
+              <td>All updates for a tenant → same partition</td>
+              <td><span class="tag tag-yellow">Varies</span></td>
+              <td>Multi-tenant systems with per-tenant indexes</td>
+            </tr>
+            <tr>
+              <td><code>random / round-robin</code></td>
+              <td>No ordering</td>
+              <td><span class="tag tag-green">Perfect</span></td>
+              <td>When ordering doesn't matter (idempotent upserts)</td>
+            </tr>
+            <tr>
+              <td><code>category</code></td>
+              <td>Category-level ordering</td>
+              <td><span class="tag tag-red">Hotspot risk</span></td>
+              <td>Avoid - popular categories will overload one partition</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Kafka consumer groups</h3>
+      <p>Kafka consumer groups enable horizontal scaling of stream processors. Each consumer in a group reads from a
+        unique subset of partitions.</p>
+
+      <div class="formula-box compact">
+        $$\text{Max Parallelism} = \min(\text{num\_partitions},\; \text{num\_consumers})$$
+        <div class="label">Adding consumers beyond the partition count provides no benefit - extra consumers sit idle
+        </div>
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Partitions</th>
+            <th>Consumers</th>
+            <th>Behavior</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>6</td>
+            <td>3</td>
+            <td>Each consumer reads 2 partitions - good utilization</td>
+          </tr>
+          <tr>
+            <td>6</td>
+            <td>6</td>
+            <td>Each consumer reads 1 partition - maximum parallelism</td>
+          </tr>
+          <tr>
+            <td>6</td>
+            <td>9</td>
+            <td>6 active + 3 idle - wasted resources</td>
+          </tr>
+          <tr>
+            <td>6</td>
+            <td>1</td>
+            <td>One consumer reads all 6 - bottleneck</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Backpressure handling</h3>
+      <p>Backpressure occurs when the pipeline can process data slower than it arrives. Without handling it, you get OOM
+        crashes, increasing lag, and eventually data loss.</p>
+
+      <div class="grid-2">
+        <div class="card card-green">
+          <strong>Healthy pipeline</strong>
+          <p class="dim">Processing rate ≥ ingestion rate. Consumer lag is stable and near zero. Memory usage is flat.
+          </p>
+          <div class="step-flow" style="margin-top:12px;">
+            <div class="step-pill" style="border-color:var(--accent2);">Ingestion: 5K/s</div>
+            <div class="step-arrow">→</div>
+            <div class="step-pill" style="border-color:var(--accent2);">Processing: 6K/s</div>
+            <div class="step-arrow">→</div>
+            <div class="step-pill" style="border-color:var(--accent2);">Lag: ~0</div>
+          </div>
+        </div>
+        <div class="card card-red">
+          <strong>Backpressured pipeline</strong>
+          <p class="dim">Processing rate < ingestion rate. Consumer lag grows linearly. Eventually, Kafka retention
+              evicts unread messages.</p>
+              <div class="step-flow" style="margin-top:12px;">
+                <div class="step-pill" style="border-color:var(--accent3);">Ingestion: 10K/s</div>
+                <div class="step-arrow">→</div>
+                <div class="step-pill" style="border-color:var(--accent3);">Processing: 3K/s</div>
+                <div class="step-arrow">→</div>
+                <div class="step-pill" style="border-color:var(--accent3);">Lag: ↑↑↑</div>
+              </div>
+        </div>
+      </div>
+
+      <div class="card card-yellow">
+        <strong>Backpressure mitigation strategies:</strong>
+        <table>
+          <thead>
+            <tr>
+              <th>Strategy</th>
+              <th>How it works</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Auto-scale consumers</strong></td>
+              <td>Monitor lag, spin up more consumer instances when lag exceeds threshold</td>
+            </tr>
+            <tr>
+              <td><strong>Increase batch size</strong></td>
+              <td>Process more docs per bulk request - reduces per-doc overhead</td>
+            </tr>
+            <tr>
+              <td><strong>Rate limiting at source</strong></td>
+              <td>Slow down producers when consumers can't keep up</td>
+            </tr>
+            <tr>
+              <td><strong>Priority queues</strong></td>
+              <td>Critical updates (price changes) in high-priority topic, less critical (view counts) in low-priority
+              </td>
+            </tr>
+            <tr>
+              <td><strong>Drop stale updates</strong></td>
+              <td>If multiple updates for same doc are queued, skip to the latest</td>
+            </tr>
+            <tr>
+              <td><strong>Increase partitions</strong></td>
+              <td>More partitions = more parallel consumers (but can't easily decrease later)</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Batch size tuning</h3>
+      <p>The bulk API batch size dramatically affects throughput. Too small = too much overhead per request. Too large =
+        high memory usage and timeouts.</p>
+
+      <div class="formula-box compact">
+        $$\text{Throughput} = \frac{\text{batch\_size}}{\text{batch\_latency}} \times \text{num\_workers}$$
+        <div class="label">Optimize batch_size to maximize this ratio without hitting memory limits</div>
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Batch Size</th>
+            <th>Throughput</th>
+            <th>Memory</th>
+            <th>Failure Impact</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>10 docs</td>
+            <td><span class="tag tag-red">Low</span> - too much HTTP overhead</td>
+            <td><span class="tag tag-green">Minimal</span></td>
+            <td>Only 10 docs to retry</td>
+          </tr>
+          <tr>
+            <td>500 docs</td>
+            <td><span class="tag tag-green">Good</span> - sweet spot for most systems</td>
+            <td><span class="tag tag-green">Moderate</span></td>
+            <td>Acceptable retry cost</td>
+          </tr>
+          <tr>
+            <td>5,000 docs</td>
+            <td><span class="tag tag-green">High</span> - good for bulk reindex</td>
+            <td><span class="tag tag-yellow">High</span></td>
+            <td>Large retry batches</td>
+          </tr>
+          <tr>
+            <td>50,000 docs</td>
+            <td><span class="tag tag-yellow">Diminishing</span> returns</td>
+            <td><span class="tag tag-red">Very high</span></td>
+            <td>OOM risk, timeout risk</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="card card-green">
+        <strong>Practical batch size tuning process:</strong>
+        <ol>
+          <li class="dim">Start with 500 documents per bulk request</li>
+          <li class="dim">Measure throughput (docs/sec) and p99 latency</li>
+          <li class="dim">Double the batch size, measure again</li>
+          <li class="dim">Keep doubling until throughput stops improving or latency becomes unacceptable</li>
+          <li class="dim">Also monitor: bulk request payload size should stay under 10-15MB</li>
+        </ol>
+      </div>
+
+      <h3>Memory management</h3>
+
+      <div class="card card-red">
+        <strong>Common memory pitfalls in search pipelines:</strong>
+        <table>
+          <thead>
+            <tr>
+              <th>Problem</th>
+              <th>Cause</th>
+              <th>Solution</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>OOM on bulk index</td>
+              <td>Loading all docs in memory before sending</td>
+              <td>Use generators / streaming - process and send in chunks</td>
+            </tr>
+            <tr>
+              <td>Embedding cache bloat</td>
+              <td>Caching all embeddings in process memory</td>
+              <td>Use external cache (Redis) with TTL, or LRU with size limit</td>
+            </tr>
+            <tr>
+              <td>Large document accumulation</td>
+              <td>Slow consumer + fast producer → messages pile up</td>
+              <td>Bound internal queues, apply backpressure upstream</td>
+            </tr>
+            <tr>
+              <td>PDF extraction spike</td>
+              <td>One 500-page PDF consumes gigabytes during parsing</td>
+              <td>Set per-document memory limits, process large docs in subprocess</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Auto-scaling architecture</h3>
+
+      <div class="arch-diagram">
+        <div class="diagram-title">Auto-Scaling Consumer Architecture</div>
+        <div class="arch-row">
+          <div class="arch-group">
+            <div class="arch-box source" style="min-width:180px;">Kafka Topic<br><span
+                style="font-size:0.72rem;">Consumer Lag Metric</span></div>
+          </div>
+          <div class="arch-arrow">→</div>
+          <div class="arch-group">
+            <div class="arch-box neutral" style="min-width:180px;">Monitoring<br><span
+                style="font-size:0.72rem;">Prometheus / CloudWatch</span></div>
+          </div>
+        </div>
+        <div class="arch-arrow-down">↓ lag > threshold</div>
+        <div class="arch-row">
+          <div class="arch-group">
+            <div class="arch-box process" style="min-width:180px;">Auto-Scaler<br><span style="font-size:0.72rem;">KEDA
+                / HPA / Custom</span></div>
+          </div>
+        </div>
+        <div class="arch-arrow-down">↓ scale up/down</div>
+        <div class="arch-row" style="gap:8px;">
+          <div class="arch-box process" style="min-width:70px;font-size:0.78rem;">Worker</div>
+          <div class="arch-box process" style="min-width:70px;font-size:0.78rem;">Worker</div>
+          <div class="arch-box process" style="min-width:70px;font-size:0.78rem;">Worker</div>
+          <div class="arch-box process" style="min-width:70px;font-size:0.78rem;border-style:dashed;opacity:0.6;">Worker
+          </div>
+          <div class="arch-box process" style="min-width:70px;font-size:0.78rem;border-style:dashed;opacity:0.4;">Worker
+          </div>
+        </div>
+        <div class="arch-label" style="margin-top:8px;">Dashed workers scale up during spikes, scale down during calm
+        </div>
+      </div>
+
+      <div class="card card-accent">
+        <strong>Key scaling numbers to remember (quick reference):</strong>
+        <table>
+          <thead>
+            <tr>
+              <th>Metric</th>
+              <th>Typical Range</th>
+              <th>Notes</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Elasticsearch bulk throughput</td>
+              <td>5K-50K docs/sec per node</td>
+              <td>Depends on doc size, mapping complexity</td>
+            </tr>
+            <tr>
+              <td>Kafka partition throughput</td>
+              <td>10-100 MB/sec per partition</td>
+              <td>Single consumer can read ~100MB/s</td>
+            </tr>
+            <tr>
+              <td>Embedding generation (GPU)</td>
+              <td>100-1000 docs/sec per GPU</td>
+              <td>Depends on model size and text length</td>
+            </tr>
+            <tr>
+              <td>Embedding generation (CPU)</td>
+              <td>5-50 docs/sec per core</td>
+              <td>10-20x slower than GPU</td>
+            </tr>
+            <tr>
+              <td>PDF extraction</td>
+              <td>1-10 pages/sec per core</td>
+              <td>Highly variable - OCR is much slower</td>
+            </tr>
+            <tr>
+              <td>Optimal bulk request size</td>
+              <td>5-15 MB per request</td>
+              <td>Beyond 15MB, timeouts increase sharply</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="card card-green" style="margin-top:24px;">
+        <strong>Summary: The pipeline checklist</strong>
+        <p class="dim">When designing or reviewing a search pipeline, walk through this mental checklist:</p>
+        <ol>
+          <li><strong>Source:</strong> What data sources? How do you extract changes? CDC, polling, webhooks?</li>
+          <li><strong>Transport:</strong> Kafka, SQS, or direct? Partitioning strategy? At-least-once?</li>
+          <li><strong>Transform:</strong> What cleaning, normalization, enrichment? Embedding generation?</li>
+          <li><strong>Load:</strong> Bulk or single-doc? Batch size? Upsert or full reindex?</li>
+          <li><strong>Zero-downtime:</strong> Using aliases? Validation before swap?</li>
+          <li><strong>Monitoring:</strong> Throughput, latency, error rate, freshness dashboards?</li>
+          <li><strong>Error handling:</strong> DLQ? Retry with backoff? Idempotent writes?</li>
+          <li><strong>Scaling:</strong> Partition count? Consumer group size? Auto-scaling policy?</li>
+        </ol>
+      </div>
+    </section>
+
+  </div>
+
+  <div class="footer">
+    <p>Data Ingestion Pipelines for Search Systems - covering batch, real-time, and hybrid architectures.</p>
+    <p style="margin-top:4px;">Tools referenced: Apache Kafka, Elasticsearch, Debezium, Airflow, Spark, dbt, Flink,
+      KEDA.</p>
+  </div>
+
+  <script>
+    // Active nav highlighting
+    const sections = document.querySelectorAll('section[id]');
+    const navLinks = document.querySelectorAll('.toc a');
+    window.addEventListener('scroll', () => {
+      let current = '';
+      sections.forEach(s => {
+        if (window.scrollY >= s.offsetTop - 120) current = s.id;
+      });
+      navLinks.forEach(a => {
+        a.classList.toggle('active', a.getAttribute('href') === '#' + current);
+      });
+    });
+  </script>
+</body>
+
+</html>

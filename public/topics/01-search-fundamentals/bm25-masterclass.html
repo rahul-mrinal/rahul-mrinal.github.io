@@ -1,0 +1,840 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BM25 - Zero to Hero</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js" onload="renderMathInElement(document.body, {
+    delimiters: [
+      {left: '$$', right: '$$', display: true},
+      {left: '\\[', right: '\\]', display: true},
+      {left: '$', right: '$', display: false},
+      {left: '\\(', right: '\\)', display: false}
+    ],
+    throwOnError: false
+  });"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../playground.css" />
+</head>
+
+<body>
+<div class="topbar">
+  <a href="/" class="topbar-brand">
+    <div class="topbar-logo">RM</div>
+    <span class="topbar-label">Rahul Mrinal</span>
+  </a>
+  <a href="/" class="topbar-back">
+    ← Back to Portfolio
+  </a>
+</div>
+
+
+  <div class="hero">
+    <div class="container">
+      <h1>BM25: Zero to Hero</h1>
+      <p>The complete interactive guide to the most important ranking algorithm in search</p>
+    </div>
+  </div>
+
+  <nav class="toc">
+    <div class="toc-inner">
+      <a href="#s1">The Problem</a>
+      <a href="#s2">Term Frequency</a>
+      <a href="#s3">IDF</a>
+      <a href="#s4">TF-IDF</a>
+      <a href="#s5">BM25 Formula</a>
+      <a href="#s6">Parameters</a>
+      <a href="#s7">Saturation</a>
+      <a href="#s8">Playground</a>
+      <a href="#s9">Implementation</a>
+      <a href="#s10">Variants</a>
+      <a href="#s11">vs Semantic</a>
+    </div>
+  </nav>
+
+  <div class="container">
+
+    <!-- ===== SECTION 1: THE PROBLEM ===== -->
+    <section id="s1">
+      <h2><span class="num">01</span> The Problem</h2>
+      <p>You have a collection of documents and a user types a query. How do you rank which documents are most relevant?
+      </p>
+
+      <div class="analogy">
+        <div class="icon">📚</div>
+        <p><strong>Analogy:</strong> Imagine you're a librarian. Someone asks for books about "machine learning." You
+          can't just count which book says "machine learning" the most - a 1000-page textbook will mention it more than
+          a brilliant 20-page tutorial, but that doesn't make it more relevant. You also know that a book mentioning a
+          rare, specific term is probably more relevant than one repeating a common word. BM25 formalizes this librarian
+          intuition into math.</p>
+      </div>
+
+      <h3>Why not just count word matches?</h3>
+      <div class="grid-2">
+        <div class="card card-red">
+          <strong>Problem 1: Longer docs win unfairly</strong>
+          <p class="dim">A 10,000-word document mentions "python" 50 times. A 200-word doc mentions it 10 times. Raw
+            count says the big doc is better, but the small one is 10x more focused on Python.</p>
+        </div>
+        <div class="card card-red">
+          <strong>Problem 2: Common words dominate</strong>
+          <p class="dim">The word "the" appears in every document. Matching on "the" tells you nothing. But matching on
+            "eigenvalue"? That's very informative. Raw counting treats them equally.</p>
+        </div>
+        <div class="card card-red">
+          <strong>Problem 3: Diminishing returns</strong>
+          <p class="dim">If a doc mentions "cat" 100 times vs 50 times, is it really 2x more relevant? Probably not.
+            After a point, more mentions don't add much. Raw counting is linear - but relevance isn't.</p>
+        </div>
+        <div class="card card-red">
+          <strong>Problem 4: No principled scoring</strong>
+          <p class="dim">Raw counts give you absolute numbers with no meaningful scale. Is a score of 47 good? Compared
+            to what? We need a framework that produces comparable, meaningful scores.</p>
+        </div>
+      </div>
+
+      <p>BM25 solves all four problems. Let's build up to it step by step.</p>
+    </section>
+
+    <!-- ===== SECTION 2: TERM FREQUENCY ===== -->
+    <section id="s2">
+      <h2><span class="num">02</span> Term Frequency (TF)</h2>
+      <p>The first building block: <strong>how often does the query term appear in a document?</strong></p>
+
+      <div class="formula-box">
+        $$\color{#6c63ff}{\text{TF}(t,\, d)} \;=\; \text{count of term } t \text{ in document } d$$
+        <div class="label">Raw Term Frequency</div>
+      </div>
+
+      <p>But raw TF has the <strong>diminishing returns</strong> problem. Common fixes:</p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Variant</th>
+            <th>Formula</th>
+            <th>Idea</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Raw</td>
+            <td>\( f(t,d) \)</td>
+            <td>Just count occurrences</td>
+          </tr>
+          <tr>
+            <td>Log-scaled</td>
+            <td>\( 1 + \log f(t,d) \)</td>
+            <td>Compress high frequencies</td>
+          </tr>
+          <tr>
+            <td>Boolean</td>
+            <td>\( \mathbb{1}_{[f(t,d) > 0]} \)</td>
+            <td>Only care about presence</td>
+          </tr>
+          <tr>
+            <td>BM25-style</td>
+            <td>\( \dfrac{f(t,d)}{k_1 + f(t,d)} \)</td>
+            <td>Saturating - approaches but never reaches 1</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <p>The BM25-style TF is the key insight: it creates a <strong>saturation curve</strong> where the first few
+        occurrences matter a lot, but additional ones give rapidly diminishing gains. We'll explore this in depth soon.
+      </p>
+    </section>
+
+    <!-- ===== SECTION 3: IDF ===== -->
+    <section id="s3">
+      <h2><span class="num">03</span> Inverse Document Frequency (IDF)</h2>
+      <p>The second building block: <strong>how rare or common is this term across all documents?</strong></p>
+
+      <div class="analogy">
+        <div class="icon">💎</div>
+        <p><strong>Analogy:</strong> Diamonds are valuable because they're rare. The word "the" is like sand -
+          everywhere, worthless for search. The word "mitochondria" is like a diamond - rare, and finding it in a
+          document tells you a LOT about what that document is about.</p>
+      </div>
+
+      <div class="formula-box">
+        $$\color{#00c9a7}{\text{IDF}(t)} \;=\;
+        \ln\!\left(\frac{\color{#ffd93d}{N}}{\color{#ff6b6b}{\text{df}(t)}}\right)$$
+        <div class="label">
+          \(\color{#ffd93d}{N}\) = total documents &nbsp;&bull;&nbsp;
+          \(\color{#ff6b6b}{\text{df}(t)}\) = documents containing term \(t\)
+        </div>
+      </div>
+
+      <p>BM25 uses a slightly different IDF formula (from Robertson-Sparck Jones):</p>
+
+      <div class="formula-box">
+        $$\color{#00c9a7}{\text{IDF}_{\text{BM25}}(t)} \;=\; \ln\!\left(\frac{\color{#ffd93d}{N} -
+        \color{#ff6b6b}{\text{df}(t)} + 0.5}{\color{#ff6b6b}{\text{df}(t)} + 0.5} + 1\right)$$
+        <div class="label">Prevents negative IDF values and handles edge cases</div>
+      </div>
+
+      <div class="card card-green">
+        <strong>IDF intuition with numbers:</strong>
+        <table>
+          <thead>
+            <tr>
+              <th>Term</th>
+              <th>Docs containing it (of 10,000)</th>
+              <th>IDF ≈</th>
+              <th>Meaning</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>"the"</td>
+              <td>9,950</td>
+              <td>0.005</td>
+              <td>Essentially zero - useless for ranking</td>
+            </tr>
+            <tr>
+              <td>"python"</td>
+              <td>500</td>
+              <td>3.0</td>
+              <td>Moderately informative</td>
+            </tr>
+            <tr>
+              <td>"asyncio"</td>
+              <td>25</td>
+              <td>6.0</td>
+              <td>Very informative - rare and specific</td>
+            </tr>
+            <tr>
+              <td>"eigendecomposition"</td>
+              <td>3</td>
+              <td>8.1</td>
+              <td>Extremely informative - highly targeted</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ===== SECTION 4: TF-IDF ===== -->
+    <section id="s4">
+      <h2><span class="num">04</span> TF-IDF: The Stepping Stone</h2>
+      <p>Before BM25, there was TF-IDF - simply multiply TF by IDF:</p>
+
+      <div class="formula-box">
+        $$\color{#6c63ff}{\text{TF-IDF}(t,\, d)} \;=\; \underbrace{\color{#6c63ff}{\text{TF}(t, d)}}_{\text{frequency in
+        doc}} \;\times\; \underbrace{\color{#00c9a7}{\text{IDF}(t)}}_{\text{rarity across corpus}}$$
+        <div class="label">High score = term is frequent in this doc AND rare across all docs</div>
+      </div>
+
+      <div class="step-flow">
+        <div class="step-pill">Count term in doc</div>
+        <div class="step-arrow">→</div>
+        <div class="step-pill">Weight by rarity</div>
+        <div class="step-arrow">→</div>
+        <div class="step-pill">Score!</div>
+      </div>
+
+      <p>TF-IDF was a huge leap forward, but it still has weaknesses:</p>
+      <div class="grid-2">
+        <div class="card card-red">
+          <strong>No saturation</strong>
+          <p class="dim">TF grows linearly (or log-linearly). 100 mentions vs 50 still matters too much.</p>
+        </div>
+        <div class="card card-red">
+          <strong>No length normalization</strong>
+          <p class="dim">Longer documents naturally have higher TF. TF-IDF doesn't correct for this.</p>
+        </div>
+      </div>
+      <p>BM25 fixes both. It's essentially a <strong>better-tuned, probabilistically-motivated version of
+          TF-IDF</strong>.</p>
+    </section>
+
+    <!-- ===== SECTION 5: THE BM25 FORMULA ===== -->
+    <section id="s5">
+      <h2><span class="num">05</span> The BM25 Formula</h2>
+      <p>Here it is - the formula that powers Elasticsearch, Lucene, and most search engines on earth:</p>
+
+      <div class="formula-box" style="padding: 40px 24px 28px;">
+        $$\color{#6c63ff}{\text{BM25}(q,\, d)} \;=\; \sum_{t \,\in\, q} \;\color{#00c9a7}{\text{IDF}(t)} \;\cdot\;
+        \frac{\color{#6c63ff}{f(t,d)} \;\cdot\; \bigl(\color{#ffd93d}{k_1} + 1\bigr)}{\color{#6c63ff}{f(t,d)} \;+\;
+        \color{#ffd93d}{k_1} \;\cdot\; \left(1 - \color{#ff6b6b}{b} + \color{#ff6b6b}{b} \;\cdot\;
+        \dfrac{|d|}{\text{avgdl}}\right)}$$
+        <div class="label" style="font-size:0.85rem;">
+          Sum over each query term: IDF weight &times; saturating TF with length normalization
+        </div>
+      </div>
+
+      <h3>Breaking it down piece by piece</h3>
+
+      <div class="card card-accent" style="margin-top:16px;">
+        <table class="vs-table">
+          <tr>
+            <td>\(\color{#6c63ff}{f(t,\, d)}\)</td>
+            <td>Raw term frequency - how many times term \(t\) appears in document \(d\)</td>
+          </tr>
+          <tr>
+            <td>\(\color{#00c9a7}{\text{IDF}(t)}\)</td>
+            <td>Inverse document frequency - how rare term \(t\) is across the corpus</td>
+          </tr>
+          <tr>
+            <td>\(\color{#ffd93d}{k_1}\)</td>
+            <td>TF saturation parameter (typically 1.2–2.0). Controls how quickly TF saturates</td>
+          </tr>
+          <tr>
+            <td>\(\color{#ff6b6b}{b}\)</td>
+            <td>Length normalization parameter (0–1, typically 0.75). How much to penalize long docs</td>
+          </tr>
+          <tr>
+            <td>\(|d|\)</td>
+            <td>Length of document \(d\) (in words/tokens)</td>
+          </tr>
+          <tr>
+            <td>\(\text{avgdl}\)</td>
+            <td>Average document length across the whole corpus</td>
+          </tr>
+        </table>
+      </div>
+
+      <h3>The three layers of BM25</h3>
+      <div class="step-flow">
+        <div class="step-pill" style="border-color:var(--accent2);color:var(--accent2);">IDF: How rare is this term?
+        </div>
+        <div class="step-arrow">×</div>
+        <div class="step-pill" style="border-color:var(--accent);color:var(--accent);">Saturating TF: How frequent (with
+          diminishing returns)?</div>
+        <div class="step-arrow">÷</div>
+        <div class="step-pill" style="border-color:var(--accent3);color:var(--accent3);">Length norm: Adjust for
+          document length</div>
+      </div>
+
+      <div class="card card-yellow">
+        <strong>Why \((k_1 + 1)\) in the numerator?</strong>
+        <p class="dim">This is a mathematical convenience. It ensures that when a term appears at least once (\(f \geq
+          1\)), the TF component is always \(\geq 1\) (rather than some fraction). Without it, the score would be
+          between 0 and 1 - with it, the score ranges from \(0\) to \((k_1 + 1)\), which scales more meaningfully with
+          IDF.</p>
+      </div>
+    </section>
+
+    <!-- ===== SECTION 6: PARAMETERS ===== -->
+    <section id="s6">
+      <h2><span class="num">06</span> The Parameters: \(k_1\) and \(b\)</h2>
+
+      <div class="grid-2">
+        <div class="card card-accent">
+          <h3 style="margin-top:0; color:var(--accent);">\(k_1\) - Saturation Control</h3>
+          <p>Controls how quickly term frequency saturates.</p>
+          <table>
+            <tr>
+              <td>\(k_1 = 0\)</td>
+              <td>Binary model - only presence/absence matters</td>
+            </tr>
+            <tr>
+              <td>\(k_1 = 1.2\)</td>
+              <td>Default - moderate saturation (most common)</td>
+            </tr>
+            <tr>
+              <td>\(k_1 = 2.0\)</td>
+              <td>Slower saturation - extra occurrences still help</td>
+            </tr>
+            <tr>
+              <td>\(k_1 \to \infty\)</td>
+              <td>No saturation - linear TF (like raw counting)</td>
+            </tr>
+          </table>
+        </div>
+        <div class="card card-green">
+          <h3 style="margin-top:0; color:var(--accent2);">\(b\) - Length Normalization</h3>
+          <p>Controls how much document length affects scoring.</p>
+          <table>
+            <tr>
+              <td>\(b = 0\)</td>
+              <td>No length normalization - ignore doc length entirely</td>
+            </tr>
+            <tr>
+              <td>\(b = 0.75\)</td>
+              <td>Default - moderate penalty for long docs</td>
+            </tr>
+            <tr>
+              <td>\(b = 1.0\)</td>
+              <td>Full normalization - strongly penalize long docs</td>
+            </tr>
+          </table>
+        </div>
+      </div>
+
+      <div class="card card-yellow">
+        <strong>When to tune these:</strong>
+        <p class="dim"><strong>\(k_1\):</strong> Increase for verbose collections (news articles, books) where
+          repetition indicates topicality. Decrease for short documents (tweets, titles) where one mention is enough.
+        </p>
+        <p class="dim"><strong>\(b\):</strong> Decrease for collections with uniform document lengths. Increase when
+          long docs tend to be less focused (e.g., web pages with lots of boilerplate).</p>
+      </div>
+    </section>
+
+    <!-- ===== SECTION 7: SATURATION ===== -->
+    <section id="s7">
+      <h2><span class="num">07</span> Saturation: The Key Insight</h2>
+      <p>The saturation curve is what makes BM25 smarter than TF-IDF. Drag the slider to see how \(k_1\) changes the
+        curve shape:</p>
+
+      <div class="playground">
+        <h4>Interactive Saturation Curve</h4>
+        <div class="slider-item" style="max-width:400px;">
+          <label>
+            <span>k₁ value</span>
+            <span id="k1-sat-val">1.2</span>
+          </label>
+          <input type="range" id="k1-sat" min="0" max="5" step="0.1" value="1.2" />
+        </div>
+        <div class="chart-wrap" style="margin-top:16px;">
+          <canvas id="satChart"></canvas>
+        </div>
+        <p class="dim" style="font-size:0.85rem; margin-top:8px;">
+          X-axis: raw term frequency (how many times the word appears). Y-axis: the TF component score after saturation.
+          Notice how the curve flattens - this is the "diminishing returns" that BM25 gives you.
+        </p>
+      </div>
+    </section>
+
+    <!-- ===== SECTION 8: PLAYGROUND ===== -->
+    <section id="s8">
+      <h2><span class="num">08</span> Live BM25 Playground</h2>
+      <p>Type a query and documents below. BM25 will rank them in real-time.</p>
+
+      <div class="playground">
+        <h4>BM25 Search Engine</h4>
+
+        <div style="margin-bottom:16px;">
+          <label style="font-size:0.85rem; font-weight:600; display:block; margin-bottom:6px;">Query</label>
+          <input type="text" id="query-input" class="demo-input" placeholder='e.g. "machine learning algorithms"'
+            value="machine learning algorithms" style="min-height:auto;" />
+        </div>
+
+        <div style="margin-bottom:16px;">
+          <label style="font-size:0.85rem; font-weight:600; display:block; margin-bottom:6px;">Documents (one per
+            line)</label>
+          <textarea id="docs-input" class="demo-input" rows="8">Machine learning is a subset of artificial intelligence that focuses on algorithms
+Deep learning algorithms use neural networks for machine learning tasks
+Introduction to machine learning: supervised and unsupervised learning algorithms explained with examples of machine learning algorithms in practice
+Statistical algorithms for data analysis and machine learning
+The history of artificial intelligence and expert systems
+Python programming for web development and automation
+Advanced machine learning algorithms including random forests and gradient boosting machines</textarea>
+        </div>
+
+        <div class="slider-group">
+          <div class="slider-item">
+            <label><span>k₁</span><span id="k1-play-val">1.2</span></label>
+            <input type="range" id="k1-play" min="0" max="5" step="0.1" value="1.2" />
+          </div>
+          <div class="slider-item">
+            <label><span>b</span><span id="b-play-val">0.75</span></label>
+            <input type="range" id="b-play" min="0" max="1" step="0.05" value="0.75" />
+          </div>
+        </div>
+
+        <button class="demo-btn" onclick="runBM25()">Search</button>
+
+        <div id="bm25-results" class="doc-results"></div>
+      </div>
+    </section>
+
+    <!-- ===== SECTION 9: IMPLEMENTATION ===== -->
+    <section id="s9">
+      <h2><span class="num">09</span> Implementation from Scratch</h2>
+      <p>Here's BM25 implemented in Python - every line maps to the math above:</p>
+
+      <pre><code><span class="kw">import</span> math
+<span class="kw">from</span> collections <span class="kw">import</span> Counter
+
+<span class="kw">class</span> <span class="fn">BM25</span>:
+    <span class="kw">def</span> <span class="fn">__init__</span>(self, corpus, k1=<span class="num">1.2</span>, b=<span class="num">0.75</span>):
+        self.k1 = k1
+        self.b = b
+        self.corpus = [doc.lower().split() <span class="kw">for</span> doc <span class="kw">in</span> corpus]
+        self.N = len(self.corpus)
+        self.avgdl = sum(len(d) <span class="kw">for</span> d <span class="kw">in</span> self.corpus) / self.N
+
+        <span class="cm"># Build document frequency table</span>
+        self.df = {}
+        <span class="kw">for</span> doc <span class="kw">in</span> self.corpus:
+            <span class="kw">for</span> term <span class="kw">in</span> set(doc):
+                self.df[term] = self.df.get(term, <span class="num">0</span>) + <span class="num">1</span>
+
+        <span class="cm"># Pre-compute IDF for every term</span>
+        self.idf = {}
+        <span class="kw">for</span> term, freq <span class="kw">in</span> self.df.items():
+            self.idf[term] = math.log(
+                (self.N - freq + <span class="num">0.5</span>) / (freq + <span class="num">0.5</span>) + <span class="num">1</span>
+            )
+
+    <span class="kw">def</span> <span class="fn">score</span>(self, query, doc_idx):
+        doc = self.corpus[doc_idx]
+        doc_len = len(doc)
+        tf = Counter(doc)
+        score = <span class="num">0.0</span>
+
+        <span class="kw">for</span> term <span class="kw">in</span> query.lower().split():
+            <span class="kw">if</span> term <span class="kw">not in</span> self.idf:
+                <span class="kw">continue</span>
+
+            f = tf[term]                      <span class="cm"># raw TF</span>
+            idf = self.idf[term]              <span class="cm"># pre-computed IDF</span>
+
+            <span class="cm"># BM25 TF component with length normalization</span>
+            numerator = f * (self.k1 + <span class="num">1</span>)
+            denominator = f + self.k1 * (
+                <span class="num">1</span> - self.b + self.b * doc_len / self.avgdl
+            )
+
+            score += idf * numerator / denominator
+
+        <span class="kw">return</span> score
+
+    <span class="kw">def</span> <span class="fn">rank</span>(self, query, top_k=<span class="num">10</span>):
+        scores = [
+            (i, self.score(query, i))
+            <span class="kw">for</span> i <span class="kw">in</span> range(self.N)
+        ]
+        scores.sort(key=<span class="kw">lambda</span> x: x[<span class="num">1</span>], reverse=<span class="kw">True</span>)
+        <span class="kw">return</span> scores[:top_k]</code></pre>
+
+      <pre><code><span class="cm"># Usage</span>
+corpus = [
+    <span class="str">"Machine learning is a subset of AI"</span>,
+    <span class="str">"Deep learning uses neural networks"</span>,
+    <span class="str">"BM25 is a ranking algorithm for search"</span>,
+]
+
+bm25 = BM25(corpus)
+results = bm25.rank(<span class="str">"machine learning"</span>)
+
+<span class="kw">for</span> idx, score <span class="kw">in</span> results:
+    <span class="fn">print</span>(f<span class="str">"Score: {score:.3f} | {corpus[idx]}"</span>)</code></pre>
+
+      <div class="card card-green">
+        <strong>Complexity:</strong>
+        <p class="dim"><strong>Index building:</strong> \(\mathcal{O}(\text{total tokens})\) - done once.<br />
+          <strong>Query time:</strong> \(\mathcal{O}(|q| \times D)\) naive, but with inverted indexes: \(\mathcal{O}(|q|
+          \times \overline{L})\) where \(\overline{L}\) = avg posting list length.<br />
+          <strong>Space:</strong> \(\mathcal{O}(|V| + D)\) where \(|V|\) = vocabulary size, \(D\) = number of documents.
+        </p>
+      </div>
+    </section>
+
+    <!-- ===== SECTION 10: VARIANTS ===== -->
+    <section id="s10">
+      <h2><span class="num">10</span> BM25 Variants</h2>
+      <p>Researchers have proposed improvements to the original BM25 (a.k.a. BM25 Okapi):</p>
+
+      <div class="card card-accent">
+        <h3 style="margin-top:0;">BM25+ (2011)</h3>
+        <p>Adds a small constant \(\delta\) (typically 1) to the TF component. Solves the problem where BM25 can give a
+          score of 0 to a document that contains the query term but is very long.</p>
+        <div class="formula-box compact" style="margin:12px 0 0;">
+          $$\text{TF}_{\text{BM25+}} \;=\; \underbrace{\frac{f(t,d) \cdot (k_1 + 1)}{f(t,d) + k_1 \cdot \bigl(1 - b + b
+          \cdot \frac{|d|}{\text{avgdl}}\bigr)}}_{\text{original BM25 TF}} \;+\; \color{#ffd93d}{\delta}$$
+        </div>
+      </div>
+
+      <div class="card card-green">
+        <h3 style="margin-top:0;">BM25L (2011)</h3>
+        <p>Modifies the length normalization to be less aggressive for long documents. Replaces \(f(t,d)\) with a
+          boosted version:</p>
+        <div class="formula-box compact" style="margin:12px 0 0;">
+          $$f'(t,d) \;=\; \frac{f(t,d)}{1 - b + b \cdot \frac{|d|}{\text{avgdl}}} \;+\; \delta$$
+        </div>
+      </div>
+
+      <div class="card card-yellow">
+        <h3 style="margin-top:0;">BM25F (Field-aware)</h3>
+        <p>Extends BM25 to handle <strong>structured documents with multiple fields</strong> (title, body, anchor text).
+          Computes a weighted pseudo-TF across fields:</p>
+        <div class="formula-box compact" style="margin:12px 0 0;">
+          $$\tilde{f}(t,d) \;=\; \sum_{c \,\in\, \text{fields}} \frac{w_c \;\cdot\; f(t, d_c)}{1 - b_c + b_c \cdot
+          \frac{|d_c|}{\text{avgdl}_c}}$$
+        </div>
+        <p class="dim" style="margin-top:8px;">Each field \(c\) gets its own boost \(w_c\) and length normalization
+          \(b_c\). This is what Elasticsearch/Lucene uses for multi-field queries.</p>
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Variant</th>
+            <th>Key Change</th>
+            <th>Best For</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>BM25 (Okapi)</td>
+            <td>Original</td>
+            <td>General purpose - great default</td>
+          </tr>
+          <tr>
+            <td>BM25+</td>
+            <td>Floor on TF component</td>
+            <td>Corpora with high length variance</td>
+          </tr>
+          <tr>
+            <td>BM25L</td>
+            <td>Softer length penalty</td>
+            <td>Long documents that are genuinely relevant</td>
+          </tr>
+          <tr>
+            <td>BM25F</td>
+            <td>Per-field weights</td>
+            <td>Structured docs (web pages, products)</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ===== SECTION 11: BM25 vs SEMANTIC ===== -->
+    <section id="s11">
+      <h2><span class="num">11</span> BM25 vs Semantic Search</h2>
+      <p>In the age of embeddings and LLMs, is BM25 still relevant? <strong>Absolutely.</strong></p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Aspect</th>
+            <th>BM25</th>
+            <th>Semantic (Dense Retrieval)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Matching type</strong></td>
+            <td>Exact keyword matching</td>
+            <td>Meaning-based similarity</td>
+          </tr>
+          <tr>
+            <td><strong>Handles synonyms</strong></td>
+            <td>No - "car" won't match "automobile"</td>
+            <td>Yes - understands meaning</td>
+          </tr>
+          <tr>
+            <td><strong>Handles typos</strong></td>
+            <td>No (without preprocessing)</td>
+            <td>Often yes</td>
+          </tr>
+          <tr>
+            <td><strong>Exact term matching</strong></td>
+            <td>Excellent - never misses an exact match</td>
+            <td>Can miss exact matches (embedding noise)</td>
+          </tr>
+          <tr>
+            <td><strong>Speed</strong></td>
+            <td>Extremely fast (inverted index)</td>
+            <td>Slower (ANN search)</td>
+          </tr>
+          <tr>
+            <td><strong>Index size</strong></td>
+            <td>Small</td>
+            <td>Large (dense vectors)</td>
+          </tr>
+          <tr>
+            <td><strong>No ML needed</strong></td>
+            <td>Works out of the box</td>
+            <td>Needs embedding model + fine-tuning</td>
+          </tr>
+          <tr>
+            <td><strong>Interpretable</strong></td>
+            <td>Yes - you can trace why each doc scored high</td>
+            <td>Not really - embeddings are opaque</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="card card-accent" style="margin-top:24px;">
+        <h3 style="margin-top:0; color:var(--accent);">Hybrid Search: Best of Both Worlds</h3>
+        <p>Modern search systems use <strong>hybrid retrieval</strong>: BM25 + semantic search combined. This is the
+          approach used by systems like Elasticsearch with vector search, Pinecone hybrid, Weaviate, and RAG pipelines.
+        </p>
+        <div class="step-flow">
+          <div class="step-pill">BM25 top-k</div>
+          <div class="step-arrow">+</div>
+          <div class="step-pill">Semantic top-k</div>
+          <div class="step-arrow">→</div>
+          <div class="step-pill">Reciprocal Rank Fusion</div>
+          <div class="step-arrow">→</div>
+          <div class="step-pill">Final ranking</div>
+        </div>
+        <p class="dim" style="margin-top:8px;">This hybrid approach consistently outperforms either method alone. BM25
+          catches exact matches that embeddings miss, while semantic search catches conceptual matches that BM25 misses.
+        </p>
+      </div>
+
+      <div class="card card-green">
+        <strong>Key takeaway:</strong>
+        <p class="dim">BM25 isn't outdated - it's <em>complementary</em>. Even the most advanced RAG systems (like those
+          powering ChatGPT's retrieval) use BM25 as a critical component. Learn it, use it, love it.</p>
+      </div>
+    </section>
+
+  </div>
+
+  <div class="footer">
+    <p>BM25: Best Matching 25 - developed by Stephen Robertson, Karen Sparck Jones, and others at City University London
+      in the 1990s.</p>
+    <p style="margin-top:4px;">Used by Elasticsearch, Apache Lucene, Apache Solr, and virtually every major search
+      engine.</p>
+  </div>
+
+  <script>
+    // ======== Saturation Chart ========
+    const satCtx = document.getElementById('satChart').getContext('2d');
+
+    function genSatData(k1) {
+      const labels = [];
+      const data = [];
+      for (let tf = 0; tf <= 30; tf++) {
+        labels.push(tf);
+        data.push(tf * (k1 + 1) / (tf + k1));
+      }
+      return { labels, data };
+    }
+
+    let satData = genSatData(1.2);
+    const satChart = new Chart(satCtx, {
+      type: 'line',
+      data: {
+        labels: satData.labels,
+        datasets: [{
+          label: 'BM25 TF Component',
+          data: satData.data,
+          borderColor: '#6c63ff',
+          backgroundColor: 'rgba(108,99,255,0.1)',
+          fill: true,
+          tension: 0.3,
+          pointRadius: 2,
+          borderWidth: 2.5,
+        }]
+      },
+      options: {
+        responsive: true,
+        animation: { duration: 300 },
+        scales: {
+          x: {
+            title: { display: true, text: 'Raw Term Frequency', color: '#8b8fa7' },
+            ticks: { color: '#8b8fa7' },
+            grid: { color: 'rgba(46,51,69,0.5)' }
+          },
+          y: {
+            title: { display: true, text: 'TF Score (saturated)', color: '#8b8fa7' },
+            ticks: { color: '#8b8fa7' },
+            grid: { color: 'rgba(46,51,69,0.5)' },
+            min: 0,
+            max: 6,
+          }
+        },
+        plugins: {
+          legend: { display: false },
+        }
+      }
+    });
+
+    document.getElementById('k1-sat').addEventListener('input', function () {
+      const k1 = parseFloat(this.value);
+      document.getElementById('k1-sat-val').textContent = k1.toFixed(1);
+      const d = genSatData(k1);
+      satChart.data.labels = d.labels;
+      satChart.data.datasets[0].data = d.data;
+      satChart.options.scales.y.max = Math.max(k1 + 1.5, 3);
+      satChart.update();
+    });
+
+    // ======== BM25 Playground ========
+    function bm25Score(query, doc, corpus, k1, b) {
+      const N = corpus.length;
+      const avgdl = corpus.reduce((s, d) => s + d.length, 0) / N;
+      const queryTerms = query.toLowerCase().split(/\s+/).filter(Boolean);
+      let score = 0;
+
+      for (const term of queryTerms) {
+        const df = corpus.filter(d => d.includes(term)).length;
+        if (df === 0) continue;
+
+        const idf = Math.log((N - df + 0.5) / (df + 0.5) + 1);
+        const f = doc.filter(w => w === term).length;
+        const num = f * (k1 + 1);
+        const den = f + k1 * (1 - b + b * doc.length / avgdl);
+        score += idf * num / den;
+      }
+      return score;
+    }
+
+    function runBM25() {
+      const query = document.getElementById('query-input').value.trim();
+      const docsRaw = document.getElementById('docs-input').value.trim().split('\n').filter(Boolean);
+      const k1 = parseFloat(document.getElementById('k1-play').value);
+      const b = parseFloat(document.getElementById('b-play').value);
+
+      const corpus = docsRaw.map(d => d.toLowerCase().split(/\s+/));
+
+      const results = docsRaw.map((text, i) => ({
+        text,
+        score: bm25Score(query, corpus[i], corpus, k1, b),
+        idx: i,
+      }));
+
+      results.sort((a, b_) => b_.score - a.score);
+
+      const queryTerms = query.toLowerCase().split(/\s+/).filter(Boolean);
+      const container = document.getElementById('bm25-results');
+      container.innerHTML = results.map((r, rank) => {
+        let highlighted = r.text;
+        for (const t of queryTerms) {
+          const re = new RegExp(`(${t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+          highlighted = highlighted.replace(re, '<mark>$1</mark>');
+        }
+        return `<div class="doc-result-item">
+      <div style="display:flex;align-items:center;flex:1;min-width:0;">
+        <span class="rank">${rank + 1}</span>
+        <span class="text">${highlighted}</span>
+      </div>
+      <span class="score">${r.score.toFixed(3)}</span>
+    </div>`;
+      }).join('');
+    }
+
+    document.getElementById('k1-play').addEventListener('input', function () {
+      document.getElementById('k1-play-val').textContent = parseFloat(this.value).toFixed(1);
+      runBM25();
+    });
+    document.getElementById('b-play').addEventListener('input', function () {
+      document.getElementById('b-play-val').textContent = parseFloat(this.value).toFixed(2);
+      runBM25();
+    });
+    document.getElementById('query-input').addEventListener('input', runBM25);
+    document.getElementById('docs-input').addEventListener('input', runBM25);
+
+    // Initial run
+    runBM25();
+
+    // Active nav highlighting
+    const sections = document.querySelectorAll('section[id]');
+    const navLinks = document.querySelectorAll('.toc a');
+    window.addEventListener('scroll', () => {
+      let current = '';
+      sections.forEach(s => {
+        if (window.scrollY >= s.offsetTop - 120) current = s.id;
+      });
+      navLinks.forEach(a => {
+        a.classList.toggle('active', a.getAttribute('href') === '#' + current);
+      });
+    });
+  </script>
+</body>
+
+</html>

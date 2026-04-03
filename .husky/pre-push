@@ -1,0 +1,14 @@
+#!/bin/sh
+
+echo "🧪 Running Playwright E2E tests before push..."
+npm run test:e2e -- --reporter=list
+
+if [ $? -ne 0 ]; then
+  echo ""
+  echo "❌ E2E tests failed! Push aborted."
+  echo "   Fix the failing tests and try again."
+  echo "   Run 'npm run test:e2e:ui' for interactive debugging."
+  exit 1
+fi
+
+echo "✅ All E2E tests passed. Pushing..."

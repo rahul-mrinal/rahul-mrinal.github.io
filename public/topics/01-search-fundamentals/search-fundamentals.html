@@ -1,0 +1,1744 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Search Fundamentals - Masterclass</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js" onload="renderMathInElement(document.body, {
+    delimiters: [
+      {left: '$$', right: '$$', display: true},
+      {left: '\\[', right: '\\]', display: true},
+      {left: '$', right: '$', display: false},
+      {left: '\\(', right: '\\)', display: false}
+    ],
+    throwOnError: false
+  });"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../playground.css" />
+</head>
+
+<body>
+<div class="topbar">
+  <a href="/" class="topbar-brand">
+    <div class="topbar-logo">RM</div>
+    <span class="topbar-label">Rahul Mrinal</span>
+  </a>
+  <a href="/" class="topbar-back">
+    ← Back to Portfolio
+  </a>
+</div>
+
+
+  <div class="hero">
+    <div class="container">
+      <h1>Search Fundamentals</h1>
+      <p>The complete interactive guide to information retrieval - from full-text to vector to hybrid search</p>
+    </div>
+  </div>
+
+  <nav class="toc">
+    <div class="toc-inner">
+      <a href="#s1">What is Search?</a>
+      <a href="#s2">Vector Search</a>
+      <a href="#s3">Hybrid Search</a>
+      <a href="#s4">Precision & Recall</a>
+      <a href="#s5">Comparison</a>
+    </div>
+  </nav>
+
+  <div class="container">
+
+    <!-- ===== SECTION 1: WHAT IS SEARCH? ===== -->
+    <section id="s1">
+      <h2><span class="num">01</span> What is Search?</h2>
+      <p>Search is the problem of finding the most relevant items from a large collection given a user's query. It's the
+        backbone of the internet, every database, every e-commerce site, every RAG pipeline.</p>
+
+      <div class="analogy">
+        <div class="icon">🔍</div>
+        <p><strong>Analogy:</strong> Imagine a massive warehouse with millions of boxes. A customer walks in and says,
+          "I need something about Italian cooking for beginners." Search is the system that - in milliseconds - finds
+          the 10 best boxes out of millions, ranks them by relevance, and hands them over. The art is in deciding what
+          "best" means and doing it fast.</p>
+      </div>
+
+      <h3>The Core Problem: Information Retrieval</h3>
+      <p><strong>Information Retrieval (IR)</strong> is the field of computer science concerned with finding material
+        (usually documents) of an unstructured nature (usually text) that satisfies an information need from within
+        large collections.</p>
+      <p>Key distinction: IR is about <strong>relevance</strong>, not just matching. A relevant result answers the
+        user's underlying intent, not just the literal words they typed.</p>
+
+      <h3>Full-Text Search vs Structured Queries</h3>
+      <div class="grid-2">
+        <div class="card card-accent">
+          <strong>Full-Text Search</strong>
+          <p class="dim">Search through the <em>content</em> of documents - articles, web pages, PDFs. The data is
+            unstructured natural language.</p>
+          <p class="dim" style="margin-top:8px;"><code>"best Italian pasta recipes for beginners"</code></p>
+          <p class="dim">Techniques: BM25, TF-IDF, vector search, inverted indexes.</p>
+        </div>
+        <div class="card card-green">
+          <strong>Structured Queries</strong>
+          <p class="dim">Query structured data in databases using a formal language (SQL). Data is organized in rows and
+            columns with defined schemas.</p>
+          <p class="dim" style="margin-top:8px;">
+            <code>SELECT * FROM recipes WHERE cuisine = 'Italian' AND difficulty = 'easy'</code></p>
+          <p class="dim">Techniques: B-trees, hash indexes, query planners.</p>
+        </div>
+      </div>
+
+      <div class="card card-yellow">
+        <strong>Why full-text search is harder:</strong>
+        <p class="dim">Structured queries have exact answers - a row either matches the WHERE clause or it doesn't.
+          Full-text search must deal with ambiguity, synonyms, typos, context, user intent, and ranking by degree of
+          relevance. There's no binary "match" - only a spectrum of relevance.</p>
+      </div>
+
+      <h3>The Search Pipeline</h3>
+      <p>Every search system, from Google to your internal Elasticsearch cluster, follows the same high-level pipeline:
+      </p>
+
+      <div class="step-flow">
+        <div class="step-pill" style="border-color:var(--accent4);color:var(--accent4);">Query</div>
+        <div class="step-arrow">→</div>
+        <div class="step-pill" style="border-color:var(--accent);color:var(--accent);">Understand</div>
+        <div class="step-arrow">→</div>
+        <div class="step-pill" style="border-color:var(--accent2);color:var(--accent2);">Retrieve</div>
+        <div class="step-arrow">→</div>
+        <div class="step-pill" style="border-color:var(--accent3);color:var(--accent3);">Rank</div>
+        <div class="step-arrow">→</div>
+        <div class="step-pill" style="border-color:var(--accent4);color:var(--accent4);">Return</div>
+      </div>
+
+      <div class="card card-accent" style="margin-top:16px;">
+        <table class="vs-table">
+          <tr>
+            <td style="color:var(--accent4);">Query</td>
+            <td>User enters their information need - can be keywords, a question, or natural language</td>
+          </tr>
+          <tr>
+            <td style="color:var(--accent);">Understand</td>
+            <td>Query processing: tokenization, lowercasing, stemming, synonym expansion, spell correction, intent
+              classification</td>
+          </tr>
+          <tr>
+            <td style="color:var(--accent2);">Retrieve</td>
+            <td>Cast a wide net to find <strong>candidate</strong> documents from the corpus (high recall). Uses
+              inverted indexes or ANN search. Typically returns hundreds to thousands of candidates</td>
+          </tr>
+          <tr>
+            <td style="color:var(--accent3);">Rank</td>
+            <td>Score and sort candidates by relevance. This is where BM25, learned rankers, cross-encoders, or
+              LLM-based rerankers apply. Optimize for <strong>precision</strong> at the top</td>
+          </tr>
+          <tr>
+            <td style="color:var(--accent4);">Return</td>
+            <td>Return the top-k results with snippets, highlights, metadata, and facets</td>
+          </tr>
+        </table>
+      </div>
+
+      <h3>The Inverted Index: How Retrieval Gets Fast</h3>
+      <p>The foundational data structure of text search. Instead of scanning every document, we pre-build a lookup
+        table: <strong>term → list of documents containing that term</strong>.</p>
+
+      <div class="card card-green">
+        <strong>Example corpus:</strong>
+        <table>
+          <thead>
+            <tr>
+              <th>Doc</th>
+              <th>Content</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>D1</td>
+              <td>"the cat sat on the mat"</td>
+            </tr>
+            <tr>
+              <td>D2</td>
+              <td>"the dog chased the cat"</td>
+            </tr>
+            <tr>
+              <td>D3</td>
+              <td>"the mat was red"</td>
+            </tr>
+          </tbody>
+        </table>
+        <strong style="margin-top:12px;display:block;">Inverted index:</strong>
+        <table>
+          <thead>
+            <tr>
+              <th>Term</th>
+              <th>Posting List</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>cat</code></td>
+              <td>D1, D2</td>
+            </tr>
+            <tr>
+              <td><code>sat</code></td>
+              <td>D1</td>
+            </tr>
+            <tr>
+              <td><code>dog</code></td>
+              <td>D2</td>
+            </tr>
+            <tr>
+              <td><code>mat</code></td>
+              <td>D1, D3</td>
+            </tr>
+            <tr>
+              <td><code>red</code></td>
+              <td>D3</td>
+            </tr>
+            <tr>
+              <td><code>chased</code></td>
+              <td>D2</td>
+            </tr>
+          </tbody>
+        </table>
+        <p class="dim" style="margin-top:8px;">Query "cat mat" → intersect posting lists → D1 appears in both → rank D1
+          highest. No full scan needed.</p>
+      </div>
+
+      <div class="analogy">
+        <div class="icon">📖</div>
+        <p><strong>Analogy:</strong> An inverted index is like the index at the back of a textbook. Instead of reading
+          every page to find "photosynthesis," you flip to the index, find "photosynthesis → pages 42, 87, 156" and go
+          directly there. Without the index, you'd have to scan every page.</p>
+      </div>
+
+      <h3>Tokenization & Text Processing</h3>
+      <p>Before text enters the index, it goes through a processing pipeline:</p>
+      <div class="step-flow">
+        <div class="step-pill">Raw Text</div>
+        <div class="step-arrow">→</div>
+        <div class="step-pill">Tokenize</div>
+        <div class="step-arrow">→</div>
+        <div class="step-pill">Lowercase</div>
+        <div class="step-arrow">→</div>
+        <div class="step-pill">Remove Stopwords</div>
+        <div class="step-arrow">→</div>
+        <div class="step-pill">Stem / Lemmatize</div>
+        <div class="step-arrow">→</div>
+        <div class="step-pill">Index</div>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Step</th>
+            <th>Input</th>
+            <th>Output</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Tokenize</td>
+            <td>"Machine Learning is GREAT!"</td>
+            <td>["Machine", "Learning", "is", "GREAT", "!"]</td>
+          </tr>
+          <tr>
+            <td>Lowercase</td>
+            <td>["Machine", "Learning", ...]</td>
+            <td>["machine", "learning", "is", "great"]</td>
+          </tr>
+          <tr>
+            <td>Stopwords</td>
+            <td>["machine", "learning", "is", "great"]</td>
+            <td>["machine", "learning", "great"]</td>
+          </tr>
+          <tr>
+            <td>Stemming</td>
+            <td>["running", "machines", "learned"]</td>
+            <td>["run", "machin", "learn"]</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ===== SECTION 2: VECTOR SEARCH ===== -->
+    <section id="s2">
+      <h2><span class="num">02</span> Vector Search / Semantic Search</h2>
+      <p>Keyword search fails when users express the same idea with different words. Vector search solves this by
+        understanding <strong>meaning</strong>, not just matching words.</p>
+
+      <div class="analogy">
+        <div class="icon">🧠</div>
+        <p><strong>Analogy:</strong> Keyword search is like looking up a word in a dictionary - you need the exact word.
+          Semantic search is like asking a knowledgeable friend - they understand what you <em>mean</em> even if you use
+          different words. "automobile" and "car" are far apart in a dictionary but close in a friend's understanding.
+        </p>
+      </div>
+
+      <h3>What Are Embeddings?</h3>
+      <p>An <strong>embedding</strong> is a dense vector (a list of floating-point numbers) that represents the
+        <em>meaning</em> of text in a high-dimensional space. Texts with similar meanings get vectors that are close
+        together.</p>
+
+      <div class="card card-accent">
+        <strong>The key idea:</strong>
+        <p class="dim">"King" - "Man" + "Woman" ≈ "Queen"</p>
+        <p class="dim" style="margin-top:4px;">Embeddings capture semantic relationships as geometric relationships in
+          vector space. Words and sentences that mean similar things live near each other, and the directions between
+          them encode meaning.</p>
+      </div>
+
+      <h3>Evolution of Embeddings</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Model</th>
+            <th>Year</th>
+            <th>Dimension</th>
+            <th>Key Innovation</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Word2Vec</strong></td>
+            <td>2013</td>
+            <td>100–300</td>
+            <td>Word-level embeddings via skip-gram / CBOW. Showed arithmetic on word vectors works</td>
+          </tr>
+          <tr>
+            <td><strong>GloVe</strong></td>
+            <td>2014</td>
+            <td>50–300</td>
+            <td>Global co-occurrence statistics. Better at capturing global patterns</td>
+          </tr>
+          <tr>
+            <td><strong>ELMo</strong></td>
+            <td>2018</td>
+            <td>1024</td>
+            <td>Context-dependent word embeddings. "Bank" has different vectors in "river bank" vs "bank account"</td>
+          </tr>
+          <tr>
+            <td><strong>BERT</strong></td>
+            <td>2018</td>
+            <td>768</td>
+            <td>Bidirectional transformers. Deep contextual embeddings, but not great for sentences out of the box</td>
+          </tr>
+          <tr>
+            <td><strong>Sentence-BERT</strong></td>
+            <td>2019</td>
+            <td>384–768</td>
+            <td>Fine-tuned for sentence-level similarity using siamese networks</td>
+          </tr>
+          <tr>
+            <td><strong>OpenAI Ada-002</strong></td>
+            <td>2022</td>
+            <td>1536</td>
+            <td>Production-grade API embedding model</td>
+          </tr>
+          <tr>
+            <td><strong>OpenAI text-embedding-3</strong></td>
+            <td>2024</td>
+            <td>256–3072</td>
+            <td>Matryoshka embeddings - truncate to any dimension</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>How Text Becomes a Vector</h3>
+      <div class="arch-diagram">
+        <div class="arch-row">
+          <div class="arch-box yellow">"The cat sat on the mat"</div>
+        </div>
+        <div class="arch-arrow">↓</div>
+        <div class="arch-row">
+          <div class="arch-box accent">Tokenizer</div>
+        </div>
+        <div class="arch-arrow">↓</div>
+        <div class="arch-row">
+          <div class="arch-box" style="font-size:0.78rem;">[101, 1996, 4937, 2938, 2006, 1996, 13523, 102]</div>
+        </div>
+        <div class="arch-arrow">↓</div>
+        <div class="arch-row">
+          <div class="arch-box green">Transformer Encoder (12+ layers)</div>
+        </div>
+        <div class="arch-arrow">↓</div>
+        <div class="arch-row">
+          <div class="arch-box" style="font-size:0.78rem;">Mean Pooling over token embeddings</div>
+        </div>
+        <div class="arch-arrow">↓</div>
+        <div class="arch-row">
+          <div class="arch-box red">[0.023, -0.118, 0.891, ..., 0.045] &nbsp; (384-dim vector)</div>
+        </div>
+      </div>
+
+      <h3>Embedding Space Visualization</h3>
+      <p>In this 2D projection, similar concepts cluster together. Hover over the dots to see the labels:</p>
+
+      <div class="embed-space" id="embedSpace"></div>
+
+      <div class="card card-yellow">
+        <strong>Key insight about dimensionality:</strong>
+        <p class="dim">Real embeddings live in 384–3072 dimensions. We project them to 2D for visualization, which loses
+          information. In high dimensions, the distances are far more expressive - many concepts that appear overlapping
+          in 2D are actually well-separated in the full space.</p>
+      </div>
+
+      <h3>Distance Metrics: How Do We Measure "Similar"?</h3>
+      <p>Given two vectors \(\mathbf{a}\) and \(\mathbf{b}\), there are three main ways to measure their similarity:</p>
+
+      <div class="formula-box">
+        $$\color{#6c63ff}{\text{Cosine Similarity}} = \frac{\mathbf{a} \cdot \mathbf{b}}{\|\mathbf{a}\| \;
+        \|\mathbf{b}\|} = \frac{\sum_i a_i b_i}{\sqrt{\sum_i a_i^2} \;\cdot\; \sqrt{\sum_i b_i^2}}$$
+        <div class="label">Measures the angle between vectors. Range: [-1, 1]. Most common in NLP.</div>
+      </div>
+
+      <div class="formula-box">
+        $$\color{#00c9a7}{\text{Dot Product}} = \mathbf{a} \cdot \mathbf{b} = \sum_i a_i b_i$$
+        <div class="label">Measures both direction and magnitude. Preferred when vector norms carry meaning (e.g.,
+          popularity).</div>
+      </div>
+
+      <div class="formula-box">
+        $$\color{#ff6b6b}{\text{Euclidean Distance}} = \|\mathbf{a} - \mathbf{b}\| = \sqrt{\sum_i (a_i - b_i)^2}$$
+        <div class="label">Straight-line distance. Lower = more similar. Sensitive to magnitude.</div>
+      </div>
+
+      <div class="card card-green">
+        <strong>When to use which metric:</strong>
+        <table>
+          <thead>
+            <tr>
+              <th>Metric</th>
+              <th>Best For</th>
+              <th>Note</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Cosine</td>
+              <td>Text similarity, NLP</td>
+              <td>Ignores magnitude - only cares about direction. A 3-word sentence and a 300-word paragraph can still
+                be "close"</td>
+            </tr>
+            <tr>
+              <td>Dot Product</td>
+              <td>Recommendation, MIPS</td>
+              <td>When normalized vectors are used, equivalent to cosine. Faster to compute</td>
+            </tr>
+            <tr>
+              <td>Euclidean</td>
+              <td>Spatial data, clustering</td>
+              <td>Sensitive to scale - may need normalization first</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Cosine Similarity Playground</h3>
+      <p>Type two sentences below. The simulator computes a <strong>simulated</strong> cosine similarity using word
+        overlap and semantic features:</p>
+
+      <div class="playground">
+        <h4>Cosine Similarity Simulator</h4>
+        <div style="margin-bottom:12px;">
+          <label style="font-size:0.85rem; font-weight:600; display:block; margin-bottom:6px;">Sentence A</label>
+          <input type="text" id="simA" class="demo-input" value="The cat sat on the mat" style="min-height:auto;" />
+        </div>
+        <div style="margin-bottom:12px;">
+          <label style="font-size:0.85rem; font-weight:600; display:block; margin-bottom:6px;">Sentence B</label>
+          <input type="text" id="simB" class="demo-input" value="A kitten was resting on a rug"
+            style="min-height:auto;" />
+        </div>
+        <button class="demo-btn" onclick="computeSimilarity()">Compute Similarity</button>
+        <div id="sim-results" style="margin-top:16px;"></div>
+      </div>
+
+      <h3>Approximate Nearest Neighbor (ANN)</h3>
+      <p>With millions of vectors, exact nearest-neighbor search (comparing the query against every vector) is too slow.
+        ANN algorithms trade a tiny bit of accuracy for massive speed gains.</p>
+
+      <div class="analogy">
+        <div class="icon">🗺️</div>
+        <p><strong>Analogy:</strong> Imagine finding the closest coffee shop. <strong>Exact search</strong> means
+          measuring the distance to every coffee shop on earth. <strong>ANN</strong> is like knowing "I'm in downtown
+          Manhattan" and only checking shops in nearby neighborhoods. You might miss a shop 1 block outside your search
+          zone, but you find a great one in 1ms instead of 1 hour.</p>
+      </div>
+
+      <div class="grid-3">
+        <div class="card card-accent">
+          <strong>HNSW</strong>
+          <p class="dim" style="font-size:0.85rem;">Hierarchical Navigable Small World graphs. Builds a multi-layer
+            graph where each layer is a "skip list." Start at the top (sparse) layer, greedily navigate toward the
+            query, then descend to finer layers.</p>
+          <p class="dim" style="font-size:0.82rem; margin-top:8px;"><strong>Speed:</strong> O(log
+            N)<br /><strong>Memory:</strong> High<br /><strong>Accuracy:</strong> Very high</p>
+        </div>
+        <div class="card card-green">
+          <strong>IVF</strong>
+          <p class="dim" style="font-size:0.85rem;">Inverted File Index. Cluster vectors with k-means, then at query
+            time only search the nearest clusters (called "probes"). More probes = better recall but slower.</p>
+          <p class="dim" style="font-size:0.82rem; margin-top:8px;"><strong>Speed:</strong> O(N/k ·
+            nprobe)<br /><strong>Memory:</strong> Low<br /><strong>Accuracy:</strong> Good (tunable)</p>
+        </div>
+        <div class="card card-red">
+          <strong>PQ</strong>
+          <p class="dim" style="font-size:0.85rem;">Product Quantization. Compress vectors by splitting them into
+            sub-vectors and quantizing each to a codebook entry. Distances are approximated using lookup tables.</p>
+          <p class="dim" style="font-size:0.82rem; margin-top:8px;"><strong>Speed:</strong> Very
+            fast<br /><strong>Memory:</strong> Very low (32x compression)<br /><strong>Accuracy:</strong> Lower (lossy)
+          </p>
+        </div>
+      </div>
+
+      <div class="card card-yellow">
+        <strong>In practice, these are combined:</strong>
+        <p class="dim">Production systems like FAISS use <code>IVF + PQ</code> for memory-constrained billion-scale
+          search, or <code>HNSW</code> for highest quality. Pinecone, Weaviate, Qdrant, and Milvus all use HNSW as their
+          default index.</p>
+      </div>
+
+      <h3>ANN Tradeoff: Speed vs Recall</h3>
+      <p>Every ANN algorithm has a knob that trades accuracy for speed. This chart shows the typical tradeoff curve:</p>
+
+      <div class="chart-wrap">
+        <canvas id="annChart"></canvas>
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th>ANN Algorithm</th>
+            <th>Index Build Time</th>
+            <th>Query Time</th>
+            <th>Memory</th>
+            <th>Recall@10</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Flat (brute force)</td>
+            <td>None</td>
+            <td>O(N)</td>
+            <td>100%</td>
+            <td>100%</td>
+          </tr>
+          <tr>
+            <td>IVF-Flat</td>
+            <td>Moderate</td>
+            <td>O(N/k)</td>
+            <td>100%</td>
+            <td>~95%</td>
+          </tr>
+          <tr>
+            <td>IVF-PQ</td>
+            <td>High</td>
+            <td>Very fast</td>
+            <td>~3%</td>
+            <td>~85%</td>
+          </tr>
+          <tr>
+            <td>HNSW</td>
+            <td>High</td>
+            <td>O(log N)</td>
+            <td>~130%</td>
+            <td>~98%</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ===== SECTION 3: HYBRID SEARCH ===== -->
+    <section id="s3">
+      <h2><span class="num">03</span> Hybrid Search</h2>
+      <p>Neither keyword search (BM25) nor vector search alone is perfect. <strong>Hybrid search combines both</strong>
+        to get the best of exact matching and semantic understanding.</p>
+
+      <h3>Why Combine BM25 + Vector Search?</h3>
+      <div class="grid-2">
+        <div class="card card-red">
+          <strong>BM25 Failures</strong>
+          <p class="dim">Query: "automobile maintenance tips"</p>
+          <p class="dim">BM25 misses a great article titled "Car Repair Guide for Beginners" - no overlapping keywords.
+          </p>
+        </div>
+        <div class="card card-red">
+          <strong>Vector Search Failures</strong>
+          <p class="dim">Query: "error code NX-4872"</p>
+          <p class="dim">Vector search returns generic "error handling" articles. BM25 finds the exact error code
+            instantly.</p>
+        </div>
+      </div>
+
+      <div class="card card-green">
+        <strong>When hybrid beats either alone:</strong>
+        <table>
+          <thead>
+            <tr>
+              <th>Scenario</th>
+              <th>BM25</th>
+              <th>Vector</th>
+              <th>Hybrid</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Exact ID / code lookup</td>
+              <td style="color:var(--accent2);">Excellent</td>
+              <td style="color:var(--accent3);">Poor</td>
+              <td style="color:var(--accent2);">Excellent</td>
+            </tr>
+            <tr>
+              <td>Synonym-heavy query</td>
+              <td style="color:var(--accent3);">Poor</td>
+              <td style="color:var(--accent2);">Excellent</td>
+              <td style="color:var(--accent2);">Excellent</td>
+            </tr>
+            <tr>
+              <td>Mixed: technical term + concept</td>
+              <td style="color:var(--accent4);">Partial</td>
+              <td style="color:var(--accent4);">Partial</td>
+              <td style="color:var(--accent2);">Excellent</td>
+            </tr>
+            <tr>
+              <td>Rare domain-specific jargon</td>
+              <td style="color:var(--accent2);">Good</td>
+              <td style="color:var(--accent4);">Varies</td>
+              <td style="color:var(--accent2);">Excellent</td>
+            </tr>
+            <tr>
+              <td>Conversational / vague query</td>
+              <td style="color:var(--accent3);">Poor</td>
+              <td style="color:var(--accent2);">Good</td>
+              <td style="color:var(--accent2);">Good</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Architecture: Dual Retrieval Pipeline</h3>
+
+      <div class="arch-diagram">
+        <div class="arch-row">
+          <div class="arch-box yellow" style="min-width:200px;">User Query</div>
+        </div>
+        <div class="arch-arrow">↓
+          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+          ↓</div>
+        <div class="arch-row" style="gap:40px;">
+          <div style="display:flex;flex-direction:column;align-items:center;gap:8px;">
+            <div class="arch-box accent">Tokenizer + Analyzer</div>
+            <div class="arch-arrow">↓</div>
+            <div class="arch-box accent">BM25 / Inverted Index</div>
+            <div class="arch-arrow">↓</div>
+            <div class="arch-box accent">Top-K (keyword)</div>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:8px;">
+            <div class="arch-box green">Embedding Model</div>
+            <div class="arch-arrow">↓</div>
+            <div class="arch-box green">ANN / Vector Index</div>
+            <div class="arch-arrow">↓</div>
+            <div class="arch-box green">Top-K (semantic)</div>
+          </div>
+        </div>
+        <div class="arch-arrow">↘
+          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ↙</div>
+        <div class="arch-row">
+          <div class="arch-box red" style="min-width:240px;">Fusion (RRF / Weighted)</div>
+        </div>
+        <div class="arch-arrow">↓</div>
+        <div class="arch-row">
+          <div class="arch-box yellow" style="min-width:200px;">Final Ranked Results</div>
+        </div>
+      </div>
+
+      <h3>Reciprocal Rank Fusion (RRF)</h3>
+      <p>RRF is the most popular method for combining results from multiple retrieval systems. It's simple, effective,
+        and requires no training:</p>
+
+      <div class="formula-box">
+        $$\color{#6c63ff}{\text{RRF}(d)} = \sum_{r \,\in\, R} \frac{1}{\color{#ffd93d}{k} + \color{#00c9a7}{r(d)}}$$
+        <div class="label">
+          \(R\) = set of rankers &nbsp;&bull;&nbsp;
+          \(\color{#00c9a7}{r(d)}\) = rank of doc \(d\) in ranker \(r\) &nbsp;&bull;&nbsp;
+          \(\color{#ffd93d}{k}\) = smoothing constant (typically 60)
+        </div>
+      </div>
+
+      <div class="card card-accent">
+        <strong>How RRF works - step by step:</strong>
+        <p class="dim">1. Get top-100 results from BM25 (each doc has a rank: 1, 2, 3, ...)</p>
+        <p class="dim">2. Get top-100 results from vector search (each doc has a rank: 1, 2, 3, ...)</p>
+        <p class="dim">3. For each unique doc, compute: score = 1/(k + rank_bm25) + 1/(k + rank_vector)</p>
+        <p class="dim">4. Sort all docs by their combined RRF score</p>
+        <p class="dim">5. A doc ranked #1 in both systems gets: 1/(60+1) + 1/(60+1) = 0.0328</p>
+        <p class="dim">6. A doc ranked #1 in BM25 but #50 in vector gets: 1/(60+1) + 1/(60+50) = 0.0255</p>
+      </div>
+
+      <h3>RRF Calculator</h3>
+      <div class="playground">
+        <h4>Reciprocal Rank Fusion - Live Calculator</h4>
+        <div class="slider-group">
+          <div class="slider-item">
+            <label><span>BM25 Rank</span><span id="rrf-bm25-val">1</span></label>
+            <input type="range" id="rrf-bm25" min="1" max="100" step="1" value="1" />
+          </div>
+          <div class="slider-item">
+            <label><span>Vector Rank</span><span id="rrf-vec-val">1</span></label>
+            <input type="range" id="rrf-vec" min="1" max="100" step="1" value="1" />
+          </div>
+        </div>
+        <div class="slider-item" style="max-width:400px;margin-bottom:16px;">
+          <label><span>k (smoothing)</span><span id="rrf-k-val">60</span></label>
+          <input type="range" id="rrf-k" min="1" max="100" step="1" value="60" />
+        </div>
+        <div class="metrics-grid">
+          <div class="metric-card">
+            <div class="metric-name">BM25 Contribution</div>
+            <div class="metric-val" id="rrf-bm25-score" style="color:var(--accent);">0.0164</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-name">Vector Contribution</div>
+            <div class="metric-val" id="rrf-vec-score" style="color:var(--accent2);">0.0164</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-name">RRF Score</div>
+            <div class="metric-val" id="rrf-total-score">0.0328</div>
+          </div>
+        </div>
+      </div>
+
+      <h3>Weighted Combination</h3>
+      <p>An alternative to RRF is a weighted linear combination of normalized scores:</p>
+
+      <div class="formula-box">
+        $$\color{#6c63ff}{\text{Score}(d)} = \color{#ffd93d}{\alpha} \cdot \hat{s}_{\text{BM25}}(d) \;+\;
+        \color{#00c9a7}{(1 - \alpha)} \cdot \hat{s}_{\text{vector}}(d)$$
+        <div class="label">
+          \(\color{#ffd93d}{\alpha}\) = weight for keyword relevance (0 to 1) &nbsp;&bull;&nbsp;
+          \(\hat{s}\) = min-max normalized score
+        </div>
+      </div>
+
+      <div class="card card-yellow">
+        <strong>RRF vs Weighted: When to use which?</strong>
+        <table>
+          <thead>
+            <tr>
+              <th>Approach</th>
+              <th>Pros</th>
+              <th>Cons</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>RRF</td>
+              <td>No score normalization needed, no tuning, robust</td>
+              <td>Ignores score magnitude - rank #1 with score 0.99 and rank #1 with score 0.51 are treated the same
+              </td>
+            </tr>
+            <tr>
+              <td>Weighted</td>
+              <td>Uses actual score values, tunable per-domain</td>
+              <td>Requires score normalization, needs tuning of \(\alpha\)</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Weighted Score Playground</h3>
+      <div class="playground">
+        <h4>Weighted Combination - Tune Alpha</h4>
+        <div class="slider-item" style="max-width:500px;margin-bottom:16px;">
+          <label><span>Alpha (α) - BM25 weight</span><span id="alpha-val">0.50</span></label>
+          <input type="range" id="alpha-slider" min="0" max="1" step="0.05" value="0.5" />
+        </div>
+        <p class="dim" style="font-size:0.85rem; margin-bottom:12px;">BM25 weight = <span class="var-yellow"
+            id="alpha-bm25">0.50</span> &nbsp;|&nbsp; Vector weight = <span class="var-green" id="alpha-vec">0.50</span>
+        </p>
+        <div id="alpha-results"></div>
+      </div>
+    </section>
+
+    <!-- ===== SECTION 4: PRECISION & RECALL ===== -->
+    <section id="s4">
+      <h2><span class="num">04</span> Precision & Recall</h2>
+      <p>How do you know if your search system is actually good? Precision and recall are the fundamental metrics of
+        information retrieval.</p>
+
+      <div class="analogy">
+        <div class="icon">🎯</div>
+        <p><strong>Analogy:</strong> A search engine is like a fishing net. <strong>Precision</strong> asks: "Of all the
+          fish I caught, what fraction are the type I wanted?" <strong>Recall</strong> asks: "Of all the target fish in
+          the lake, what fraction did my net catch?" A tiny, fine net might catch only target fish (high precision) but
+          miss most of them (low recall). A massive net catches everything (high recall) but also catches a lot of junk
+          (low precision).</p>
+      </div>
+
+      <h3>Definitions</h3>
+
+      <div class="grid-2">
+        <div class="formula-box">
+          $$\color{#6c63ff}{\text{Precision}} = \frac{\text{Relevant} \cap \text{Retrieved}}{|\text{Retrieved}|}$$
+          <div class="label">Of everything you returned, how much was actually relevant?</div>
+        </div>
+        <div class="formula-box">
+          $$\color{#00c9a7}{\text{Recall}} = \frac{\text{Relevant} \cap \text{Retrieved}}{|\text{Relevant}|}$$
+          <div class="label">Of everything that's relevant, how much did you find?</div>
+        </div>
+      </div>
+
+      <div class="formula-box">
+        $$\color{#ffd93d}{\text{F1}} = 2 \cdot \frac{\text{Precision} \times \text{Recall}}{\text{Precision} +
+        \text{Recall}}$$
+        <div class="label">Harmonic mean of precision and recall - balances both equally</div>
+      </div>
+
+      <div class="card card-accent">
+        <strong>Why harmonic mean, not arithmetic mean?</strong>
+        <p class="dim">If precision = 1.0 and recall = 0.01, the arithmetic mean = 0.505 (sounds fine!). But the
+          harmonic mean = 0.0198 (correctly shows the system is terrible). The harmonic mean penalizes extreme
+          imbalance, which is exactly what we want - a system that's great at one metric but terrible at the other is
+          not useful.</p>
+      </div>
+
+      <h3>The Precision-Recall Tradeoff</h3>
+      <p>Drag the threshold slider to see how changing the cutoff affects precision and recall:</p>
+
+      <div class="chart-wrap">
+        <canvas id="prChart"></canvas>
+      </div>
+
+      <div class="card card-yellow">
+        <strong>The tradeoff in practice:</strong>
+        <table>
+          <thead>
+            <tr>
+              <th>System</th>
+              <th>Prioritize</th>
+              <th>Why</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Legal discovery</td>
+              <td style="color:var(--accent2);">Recall</td>
+              <td>Missing a relevant document can lose a case. Return everything, even at cost of noise</td>
+            </tr>
+            <tr>
+              <td>E-commerce search</td>
+              <td style="color:var(--accent);">Precision</td>
+              <td>Top results must be relevant - users won't scroll past page 1</td>
+            </tr>
+            <tr>
+              <td>RAG retrieval</td>
+              <td style="color:var(--accent4);">Balance</td>
+              <td>Need enough relevant chunks (recall) but too much noise confuses the LLM (precision)</td>
+            </tr>
+            <tr>
+              <td>Medical diagnosis</td>
+              <td style="color:var(--accent2);">Recall</td>
+              <td>Missing a disease is worse than a false alarm - high recall, then human review</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Interactive Precision/Recall Demo</h3>
+      <p>Below are 10 documents for the query <strong>"machine learning with Python"</strong>. Click documents to toggle
+        whether they are <span class="var-accent">"Retrieved"</span> by your search system. Green-tagged documents are
+        truly relevant. Watch the metrics update live:</p>
+
+      <div class="playground">
+        <h4>Search Evaluation Sandbox</h4>
+        <p class="dim" style="font-size:0.85rem; margin-bottom:12px;">Click to toggle retrieval. <span
+            class="tag tag-relevant">Relevant</span> = truly relevant to the query.</p>
+        <div id="pr-docs"></div>
+        <div class="metrics-grid" id="pr-metrics">
+          <div class="metric-card">
+            <div class="metric-name">Precision</div>
+            <div class="metric-val" id="pr-precision" style="color:var(--accent);">-</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-name">Recall</div>
+            <div class="metric-val" id="pr-recall" style="color:var(--accent2);">-</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-name">F1 Score</div>
+            <div class="metric-val" id="pr-f1" style="color:var(--accent4);">-</div>
+          </div>
+        </div>
+        <div id="pr-breakdown" class="result-box"
+          style="margin-top:16px; font-size:0.85rem; font-family:'Inter',sans-serif;">
+          Click documents above to start evaluating.
+        </div>
+      </div>
+
+      <h3>Beyond Precision & Recall: Ranking Metrics</h3>
+      <p>Precision and recall treat search as a set problem - a doc is either retrieved or not. But <strong>ranking
+          order matters</strong>. These metrics capture whether the best results appear at the top:</p>
+
+      <div class="card card-accent">
+        <h3 style="margin-top:0; color:var(--accent);">MRR - Mean Reciprocal Rank</h3>
+        <div class="formula-box compact" style="margin:12px 0;">
+          $$\color{#6c63ff}{\text{MRR}} = \frac{1}{|Q|} \sum_{i=1}^{|Q|} \frac{1}{\text{rank}_i}$$
+        </div>
+        <p class="dim">For each query, find the rank of the <strong>first</strong> relevant result. MRR averages 1/rank
+          across all queries. Focuses entirely on the first correct answer - great for navigational queries ("take me to
+          X").</p>
+        <table>
+          <thead>
+            <tr>
+              <th>Query</th>
+              <th>First relevant at rank</th>
+              <th>Reciprocal Rank</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Q1</td>
+              <td>1</td>
+              <td>1/1 = 1.000</td>
+            </tr>
+            <tr>
+              <td>Q2</td>
+              <td>3</td>
+              <td>1/3 = 0.333</td>
+            </tr>
+            <tr>
+              <td>Q3</td>
+              <td>2</td>
+              <td>1/2 = 0.500</td>
+            </tr>
+          </tbody>
+        </table>
+        <p class="dim"><strong>MRR</strong> = (1.000 + 0.333 + 0.500) / 3 = <strong>0.611</strong></p>
+      </div>
+
+      <div class="card card-green">
+        <h3 style="margin-top:0; color:var(--accent2);">MAP - Mean Average Precision</h3>
+        <div class="formula-box compact" style="margin:12px 0;">
+          $$\color{#00c9a7}{\text{AP}(q)} = \frac{1}{|\text{Rel}|} \sum_{k=1}^{n} P(k) \cdot \text{rel}(k)$$
+        </div>
+        <p class="dim">For each query: at every rank position where a relevant doc appears, compute precision at that
+          cutoff. Average those. Then average across queries. Rewards systems that rank relevant docs higher.</p>
+        <p class="dim" style="margin-top:8px;"><strong>Example:</strong> Results: [R, N, R, N, R] (R=relevant, N=not)
+        </p>
+        <p class="dim">P@1 = 1/1 = 1.0, P@3 = 2/3 = 0.67, P@5 = 3/5 = 0.60</p>
+        <p class="dim">AP = (1.0 + 0.67 + 0.60) / 3 = <strong>0.756</strong></p>
+      </div>
+
+      <div class="card card-yellow">
+        <h3 style="margin-top:0; color:var(--accent4);">NDCG - Normalized Discounted Cumulative Gain</h3>
+        <div class="formula-box compact" style="margin:12px 0;">
+          $$\color{#ffd93d}{\text{DCG}@k} = \sum_{i=1}^{k} \frac{2^{\text{rel}_i} - 1}{\log_2(i + 1)}$$
+        </div>
+        <div class="formula-box compact" style="margin:12px 0;">
+          $$\color{#ffd93d}{\text{NDCG}@k} = \frac{\text{DCG}@k}{\text{IDCG}@k}$$
+        </div>
+        <p class="dim">Unlike P/R (binary: relevant or not), NDCG supports <strong>graded relevance</strong> (e.g., 0 =
+          irrelevant, 1 = somewhat relevant, 2 = highly relevant, 3 = perfect). The log denominator discounts results at
+          lower positions. IDCG is the ideal (best possible) DCG - the ratio normalizes the score to [0, 1].</p>
+        <p class="dim" style="margin-top:8px;"><strong>Example:</strong> Results with graded relevance: [3, 2, 0, 1]</p>
+        <p class="dim">DCG = (2³-1)/log₂2 + (2²-1)/log₂3 + (2⁰-1)/log₂4 + (2¹-1)/log₂5</p>
+        <p class="dim">DCG = 7/1 + 3/1.585 + 0/2 + 1/2.322 = 7 + 1.893 + 0 + 0.431 = <strong>9.324</strong></p>
+      </div>
+
+      <div class="card card-accent" style="margin-top:24px;">
+        <strong>Which metric to use?</strong>
+        <table>
+          <thead>
+            <tr>
+              <th>Metric</th>
+              <th>Handles Graded Relevance?</th>
+              <th>Position-Aware?</th>
+              <th>Common Use Case</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Precision@K</td>
+              <td>No (binary)</td>
+              <td>Only via cutoff</td>
+              <td>Quick sanity check</td>
+            </tr>
+            <tr>
+              <td>Recall@K</td>
+              <td>No (binary)</td>
+              <td>Only via cutoff</td>
+              <td>Retrieval stage evaluation</td>
+            </tr>
+            <tr>
+              <td>F1</td>
+              <td>No (binary)</td>
+              <td>No</td>
+              <td>Balanced set evaluation</td>
+            </tr>
+            <tr>
+              <td>MRR</td>
+              <td>No (binary)</td>
+              <td>Yes (first hit)</td>
+              <td>Navigational / QA queries</td>
+            </tr>
+            <tr>
+              <td>MAP</td>
+              <td>No (binary)</td>
+              <td>Yes (all hits)</td>
+              <td>General search evaluation</td>
+            </tr>
+            <tr>
+              <td>NDCG</td>
+              <td>Yes (graded)</td>
+              <td>Yes</td>
+              <td>Web search, recommendations - gold standard</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>NDCG Calculator</h3>
+      <div class="playground">
+        <h4>NDCG@5 - Live Calculator</h4>
+        <p class="dim" style="font-size:0.85rem; margin-bottom:16px;">Set the relevance grade (0–3) for each of the top
+          5 results. NDCG compares your ranking against the ideal ranking.</p>
+        <div style="display:grid; grid-template-columns:repeat(5,1fr); gap:12px;">
+          <div class="slider-item">
+            <label><span>Rank 1</span><span id="ndcg-v1">3</span></label>
+            <input type="range" class="ndcg-input" data-idx="0" min="0" max="3" step="1" value="3" />
+          </div>
+          <div class="slider-item">
+            <label><span>Rank 2</span><span id="ndcg-v2">2</span></label>
+            <input type="range" class="ndcg-input" data-idx="1" min="0" max="3" step="1" value="2" />
+          </div>
+          <div class="slider-item">
+            <label><span>Rank 3</span><span id="ndcg-v3">0</span></label>
+            <input type="range" class="ndcg-input" data-idx="2" min="0" max="3" step="1" value="0" />
+          </div>
+          <div class="slider-item">
+            <label><span>Rank 4</span><span id="ndcg-v4">1</span></label>
+            <input type="range" class="ndcg-input" data-idx="3" min="0" max="3" step="1" value="1" />
+          </div>
+          <div class="slider-item">
+            <label><span>Rank 5</span><span id="ndcg-v5">0</span></label>
+            <input type="range" class="ndcg-input" data-idx="4" min="0" max="3" step="1" value="0" />
+          </div>
+        </div>
+        <div class="metrics-grid" style="margin-top:20px; grid-template-columns: repeat(3, 1fr);">
+          <div class="metric-card">
+            <div class="metric-name">DCG@5</div>
+            <div class="metric-val" id="ndcg-dcg" style="color:var(--accent);">-</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-name">Ideal DCG@5</div>
+            <div class="metric-val" id="ndcg-idcg" style="color:var(--accent2);">-</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-name">NDCG@5</div>
+            <div class="metric-val" id="ndcg-ndcg" style="color:var(--accent4);">-</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== SECTION 5: PUTTING IT ALL TOGETHER ===== -->
+    <section id="s5">
+      <h2><span class="num">05</span> Putting It All Together</h2>
+      <p>Here's a comprehensive comparison of the three search paradigms to give you a comprehensive overview:</p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Dimension</th>
+            <th>BM25 (Keyword)</th>
+            <th>Vector (Semantic)</th>
+            <th>Hybrid</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Matching type</strong></td>
+            <td>Exact lexical match</td>
+            <td>Meaning-based similarity</td>
+            <td>Both</td>
+          </tr>
+          <tr>
+            <td><strong>Synonyms</strong></td>
+            <td style="color:var(--accent3);">Misses them entirely</td>
+            <td style="color:var(--accent2);">Handles naturally</td>
+            <td style="color:var(--accent2);">Handled via vectors</td>
+          </tr>
+          <tr>
+            <td><strong>Exact match</strong></td>
+            <td style="color:var(--accent2);">Never misses</td>
+            <td style="color:var(--accent3);">Can miss (embedding noise)</td>
+            <td style="color:var(--accent2);">Never misses</td>
+          </tr>
+          <tr>
+            <td><strong>Query latency</strong></td>
+            <td style="color:var(--accent2);">&lt;5ms (inverted index)</td>
+            <td style="color:var(--accent4);">10–50ms (ANN)</td>
+            <td style="color:var(--accent4);">15–60ms (both)</td>
+          </tr>
+          <tr>
+            <td><strong>Index build cost</strong></td>
+            <td style="color:var(--accent2);">Low - just tokenize</td>
+            <td style="color:var(--accent3);">High - embed all docs</td>
+            <td style="color:var(--accent3);">High - both indexes</td>
+          </tr>
+          <tr>
+            <td><strong>Storage</strong></td>
+            <td style="color:var(--accent2);">Small (inverted index)</td>
+            <td style="color:var(--accent3);">Large (dense vectors)</td>
+            <td style="color:var(--accent3);">Both - largest</td>
+          </tr>
+          <tr>
+            <td><strong>Needs ML model</strong></td>
+            <td style="color:var(--accent2);">No</td>
+            <td style="color:var(--accent3);">Yes (embedding model)</td>
+            <td style="color:var(--accent3);">Yes</td>
+          </tr>
+          <tr>
+            <td><strong>Interpretability</strong></td>
+            <td style="color:var(--accent2);">High - traceable scores</td>
+            <td style="color:var(--accent3);">Low - opaque embeddings</td>
+            <td style="color:var(--accent4);">Medium</td>
+          </tr>
+          <tr>
+            <td><strong>Handles typos</strong></td>
+            <td style="color:var(--accent3);">No (without fuzzy)</td>
+            <td style="color:var(--accent2);">Usually yes</td>
+            <td style="color:var(--accent2);">Yes via vectors</td>
+          </tr>
+          <tr>
+            <td><strong>Zero-shot new domains</strong></td>
+            <td style="color:var(--accent2);">Works immediately</td>
+            <td style="color:var(--accent4);">Depends on model</td>
+            <td style="color:var(--accent2);">Good baseline</td>
+          </tr>
+          <tr>
+            <td><strong>Infrastructure</strong></td>
+            <td>Elasticsearch, Lucene</td>
+            <td>Pinecone, Weaviate, FAISS</td>
+            <td>Weaviate, Elastic 8+, Vespa</td>
+          </tr>
+          <tr>
+            <td><strong>Best for</strong></td>
+            <td>Exact lookup, known-item search, log search</td>
+            <td>Conceptual search, recommendations, multilingual</td>
+            <td>RAG, e-commerce, enterprise search</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Decision Framework: Which Search to Use?</h3>
+
+      <div class="arch-diagram" style="padding:28px;">
+        <div class="arch-row">
+          <div class="arch-box yellow" style="min-width:260px;">Do users search with exact terms?</div>
+        </div>
+        <div style="display:flex; gap:80px; margin-top:8px;">
+          <div style="display:flex;flex-direction:column;align-items:center;">
+            <div class="arch-arrow">↓ Yes</div>
+            <div class="arch-box accent">BM25 is sufficient</div>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:center;">
+            <div class="arch-arrow">↓ No / Mixed</div>
+            <div class="arch-box yellow" style="min-width:260px;margin-top:0;">Do you need exact match guarantees?</div>
+          </div>
+        </div>
+        <div style="display:flex; gap:80px; margin-top:8px; margin-left:220px;">
+          <div style="display:flex;flex-direction:column;align-items:center;">
+            <div class="arch-arrow">↓ No</div>
+            <div class="arch-box green">Vector search</div>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:center;">
+            <div class="arch-arrow">↓ Yes</div>
+            <div class="arch-box red">Hybrid search</div>
+          </div>
+        </div>
+      </div>
+
+      <h3>Quick Reference</h3>
+
+      <div class="card card-green">
+        <strong>Key formulas to know:</strong>
+        <table>
+          <thead>
+            <tr>
+              <th>Concept</th>
+              <th>Formula</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Cosine Similarity</td>
+              <td>\(\frac{\mathbf{a} \cdot \mathbf{b}}{\|\mathbf{a}\| \|\mathbf{b}\|}\)</td>
+            </tr>
+            <tr>
+              <td>BM25 TF Component</td>
+              <td>\(\frac{f(t,d) \cdot (k_1 + 1)}{f(t,d) + k_1 \cdot (1 - b + b \cdot |d|/\text{avgdl})}\)</td>
+            </tr>
+            <tr>
+              <td>IDF (BM25)</td>
+              <td>\(\ln\left(\frac{N - \text{df}(t) + 0.5}{\text{df}(t) + 0.5} + 1\right)\)</td>
+            </tr>
+            <tr>
+              <td>RRF</td>
+              <td>\(\sum_{r \in R} \frac{1}{k + r(d)}\)</td>
+            </tr>
+            <tr>
+              <td>Precision</td>
+              <td>\(\frac{|\text{Relevant} \cap \text{Retrieved}|}{|\text{Retrieved}|}\)</td>
+            </tr>
+            <tr>
+              <td>Recall</td>
+              <td>\(\frac{|\text{Relevant} \cap \text{Retrieved}|}{|\text{Relevant}|}\)</td>
+            </tr>
+            <tr>
+              <td>F1</td>
+              <td>\(2 \cdot \frac{P \cdot R}{P + R}\)</td>
+            </tr>
+            <tr>
+              <td>NDCG</td>
+              <td>\(\frac{\text{DCG}@k}{\text{IDCG}@k}\) where DCG = \(\sum \frac{2^{\text{rel}_i}-1}{\log_2(i+1)}\)
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="card card-accent">
+        <strong>Common questions and answers:</strong>
+        <p class="dim" style="margin-top:8px;"><strong>Q: Why not just use vector search for everything?</strong></p>
+        <p class="dim">A: Vector search can miss exact keyword matches (e.g., error codes, product IDs). It requires
+          expensive embedding models and more storage. BM25 is faster, interpretable, and works out of the box without
+          ML infrastructure.</p>
+
+        <p class="dim" style="margin-top:12px;"><strong>Q: How does RRF work and why is k=60?</strong></p>
+        <p class="dim">A: RRF assigns score 1/(k+rank) per ranker and sums. k=60 was found empirically in the original
+          paper (Cormack et al., 2009) to work well - it smooths out the difference between high ranks so rank #1 vs #2
+          isn't as dramatic as it would be with k=1.</p>
+
+        <p class="dim" style="margin-top:12px;"><strong>Q: What's the difference between bi-encoder and
+            cross-encoder?</strong></p>
+        <p class="dim">A: Bi-encoders embed query and doc independently → fast but less accurate (used for retrieval).
+          Cross-encoders process query+doc together → slow but much more accurate (used for reranking top-k results).
+        </p>
+
+        <p class="dim" style="margin-top:12px;"><strong>Q: When would you prioritize recall over precision?</strong></p>
+        <p class="dim">A: When the cost of missing a relevant item is high (legal discovery, medical screening, RAG
+          where the LLM can filter noise). Prioritize precision when users see results directly (web search, e-commerce)
+          and noise erodes trust.</p>
+      </div>
+
+      <div class="card card-yellow">
+        <strong>The modern search stack (2024+):</strong>
+        <div class="step-flow">
+          <div class="step-pill" style="border-color:var(--accent);color:var(--accent);">BM25 retrieval</div>
+          <div class="step-arrow">+</div>
+          <div class="step-pill" style="border-color:var(--accent2);color:var(--accent2);">Vector retrieval</div>
+          <div class="step-arrow">→</div>
+          <div class="step-pill" style="border-color:var(--accent3);color:var(--accent3);">RRF fusion</div>
+          <div class="step-arrow">→</div>
+          <div class="step-pill" style="border-color:var(--accent4);color:var(--accent4);">Cross-encoder rerank</div>
+          <div class="step-arrow">→</div>
+          <div class="step-pill">Top-k results</div>
+        </div>
+        <p class="dim" style="margin-top:8px;">This multi-stage pipeline is used by virtually every production search
+          and RAG system. Each stage narrows the candidate set while increasing the quality of ranking.</p>
+      </div>
+    </section>
+
+  </div>
+
+  <div class="footer">
+    <p>Search Fundamentals Masterclass - covering information retrieval from keyword search to vector search to hybrid
+      systems.</p>
+    <p style="margin-top:4px;">Core reading: Manning, Raghavan & Schütze, "Introduction to Information Retrieval" (2008)
+      &bull; Cormack et al., "Reciprocal Rank Fusion" (2009) &bull; Karpukhin et al., "Dense Passage Retrieval" (2020)
+    </p>
+  </div>
+
+  <script>
+    // ======== Embedding Space Visualization ========
+    (function () {
+      const space = document.getElementById('embedSpace');
+      const w = space.clientWidth;
+      const h = space.clientHeight;
+
+      const clusters = [
+        {
+          label: 'Animals', color: '#6c63ff', words: [
+            { t: 'cat', x: 0.15, y: 0.3 }, { t: 'dog', x: 0.18, y: 0.38 },
+            { t: 'kitten', x: 0.13, y: 0.34 }, { t: 'puppy', x: 0.2, y: 0.42 },
+            { t: 'fish', x: 0.25, y: 0.25 }, { t: 'bird', x: 0.22, y: 0.2 },
+          ]
+        },
+        {
+          label: 'Vehicles', color: '#00c9a7', words: [
+            { t: 'car', x: 0.7, y: 0.25 }, { t: 'automobile', x: 0.72, y: 0.3 },
+            { t: 'truck', x: 0.75, y: 0.2 }, { t: 'motorcycle', x: 0.68, y: 0.18 },
+            { t: 'bicycle', x: 0.65, y: 0.32 }, { t: 'bus', x: 0.78, y: 0.28 },
+          ]
+        },
+        {
+          label: 'Food', color: '#ff6b6b', words: [
+            { t: 'pizza', x: 0.4, y: 0.72 }, { t: 'pasta', x: 0.38, y: 0.78 },
+            { t: 'sushi', x: 0.45, y: 0.68 }, { t: 'burger', x: 0.42, y: 0.82 },
+            { t: 'salad', x: 0.35, y: 0.7 },
+          ]
+        },
+        {
+          label: 'Tech', color: '#ffd93d', words: [
+            { t: 'python', x: 0.78, y: 0.7 }, { t: 'javascript', x: 0.82, y: 0.75 },
+            { t: 'algorithm', x: 0.75, y: 0.65 }, { t: 'database', x: 0.85, y: 0.68 },
+            { t: 'API', x: 0.8, y: 0.8 },
+          ]
+        },
+      ];
+
+      clusters.forEach(c => {
+        c.words.forEach(w_item => {
+          const dot = document.createElement('div');
+          dot.className = 'embed-dot';
+          dot.style.left = (w_item.x * 100) + '%';
+          dot.style.top = (w_item.y * 100) + '%';
+          dot.style.background = c.color;
+          dot.title = w_item.t;
+          space.appendChild(dot);
+
+          const lbl = document.createElement('div');
+          lbl.className = 'embed-label';
+          lbl.style.left = (w_item.x * 100 + 1.5) + '%';
+          lbl.style.top = (w_item.y * 100 + 1.5) + '%';
+          lbl.style.color = c.color;
+          lbl.textContent = w_item.t;
+          space.appendChild(lbl);
+        });
+
+        const clbl = document.createElement('div');
+        clbl.className = 'embed-label';
+        const cx = c.words.reduce((s, w_i) => s + w_i.x, 0) / c.words.length;
+        const cy = c.words.reduce((s, w_i) => s + w_i.y, 0) / c.words.length;
+        clbl.style.left = (cx * 100 - 3) + '%';
+        clbl.style.top = (cy * 100 - 5) + '%';
+        clbl.style.color = c.color;
+        clbl.style.fontSize = '0.82rem';
+        clbl.style.fontWeight = '700';
+        clbl.style.opacity = '0.5';
+        clbl.textContent = c.label;
+        space.appendChild(clbl);
+      });
+
+      const axX = document.createElement('div');
+      axX.className = 'embed-axis-label';
+      axX.style.bottom = '8px'; axX.style.right = '12px';
+      axX.textContent = 'Dimension 1 →';
+      space.appendChild(axX);
+
+      const axY = document.createElement('div');
+      axY.className = 'embed-axis-label';
+      axY.style.top = '8px'; axY.style.left = '12px';
+      axY.textContent = '↑ Dimension 2';
+      space.appendChild(axY);
+    })();
+
+    // ======== Cosine Similarity Simulator ========
+    function computeSimilarity() {
+      const a = document.getElementById('simA').value.toLowerCase().trim();
+      const b = document.getElementById('simB').value.toLowerCase().trim();
+      if (!a || !b) return;
+
+      const stopwords = new Set(['the', 'a', 'an', 'is', 'was', 'were', 'are', 'on', 'in', 'at', 'to', 'for', 'of', 'and', 'or', 'but', 'it', 'this', 'that', 'with', 'from', 'by', 'as', 'be', 'has', 'had', 'have', 'do', 'does', 'did']);
+
+      function tokenize(s) { return s.replace(/[^\w\s]/g, '').split(/\s+/).filter(w => w.length > 0); }
+      function meaningful(tokens) { return tokens.filter(t => !stopwords.has(t)); }
+
+      const tokA = tokenize(a), tokB = tokenize(b);
+      const mA = meaningful(tokA), mB = meaningful(tokB);
+
+      const synonymMap = {
+        'cat': ['kitten', 'feline'], 'kitten': ['cat', 'feline'], 'feline': ['cat', 'kitten'],
+        'dog': ['puppy', 'canine', 'hound'], 'puppy': ['dog', 'canine'], 'canine': ['dog', 'puppy'],
+        'car': ['automobile', 'vehicle'], 'automobile': ['car', 'vehicle'], 'vehicle': ['car', 'automobile'],
+        'happy': ['glad', 'joyful', 'cheerful'], 'glad': ['happy', 'joyful'], 'joyful': ['happy', 'glad'],
+        'sad': ['unhappy', 'sorrowful'], 'unhappy': ['sad', 'sorrowful'],
+        'big': ['large', 'huge', 'enormous'], 'large': ['big', 'huge'], 'huge': ['big', 'large', 'enormous'],
+        'small': ['tiny', 'little', 'miniature'], 'tiny': ['small', 'little'], 'little': ['small', 'tiny'],
+        'fast': ['quick', 'rapid', 'swift'], 'quick': ['fast', 'rapid'], 'rapid': ['fast', 'quick'],
+        'good': ['great', 'excellent', 'fine'], 'great': ['good', 'excellent'],
+        'bad': ['poor', 'terrible', 'awful'], 'poor': ['bad', 'terrible'],
+        'sat': ['sitting', 'resting', 'seated'], 'resting': ['sat', 'sitting', 'relaxing'], 'sitting': ['sat', 'resting'],
+        'mat': ['rug', 'carpet', 'pad'], 'rug': ['mat', 'carpet'], 'carpet': ['mat', 'rug'],
+        'machine': ['computer', 'automated'], 'learning': ['training', 'studying', 'education'],
+        'run': ['running', 'jog', 'sprint'], 'walk': ['walking', 'stroll'],
+        'eat': ['eating', 'consume', 'dine'], 'food': ['meal', 'cuisine', 'dish'],
+        'house': ['home', 'dwelling', 'residence'], 'home': ['house', 'dwelling'],
+      };
+
+      function stem(w) {
+        if (w.endsWith('ing') && w.length > 5) return w.slice(0, -3);
+        if (w.endsWith('ed') && w.length > 4) return w.slice(0, -2);
+        if (w.endsWith('s') && !w.endsWith('ss') && w.length > 3) return w.slice(0, -1);
+        if (w.endsWith('ly') && w.length > 4) return w.slice(0, -2);
+        return w;
+      }
+
+      let exactOverlap = 0;
+      const setB = new Set(mB);
+      const setBStem = new Set(mB.map(stem));
+      mA.forEach(w => { if (setB.has(w)) exactOverlap++; });
+
+      let stemOverlap = 0;
+      const mAStem = mA.map(stem);
+      mAStem.forEach(w => { if (setBStem.has(w)) stemOverlap++; });
+
+      let synOverlap = 0;
+      mA.forEach(wa => {
+        const syns = synonymMap[wa] || [];
+        mB.forEach(wb => {
+          if (syns.includes(wb)) synOverlap++;
+          const synsB = synonymMap[wb] || [];
+          const stemA = stem(wa), stemB = stem(wb);
+          if (syns.map(stem).includes(stemB) || synsB.map(stem).includes(stemA)) synOverlap += 0.3;
+        });
+      });
+      synOverlap = Math.min(synOverlap, mA.length);
+
+      const lenSim = 1 - Math.abs(mA.length - mB.length) / Math.max(mA.length, mB.length, 1);
+      const maxPossible = Math.max(mA.length, mB.length, 1);
+
+      let score = 0;
+      score += (exactOverlap / maxPossible) * 0.45;
+      score += ((stemOverlap - exactOverlap) / maxPossible) * 0.2;
+      score += (synOverlap / maxPossible) * 0.25;
+      score += lenSim * 0.1;
+
+      score = Math.max(0.02, Math.min(0.98, score));
+
+      let interp = '', interpColor = '';
+      if (score >= 0.8) { interp = 'Very similar - these sentences express nearly the same meaning'; interpColor = 'var(--accent2)'; }
+      else if (score >= 0.6) { interp = 'Similar - related topic with overlapping concepts'; interpColor = 'var(--accent2)'; }
+      else if (score >= 0.35) { interp = 'Moderately similar - some shared concepts'; interpColor = 'var(--accent4)'; }
+      else if (score >= 0.15) { interp = 'Low similarity - loosely related at best'; interpColor = 'var(--accent3)'; }
+      else { interp = 'Very different - no meaningful semantic overlap'; interpColor = 'var(--accent3)'; }
+
+      const container = document.getElementById('sim-results');
+      container.innerHTML = `
+    <div class="result-box">
+      <div class="result-label">Simulated Cosine Similarity</div>
+      <div class="result-value" style="color:${interpColor}">${score.toFixed(3)}</div>
+      <div class="sim-bar-wrap">
+        <div class="sim-bar-outer">
+          <div class="sim-bar-inner" style="width:${score * 100}%;background:${interpColor};"></div>
+        </div>
+      </div>
+      <p class="dim" style="font-size:0.82rem; margin-top:10px;">${interp}</p>
+      <p class="dim" style="font-size:0.78rem; margin-top:6px;">
+        Exact matches: ${exactOverlap} &bull;
+        Stem matches: ${Math.max(0, stemOverlap - exactOverlap).toFixed(0)} &bull;
+        Synonym matches: ${synOverlap.toFixed(1)} &bull;
+        Meaningful words: ${mA.length} / ${mB.length}
+      </p>
+    </div>
+  `;
+    }
+    computeSimilarity();
+
+    // ======== ANN Tradeoff Chart ========
+    (function () {
+      const ctx = document.getElementById('annChart').getContext('2d');
+      new Chart(ctx, {
+        type: 'scatter',
+        data: {
+          datasets: [
+            {
+              label: 'Flat (Brute Force)',
+              data: [{ x: 1000, y: 100 }],
+              backgroundColor: '#ff6b6b',
+              pointRadius: 8,
+            },
+            {
+              label: 'IVF-Flat',
+              data: [{ x: 50, y: 95 }],
+              backgroundColor: '#ffd93d',
+              pointRadius: 8,
+            },
+            {
+              label: 'IVF-PQ',
+              data: [{ x: 5, y: 85 }],
+              backgroundColor: '#00c9a7',
+              pointRadius: 8,
+            },
+            {
+              label: 'HNSW',
+              data: [{ x: 10, y: 98 }],
+              backgroundColor: '#6c63ff',
+              pointRadius: 8,
+            },
+          ]
+        },
+        options: {
+          responsive: true,
+          scales: {
+            x: {
+              type: 'logarithmic',
+              title: { display: true, text: 'Query Time (relative, log scale)', color: '#8b8fa7' },
+              ticks: { color: '#8b8fa7' },
+              grid: { color: 'rgba(46,51,69,0.5)' },
+            },
+            y: {
+              title: { display: true, text: 'Recall@10 (%)', color: '#8b8fa7' },
+              ticks: { color: '#8b8fa7' },
+              grid: { color: 'rgba(46,51,69,0.5)' },
+              min: 75,
+              max: 102,
+            }
+          },
+          plugins: {
+            legend: {
+              labels: { color: '#8b8fa7', usePointStyle: true, pointStyle: 'circle' }
+            },
+            tooltip: {
+              callbacks: {
+                label: (ctx) => `${ctx.dataset.label}: Time=${ctx.parsed.x}, Recall=${ctx.parsed.y}%`
+              }
+            }
+          }
+        }
+      });
+    })();
+
+    // ======== RRF Calculator ========
+    function updateRRF() {
+      const bm25Rank = parseInt(document.getElementById('rrf-bm25').value);
+      const vecRank = parseInt(document.getElementById('rrf-vec').value);
+      const k = parseInt(document.getElementById('rrf-k').value);
+
+      document.getElementById('rrf-bm25-val').textContent = bm25Rank;
+      document.getElementById('rrf-vec-val').textContent = vecRank;
+      document.getElementById('rrf-k-val').textContent = k;
+
+      const bm25Score = 1 / (k + bm25Rank);
+      const vecScore = 1 / (k + vecRank);
+      const total = bm25Score + vecScore;
+
+      document.getElementById('rrf-bm25-score').textContent = bm25Score.toFixed(4);
+      document.getElementById('rrf-vec-score').textContent = vecScore.toFixed(4);
+      document.getElementById('rrf-total-score').textContent = total.toFixed(4);
+    }
+
+    document.getElementById('rrf-bm25').addEventListener('input', updateRRF);
+    document.getElementById('rrf-vec').addEventListener('input', updateRRF);
+    document.getElementById('rrf-k').addEventListener('input', updateRRF);
+    updateRRF();
+
+    // ======== Weighted Combination Playground ========
+    function updateAlpha() {
+      const alpha = parseFloat(document.getElementById('alpha-slider').value);
+      document.getElementById('alpha-val').textContent = alpha.toFixed(2);
+      document.getElementById('alpha-bm25').textContent = alpha.toFixed(2);
+      document.getElementById('alpha-vec').textContent = (1 - alpha).toFixed(2);
+
+      const docs = [
+        { name: 'Doc A - "Python machine learning tutorial"', bm25: 0.92, vec: 0.55 },
+        { name: 'Doc B - "ML algorithms with code examples"', bm25: 0.30, vec: 0.88 },
+        { name: 'Doc C - "Python ML: scikit-learn guide"', bm25: 0.85, vec: 0.82 },
+        { name: 'Doc D - "Deep learning fundamentals"', bm25: 0.10, vec: 0.75 },
+        { name: 'Doc E - "Python data structures"', bm25: 0.60, vec: 0.20 },
+      ];
+
+      docs.forEach(d => {
+        d.combined = alpha * d.bm25 + (1 - alpha) * d.vec;
+      });
+      docs.sort((a, b) => b.combined - a.combined);
+
+      const container = document.getElementById('alpha-results');
+      container.innerHTML = docs.map((d, i) => `
+    <div class="doc-result-item">
+      <div style="display:flex;align-items:center;flex:1;min-width:0;">
+        <span class="rank">${i + 1}</span>
+        <span class="text">
+          ${d.name}<br/>
+          <span class="dim" style="font-size:0.78rem;">
+            BM25: <span style="color:var(--accent)">${d.bm25.toFixed(2)}</span> &times; ${alpha.toFixed(2)} = ${(alpha * d.bm25).toFixed(3)} &nbsp;|&nbsp;
+            Vec: <span style="color:var(--accent2)">${d.vec.toFixed(2)}</span> &times; ${(1 - alpha).toFixed(2)} = ${((1 - alpha) * d.vec).toFixed(3)}
+          </span>
+        </span>
+      </div>
+      <span class="score">${d.combined.toFixed(3)}</span>
+    </div>
+  `).join('');
+    }
+
+    document.getElementById('alpha-slider').addEventListener('input', updateAlpha);
+    updateAlpha();
+
+    // ======== Precision-Recall Tradeoff Chart ========
+    (function () {
+      const ctx = document.getElementById('prChart').getContext('2d');
+      const n = 50;
+      const precData = [], recData = [], f1Data = [], labels = [];
+      for (let i = 0; i <= n; i++) {
+        const t = i / n;
+        labels.push(t.toFixed(2));
+        const p = 1 - 0.7 * t * t;
+        const r = Math.pow(t, 0.6);
+        const f1 = (p + r > 0) ? 2 * p * r / (p + r) : 0;
+        precData.push(p);
+        recData.push(r);
+        f1Data.push(f1);
+      }
+
+      new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [
+            { label: 'Precision', data: precData, borderColor: '#6c63ff', backgroundColor: 'rgba(108,99,255,0.08)', fill: false, tension: 0.3, pointRadius: 0, borderWidth: 2.5 },
+            { label: 'Recall', data: recData, borderColor: '#00c9a7', backgroundColor: 'rgba(0,201,167,0.08)', fill: false, tension: 0.3, pointRadius: 0, borderWidth: 2.5 },
+            { label: 'F1 Score', data: f1Data, borderColor: '#ffd93d', backgroundColor: 'rgba(255,217,61,0.08)', fill: false, tension: 0.3, pointRadius: 0, borderWidth: 2, borderDash: [6, 3] },
+          ]
+        },
+        options: {
+          responsive: true,
+          scales: {
+            x: {
+              title: { display: true, text: 'Retrieval Threshold (more results →)', color: '#8b8fa7' },
+              ticks: { color: '#8b8fa7', maxTicksLimit: 10 },
+              grid: { color: 'rgba(46,51,69,0.5)' },
+            },
+            y: {
+              title: { display: true, text: 'Score', color: '#8b8fa7' },
+              ticks: { color: '#8b8fa7' },
+              grid: { color: 'rgba(46,51,69,0.5)' },
+              min: 0, max: 1.05,
+            }
+          },
+          plugins: {
+            legend: { labels: { color: '#8b8fa7' } },
+          }
+        }
+      });
+    })();
+
+    // ======== Precision/Recall Interactive Demo ========
+    (function () {
+      const docs = [
+        { text: 'Python machine learning tutorial with scikit-learn', relevant: true },
+        { text: 'Introduction to deep learning with PyTorch', relevant: true },
+        { text: 'History of the Python programming language', relevant: false },
+        { text: 'Machine learning algorithms explained in Python', relevant: true },
+        { text: 'Web development with Django and Flask', relevant: false },
+        { text: 'Statistical learning with Python examples', relevant: true },
+        { text: 'JavaScript frameworks comparison 2024', relevant: false },
+        { text: 'Neural networks and ML pipelines in Python', relevant: true },
+        { text: 'Database optimization techniques for PostgreSQL', relevant: false },
+        { text: 'Natural language processing with Python NLTK', relevant: true },
+      ];
+
+      const retrieved = new Array(docs.length).fill(false);
+
+      function render() {
+        const container = document.getElementById('pr-docs');
+        container.innerHTML = docs.map((d, i) => `
+      <div class="pr-doc ${retrieved[i] ? 'retrieved' : ''}" onclick="toggleDoc(${i})">
+        <span class="tag ${d.relevant ? 'tag-relevant' : 'tag-irrelevant'}">${d.relevant ? 'Relevant' : 'Irrelevant'}</span>
+        ${retrieved[i] ? '<span class="tag tag-retrieved">Retrieved</span>' : ''}
+        <span style="flex:1;">${d.text}</span>
+      </div>
+    `).join('');
+
+        const numRetrieved = retrieved.filter(Boolean).length;
+        const numRelevant = docs.filter(d => d.relevant).length;
+        let truePos = 0;
+        docs.forEach((d, i) => { if (retrieved[i] && d.relevant) truePos++; });
+
+        const precision = numRetrieved > 0 ? truePos / numRetrieved : 0;
+        const recall = numRelevant > 0 ? truePos / numRelevant : 0;
+        const f1 = (precision + recall > 0) ? 2 * precision * recall / (precision + recall) : 0;
+
+        document.getElementById('pr-precision').textContent = numRetrieved > 0 ? precision.toFixed(3) : '-';
+        document.getElementById('pr-recall').textContent = numRetrieved > 0 ? recall.toFixed(3) : '-';
+        document.getElementById('pr-f1').textContent = numRetrieved > 0 ? f1.toFixed(3) : '-';
+
+        const breakdown = document.getElementById('pr-breakdown');
+        if (numRetrieved === 0) {
+          breakdown.innerHTML = 'Click documents above to start evaluating.';
+        } else {
+          const fp = numRetrieved - truePos;
+          const fn = numRelevant - truePos;
+          breakdown.innerHTML = `
+        <strong>Breakdown:</strong>
+        Retrieved: <span style="color:var(--accent)">${numRetrieved}</span> &bull;
+        Relevant in corpus: <span style="color:var(--accent2)">${numRelevant}</span><br/>
+        True Positives: <span style="color:var(--accent2)">${truePos}</span> &bull;
+        False Positives: <span style="color:var(--accent3)">${fp}</span> &bull;
+        False Negatives: <span style="color:var(--accent4)">${fn}</span><br/>
+        Precision = ${truePos}/${numRetrieved} = <span style="color:var(--accent)">${precision.toFixed(3)}</span> &bull;
+        Recall = ${truePos}/${numRelevant} = <span style="color:var(--accent2)">${recall.toFixed(3)}</span> &bull;
+        F1 = <span style="color:var(--accent4)">${f1.toFixed(3)}</span>
+      `;
+        }
+      }
+
+      window.toggleDoc = function (i) {
+        retrieved[i] = !retrieved[i];
+        render();
+      };
+
+      render();
+    })();
+
+    // ======== NDCG Calculator ========
+    function updateNDCG() {
+      const vals = [];
+      document.querySelectorAll('.ndcg-input').forEach((inp, i) => {
+        const v = parseInt(inp.value);
+        vals.push(v);
+        document.getElementById('ndcg-v' + (i + 1)).textContent = v;
+      });
+
+      function dcg(rels) {
+        let s = 0;
+        rels.forEach((r, i) => { s += (Math.pow(2, r) - 1) / Math.log2(i + 2); });
+        return s;
+      }
+
+      const myDCG = dcg(vals);
+      const ideal = [...vals].sort((a, b) => b - a);
+      const idealDCG = dcg(ideal);
+      const ndcg = idealDCG > 0 ? myDCG / idealDCG : 0;
+
+      document.getElementById('ndcg-dcg').textContent = myDCG.toFixed(3);
+      document.getElementById('ndcg-idcg').textContent = idealDCG.toFixed(3);
+      document.getElementById('ndcg-ndcg').textContent = ndcg.toFixed(3);
+    }
+
+    document.querySelectorAll('.ndcg-input').forEach(inp => {
+      inp.addEventListener('input', updateNDCG);
+    });
+    updateNDCG();
+
+    // ======== Active nav highlighting ========
+    const sections = document.querySelectorAll('section[id]');
+    const navLinks = document.querySelectorAll('.toc a');
+    window.addEventListener('scroll', () => {
+      let current = '';
+      sections.forEach(s => {
+        if (window.scrollY >= s.offsetTop - 120) current = s.id;
+      });
+      navLinks.forEach(a => {
+        a.classList.toggle('active', a.getAttribute('href') === '#' + current);
+      });
+    });
+  </script>
+</body>
+
+</html>
