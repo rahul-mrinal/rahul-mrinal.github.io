@@ -9,7 +9,7 @@ import Contact from "../components/home/Contact";
 export default function Home() {
   return (
     <main>
-      <title>Rahul Mrinal - Generative AI Lead & Engineering Manager</title>
+      <title>Rahul Mrinal - Generative AI Manager</title>
       <Hero />
       <About />
       <Experience />
