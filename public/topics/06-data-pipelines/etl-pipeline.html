@@ -1,0 +1,857 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ETL Pipeline for Search</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js" onload="renderMathInElement(document.body, {
+    delimiters: [
+      {left: '$$', right: '$$', display: true},
+      {left: '\\[', right: '\\]', display: true},
+      {left: '$', right: '$', display: false},
+      {left: '\\(', right: '\\)', display: false}
+    ],
+    throwOnError: false
+  });"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../playground.css" />
+  <style>
+    .pipeline-stage-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      text-align: center;
+      min-width: 140px;
+      position: relative;
+      transition: all 0.3s;
+    }
+    .pipeline-stage-box.active { border-color: var(--accent); box-shadow: 0 0 20px rgba(108,99,255,0.2); }
+    .pipeline-stage-box .stage-name { font-weight: 700; font-size: 0.95rem; margin-bottom: 4px; }
+    .pipeline-stage-box .stage-count { font-family: 'JetBrains Mono', monospace; font-size: 0.82rem; color: var(--text-dim); }
+    .pipeline-visual { display: flex; align-items: center; gap: 0; justify-content: center; margin: 24px 0; flex-wrap: wrap; }
+    .pipeline-visual .arrow { color: var(--text-dim); font-size: 1.6rem; padding: 0 12px; }
+    .doc-flow { display: flex; flex-direction: column; gap: 6px; margin-top: 16px; max-height: 300px; overflow-y: auto; }
+    .doc-pill {
+      display: flex; align-items: center; justify-content: space-between;
+      background: var(--code-bg); border: 1px solid var(--border); border-radius: var(--radius-sm);
+      padding: 8px 14px; font-size: 0.82rem; transition: all 0.4s;
+    }
+    .doc-pill.success { border-color: var(--accent2); background: rgba(0,201,167,0.06); }
+    .doc-pill.fail { border-color: var(--accent3); background: rgba(255,107,107,0.06); }
+    .doc-pill .doc-name { font-weight: 600; }
+    .doc-pill .doc-status { font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; }
+    .dlq-sidebar {
+      background: rgba(255,107,107,0.05); border: 1px solid rgba(255,107,107,0.2);
+      border-radius: var(--radius); padding: 16px; margin-top: 16px;
+    }
+    .dlq-sidebar h4 { color: var(--accent3); margin-bottom: 12px; }
+    .counter-row { display: flex; gap: 16px; margin: 16px 0; flex-wrap: wrap; }
+    .counter-box {
+      background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm);
+      padding: 12px 20px; text-align: center; flex: 1; min-width: 100px;
+    }
+    .counter-box .counter-label { font-size: 0.75rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; }
+    .counter-box .counter-val { font-size: 1.4rem; font-weight: 700; font-family: 'JetBrains Mono', monospace; }
+    .gauge-container { position: relative; width: 140px; height: 80px; margin: 0 auto; }
+    .gauge-label { text-align: center; font-size: 0.78rem; color: var(--text-dim); margin-top: 4px; }
+    .monitor-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+    .monitor-card {
+      background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 16px; text-align: center;
+    }
+    .monitor-card .monitor-val { font-size: 1.8rem; font-weight: 700; font-family: 'JetBrains Mono', monospace; }
+    .monitor-card .monitor-label { font-size: 0.75rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 4px; }
+    @media (max-width: 600px) {
+      .monitor-grid { grid-template-columns: 1fr; }
+      .pipeline-visual { flex-direction: column; }
+      .pipeline-visual .arrow { transform: rotate(90deg); padding: 8px 0; }
+    }
+  </style>
+</head>
+
+<body>
+<div class="topbar">
+  <a href="/" class="topbar-brand">
+    <div class="topbar-logo">RM</div>
+    <span class="topbar-label">Rahul Mrinal</span>
+  </a>
+  <a href="/blog" class="topbar-back">← Back to Blog</a>
+</div>
+
+<div class="hero">
+  <div class="container">
+    <h1>ETL Pipeline for Search</h1>
+    <p class="subtitle">Extract, Transform, Load — handling messy data at scale</p>
+    <div class="badges">
+      <span class="badge badge-hnsw">Extract</span>
+      <span class="badge badge-ivf">Transform</span>
+      <span class="badge badge-pq">Load</span>
+    </div>
+  </div>
+</div>
+
+<nav class="toc">
+  <div class="toc-inner">
+    <a href="#s1">Assembly Line</a>
+    <a href="#s2">Extract</a>
+    <a href="#s3">Transform</a>
+    <a href="#s4">Load</a>
+    <a href="#s5">Simulator</a>
+    <a href="#s6">Error Handling</a>
+    <a href="#s7">Monitoring</a>
+    <a href="#s8">Idempotency</a>
+    <a href="#s9">Takeaway</a>
+  </div>
+</nav>
+
+<div class="container">
+
+  <!-- ===== SECTION 1 ===== -->
+  <section id="s1">
+    <h2><span class="num">01</span> The Assembly Line Analogy</h2>
+    <p>An ETL pipeline is exactly like a factory assembly line. Raw materials enter one end, each station performs a single well-defined job, and finished products emerge at the other end.</p>
+
+    <div class="analogy">
+      <div class="icon">🏭</div>
+      <p><strong>Factory floor:</strong> Station 1 receives raw metal sheets (Extract). Station 2 cuts, bends, and polishes them (Transform). Station 3 packages and ships the final product (Load). If a sheet is warped, it's pulled off the line — not jammed through.</p>
+    </div>
+
+    <div class="pipeline">
+      <div class="pipeline-node accent">📥 Extract</div>
+      <span class="pipeline-arrow">→</span>
+      <div class="pipeline-node green">🔧 Transform</div>
+      <span class="pipeline-arrow">→</span>
+      <div class="pipeline-node yellow">📤 Load</div>
+    </div>
+
+    <div class="grid-2">
+      <div class="card card-accent">
+        <h3>Why separate stages?</h3>
+        <ul>
+          <li>Each stage can be tested independently</li>
+          <li>Stages can scale horizontally on their own</li>
+          <li>Failures are isolated and debuggable</li>
+          <li>Different teams can own different stages</li>
+        </ul>
+      </div>
+      <div class="card card-green">
+        <h3>Single Responsibility</h3>
+        <p>Each station does <strong>one job well</strong>. Extract doesn't clean data. Transform doesn't write to the index. Load doesn't fetch from APIs. Clean boundaries prevent cascading failures.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== SECTION 2 ===== -->
+  <section id="s2">
+    <h2><span class="num">02</span> Extract</h2>
+    <p>The first stage pulls raw data from source systems. The goal is to get data out reliably without transforming it — preserving the original form so nothing is lost.</p>
+
+    <h3>Common Data Sources</h3>
+    <div class="grid-3">
+      <div class="card card-accent">
+        <h3>Databases</h3>
+        <p>PostgreSQL, MySQL, MongoDB. Use CDC (Change Data Capture) or periodic queries to pull new/updated records.</p>
+      </div>
+      <div class="card card-green">
+        <h3>APIs</h3>
+        <p>REST, GraphQL, webhooks. Paginate through results, handle rate limits, manage auth tokens.</p>
+      </div>
+      <div class="card card-yellow">
+        <h3>Files</h3>
+        <p>CSV, JSON, XML, PDFs. Watch directories or S3 buckets for new arrivals. Parse with schema awareness.</p>
+      </div>
+    </div>
+
+    <h3>Extraction Patterns</h3>
+    <table>
+      <thead><tr><th>Pattern</th><th>How</th><th>Best For</th></tr></thead>
+      <tbody>
+        <tr><td>Full dump</td><td>SELECT * every run</td><td>Small datasets, initial bootstrapping</td></tr>
+        <tr><td>Incremental</td><td>WHERE updated_at > last_run</td><td>Large tables with timestamps</td></tr>
+        <tr><td>CDC</td><td>Read database change log</td><td>Real-time, high-volume systems</td></tr>
+        <tr><td>Event-driven</td><td>Consume from Kafka/SQS</td><td>Microservices, streaming</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Extraction Code Pattern</h3>
+    <pre><code><span class="cm"># Incremental extraction with checkpointing</span>
+<span class="kw">class</span> <span class="fn">IncrementalExtractor</span>:
+    <span class="kw">def</span> <span class="fn">__init__</span>(self, source, checkpoint_store):
+        self.source = source
+        self.checkpoints = checkpoint_store
+
+    <span class="kw">def</span> <span class="fn">extract</span>(self, batch_size=<span class="op">1000</span>):
+        last_id = self.checkpoints.<span class="fn">get</span>(<span class="str">"last_extracted_id"</span>, <span class="op">0</span>)
+        <span class="kw">while</span> <span class="op">True</span>:
+            batch = self.source.<span class="fn">query</span>(
+                <span class="str">"SELECT * FROM docs WHERE id > %s ORDER BY id LIMIT %s"</span>,
+                [last_id, batch_size]
+            )
+            <span class="kw">if not</span> batch:
+                <span class="kw">break</span>
+            <span class="kw">yield</span> batch
+            last_id = batch[-<span class="op">1</span>][<span class="str">"id"</span>]
+            self.checkpoints.<span class="fn">save</span>(<span class="str">"last_extracted_id"</span>, last_id)</code></pre>
+
+    <div class="insight">
+      <div class="insight-title">Key Principle</div>
+      <p>Extract should be <strong>idempotent and resumable</strong>. If it fails halfway through, you should be able to restart without duplicating data. Use cursor-based pagination and checkpoint offsets.</p>
+    </div>
+
+    <div class="pro-tip">
+      <div class="tip-header">Rate Limiting</div>
+      <p>When extracting from external APIs, always implement rate limiting with token buckets. A common pattern: 100 requests/minute with a burst capacity of 10. Back off exponentially if you hit 429 (Too Many Requests) responses.</p>
+    </div>
+  </section>
+
+  <!-- ===== SECTION 3 ===== -->
+  <section id="s3">
+    <h2><span class="num">03</span> Transform</h2>
+    <p>The transform stage is where raw data becomes search-ready. This is the heart of the pipeline — cleaning, normalizing, and enriching documents.</p>
+
+    <h3>Common Transformations</h3>
+    <div class="grid-2">
+      <div class="card card-accent">
+        <h3>Clean</h3>
+        <ul>
+          <li>Strip HTML tags and special characters</li>
+          <li>Fix encoding issues (UTF-8 normalization)</li>
+          <li>Remove duplicate whitespace</li>
+          <li>Handle null/missing fields</li>
+        </ul>
+      </div>
+      <div class="card card-green">
+        <h3>Normalize</h3>
+        <ul>
+          <li>Lowercase text fields</li>
+          <li>Standardize date formats (ISO 8601)</li>
+          <li>Unify currency/units</li>
+          <li>Map categories to canonical values</li>
+        </ul>
+      </div>
+      <div class="card card-yellow">
+        <h3>Enrich</h3>
+        <ul>
+          <li>Add computed fields (word count, reading time)</li>
+          <li>Geo-code addresses</li>
+          <li>Generate embeddings for semantic search</li>
+          <li>Extract entities (NER)</li>
+        </ul>
+      </div>
+      <div class="card card-red">
+        <h3>Validate</h3>
+        <ul>
+          <li>Check required fields exist</li>
+          <li>Verify data types match schema</li>
+          <li>Ensure values are within expected ranges</li>
+          <li>Flag or reject invalid documents</li>
+        </ul>
+      </div>
+    </div>
+
+    <h3>Before → After</h3>
+    <pre><code><span class="cm">// Raw (messy)</span>
+{
+  <span class="str">"Title"</span>:    <span class="str">"  The Quick Brown FOX &amp;amp; friends  "</span>,
+  <span class="str">"date"</span>:     <span class="str">"03/15/2024"</span>,
+  <span class="str">"PRICE"</span>:    <span class="str">"$29.99 USD"</span>,
+  <span class="str">"category"</span>: <span class="str">"Electronics/Gadgets"</span>,
+  <span class="str">"body"</span>:     <span class="str">"&lt;p&gt;Great product!&lt;/p&gt;"</span>
+}
+
+<span class="cm">// Transformed (clean)</span>
+{
+  <span class="str">"title"</span>:       <span class="str">"the quick brown fox & friends"</span>,
+  <span class="str">"date"</span>:        <span class="str">"2024-03-15T00:00:00Z"</span>,
+  <span class="str">"price"</span>:       <span class="op">29.99</span>,
+  <span class="str">"currency"</span>:    <span class="str">"USD"</span>,
+  <span class="str">"category"</span>:    <span class="str">"electronics"</span>,
+  <span class="str">"subcategory"</span>: <span class="str">"gadgets"</span>,
+  <span class="str">"body"</span>:        <span class="str">"Great product!"</span>,
+  <span class="str">"word_count"</span>:  <span class="op">2</span>
+}</code></pre>
+
+    <h3>Transform Pipeline Pattern</h3>
+    <pre><code><span class="cm"># Chain of transformations — each function is independent</span>
+<span class="kw">def</span> <span class="fn">transform_pipeline</span>(doc):
+    transforms = [
+        <span class="fn">strip_html</span>,
+        <span class="fn">normalize_encoding</span>,
+        <span class="fn">lowercase_text_fields</span>,
+        <span class="fn">standardize_dates</span>,
+        <span class="fn">parse_price</span>,
+        <span class="fn">split_category</span>,
+        <span class="fn">compute_word_count</span>,
+        <span class="fn">validate_schema</span>,
+    ]
+    <span class="kw">for</span> fn <span class="kw">in</span> transforms:
+        doc = <span class="fn">fn</span>(doc)
+        <span class="kw">if</span> doc <span class="kw">is</span> <span class="op">None</span>:
+            <span class="kw">return</span> <span class="op">None</span>  <span class="cm"># rejected by validation</span>
+    <span class="kw">return</span> doc</code></pre>
+
+    <div class="card card-accent">
+      <h3>Transform Rules of Thumb</h3>
+      <ul>
+        <li><strong>Pure functions:</strong> Each transform takes a doc in, returns a doc out. No side effects.</li>
+        <li><strong>Fail early:</strong> Validate before expensive operations like embedding generation.</li>
+        <li><strong>Log everything:</strong> Record what changed so you can debug issues downstream.</li>
+        <li><strong>Test with production data:</strong> Synthetic test data never covers all the edge cases you'll encounter in the real world.</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ===== SECTION 4 ===== -->
+  <section id="s4">
+    <h2><span class="num">04</span> Load</h2>
+    <p>The final stage pushes transformed documents into the search index. Done poorly, this can be the bottleneck of the entire pipeline.</p>
+
+    <h3>Loading Strategies</h3>
+    <table>
+      <thead><tr><th>Strategy</th><th>Description</th><th>Throughput</th></tr></thead>
+      <tbody>
+        <tr><td>Single insert</td><td>Index one document at a time</td><td>~50 docs/sec</td></tr>
+        <tr><td>Bulk insert</td><td>Batch 500-5000 docs per request</td><td>~5,000 docs/sec</td></tr>
+        <tr><td>Parallel bulk</td><td>Multiple bulk workers concurrently</td><td>~20,000+ docs/sec</td></tr>
+      </tbody>
+    </table>
+
+    <div class="card card-green">
+      <h3>Bulk Indexing Best Practices</h3>
+      <ul>
+        <li><strong>Batch size:</strong> 500-2000 docs per batch (tune by testing)</li>
+        <li><strong>Disable refresh:</strong> Set <code>refresh_interval=-1</code> during bulk load</li>
+        <li><strong>Increase replicas after:</strong> Set replicas to 0 during load, restore after</li>
+        <li><strong>Monitor queue size:</strong> Watch for rejected execution exceptions</li>
+      </ul>
+    </div>
+
+    <div class="pro-tip">
+      <div class="tip-header">Pro Tip</div>
+      <p>Use <strong>alias swapping</strong> for zero-downtime reindexing. Build the new index in the background, then atomically swap the alias pointer. Users never see partial data.</p>
+    </div>
+
+    <h3>Bulk Loading Code</h3>
+    <pre><code><span class="cm"># Efficient bulk loading with error handling</span>
+<span class="kw">from</span> elasticsearch.helpers <span class="kw">import</span> <span class="fn">streaming_bulk</span>
+
+<span class="kw">def</span> <span class="fn">bulk_load</span>(client, index, documents, chunk_size=<span class="op">500</span>):
+    successes = <span class="op">0</span>
+    errors = []
+
+    <span class="kw">for</span> ok, info <span class="kw">in</span> <span class="fn">streaming_bulk</span>(
+        client,
+        documents,
+        index=index,
+        chunk_size=chunk_size,
+        raise_on_error=<span class="op">False</span>,
+        max_retries=<span class="op">3</span>,
+        initial_backoff=<span class="op">2</span>,
+    ):
+        <span class="kw">if</span> ok:
+            successes += <span class="op">1</span>
+        <span class="kw">else</span>:
+            errors.<span class="fn">append</span>(info)
+
+    <span class="fn">print</span>(<span class="str">f"Indexed {successes}, failed {len(errors)}"</span>)
+    <span class="kw">return</span> successes, errors</code></pre>
+
+    <div class="arch-diagram">
+      <div class="arch-section-label">Load Architecture</div>
+      <div class="arch-row">
+        <div class="arch-box accent">Transform Output</div>
+        <div class="arch-arrow">→</div>
+        <div class="arch-box yellow">Batch Buffer</div>
+        <div class="arch-arrow">→</div>
+        <div class="arch-box green">Bulk API</div>
+        <div class="arch-arrow">→</div>
+        <div class="arch-box" style="border-color: var(--accent2); color: var(--accent2);">Search Index</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== SECTION 5: PIPELINE SIMULATOR ===== -->
+  <section id="s5">
+    <h2><span class="num">05</span> Pipeline Simulator</h2>
+    <p>Watch documents flow through a real ETL pipeline. Some have issues — see how the pipeline handles them.</p>
+
+    <div class="playground">
+      <h4>Interactive Pipeline Simulator</h4>
+
+      <div class="pipeline-visual">
+        <div class="pipeline-stage-box" id="stage-extract">
+          <div class="stage-name" style="color: var(--accent);">📥 Extract</div>
+          <div class="stage-count" id="extract-count">0 docs</div>
+        </div>
+        <div class="arrow">→</div>
+        <div class="pipeline-stage-box" id="stage-transform">
+          <div class="stage-name" style="color: var(--accent2);">🔧 Transform</div>
+          <div class="stage-count" id="transform-count">0 docs</div>
+        </div>
+        <div class="arrow">→</div>
+        <div class="pipeline-stage-box" id="stage-load">
+          <div class="stage-name" style="color: var(--accent4);">📤 Load</div>
+          <div class="stage-count" id="load-count">0 docs</div>
+        </div>
+      </div>
+
+      <div class="counter-row">
+        <div class="counter-box">
+          <div class="counter-label">Total</div>
+          <div class="counter-val" id="total-count" style="color: var(--text);">10</div>
+        </div>
+        <div class="counter-box">
+          <div class="counter-label">Success</div>
+          <div class="counter-val" id="success-count" style="color: var(--accent2);">0</div>
+        </div>
+        <div class="counter-box">
+          <div class="counter-label">Failed</div>
+          <div class="counter-val" id="fail-count" style="color: var(--accent3);">0</div>
+        </div>
+        <div class="counter-box">
+          <div class="counter-label">In Progress</div>
+          <div class="counter-val" id="progress-count" style="color: var(--accent);">0</div>
+        </div>
+      </div>
+
+      <button class="demo-btn" id="run-pipeline-btn" onclick="runPipeline()">▶ Run Pipeline</button>
+      <button class="btn" id="reset-pipeline-btn" onclick="resetPipeline()" style="margin-top:12px; margin-left:8px;">↻ Reset</button>
+
+      <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 16px; margin-top: 20px;">
+        <div>
+          <h4 style="color: var(--text); font-size: 0.88rem; margin-bottom: 8px;">Document Flow</h4>
+          <div class="doc-flow" id="doc-flow"></div>
+        </div>
+        <div class="dlq-sidebar">
+          <h4>☠ Dead Letter Queue</h4>
+          <div id="dlq-list" style="font-size: 0.82rem; color: var(--text-dim);">
+            <p style="font-style: italic;">No failed documents yet</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== SECTION 6 ===== -->
+  <section id="s6">
+    <h2><span class="num">06</span> Error Handling</h2>
+    <p>In production, things fail constantly. Network blips, malformed data, service outages. A robust pipeline doesn't just detect errors — it recovers gracefully.</p>
+
+    <div class="grid-2">
+      <div class="card card-accent">
+        <h3>Retry Strategies</h3>
+        <ul>
+          <li><strong>Immediate retry:</strong> Try again right away (transient errors)</li>
+          <li><strong>Exponential backoff:</strong> Wait 1s, 2s, 4s, 8s… (overloaded services)</li>
+          <li><strong>Jittered backoff:</strong> Add randomness to prevent thundering herd</li>
+          <li><strong>Max retries:</strong> Give up after N attempts and route to DLQ</li>
+        </ul>
+      </div>
+      <div class="card card-red">
+        <h3>Circuit Breaker</h3>
+        <p>When a downstream service is failing, stop sending requests entirely. Three states:</p>
+        <ul>
+          <li><strong>Closed:</strong> Normal operation, requests flow through</li>
+          <li><strong>Open:</strong> Service is down, all requests fail fast</li>
+          <li><strong>Half-open:</strong> Try one request to see if service recovered</li>
+        </ul>
+      </div>
+    </div>
+
+    <h3>Dead Letter Queue (DLQ)</h3>
+    <p>Documents that fail all retry attempts are sent to a DLQ — a separate storage area for manual review. Each entry records:</p>
+    <div class="grid-3">
+      <div class="card"><h3>What failed</h3><p>The original document payload</p></div>
+      <div class="card"><h3>Why it failed</h3><p>Error message and stack trace</p></div>
+      <div class="card"><h3>When it failed</h3><p>Timestamp and retry count</p></div>
+    </div>
+
+    <div class="insight">
+      <div class="insight-title">Production Reality</div>
+      <p>In most search pipelines, 0.1-1% of documents hit the DLQ. That's normal. What's <em>not</em> normal is ignoring them. Set up alerts when DLQ depth exceeds a threshold.</p>
+    </div>
+
+    <h3>Retry with Exponential Backoff</h3>
+    <pre><code><span class="cm"># Exponential backoff with jitter</span>
+<span class="kw">import</span> random, time
+
+<span class="kw">def</span> <span class="fn">retry_with_backoff</span>(fn, max_retries=<span class="op">5</span>, base_delay=<span class="op">1.0</span>):
+    <span class="kw">for</span> attempt <span class="kw">in</span> <span class="fn">range</span>(max_retries):
+        <span class="kw">try</span>:
+            <span class="kw">return</span> <span class="fn">fn</span>()
+        <span class="kw">except</span> TransientError:
+            <span class="kw">if</span> attempt == max_retries - <span class="op">1</span>:
+                <span class="kw">raise</span>
+            delay = base_delay * (<span class="op">2</span> ** attempt)
+            jitter = random.<span class="fn">uniform</span>(<span class="op">0</span>, delay * <span class="op">0.1</span>)
+            time.<span class="fn">sleep</span>(delay + jitter)</code></pre>
+
+    <h3>Circuit Breaker States</h3>
+    <div class="arch-diagram">
+      <div class="arch-row">
+        <div class="arch-box green">CLOSED</div>
+        <div class="arch-arrow">→ failures exceed threshold →</div>
+        <div class="arch-box red">OPEN</div>
+      </div>
+      <div class="arch-label-row">↑ success on test request &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ↓ timeout expires</div>
+      <div class="arch-row">
+        <div class="arch-box" style="visibility: hidden;">placeholder</div>
+        <div class="arch-arrow" style="visibility: hidden;">→</div>
+        <div class="arch-box yellow">HALF-OPEN</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== SECTION 7: MONITORING ===== -->
+  <section id="s7">
+    <h2><span class="num">07</span> Monitoring</h2>
+    <p>You can't improve what you can't measure. Pipeline monitoring gives you real-time visibility into health and throughput.</p>
+
+    <h3>The Three Pillars of Pipeline Observability</h3>
+    <div class="grid-3">
+      <div class="card card-accent">
+        <h3>Throughput</h3>
+        <p>Documents processed per second. Track at each stage to find bottlenecks. If Extract outputs 100/s but Transform only handles 60/s, you have a backup forming.</p>
+      </div>
+      <div class="card card-red">
+        <h3>Error Rate</h3>
+        <p>Percentage of documents that fail at each stage. Normal is &lt;1%. Above 5% warrants investigation. Above 10% should trigger circuit breakers.</p>
+      </div>
+      <div class="card card-yellow">
+        <h3>Latency</h3>
+        <p>Time from extraction to index availability. Track p50, p95, p99. A spike in p99 often indicates resource contention or garbage collection pressure.</p>
+      </div>
+    </div>
+
+    <div class="playground">
+      <h4>Pipeline Monitor Dashboard</h4>
+
+      <div class="monitor-grid">
+        <div class="monitor-card">
+          <div class="monitor-val" id="throughput-val" style="color: var(--accent2);">0</div>
+          <div class="monitor-label">Docs / sec</div>
+        </div>
+        <div class="monitor-card">
+          <div class="monitor-val" id="error-rate-val" style="color: var(--accent3);">0%</div>
+          <div class="monitor-label">Error Rate</div>
+        </div>
+        <div class="monitor-card">
+          <div class="monitor-val" id="latency-val" style="color: var(--accent4);">0ms</div>
+          <div class="monitor-label">Avg Latency</div>
+        </div>
+      </div>
+
+      <div class="slider-group">
+        <div class="slider-item">
+          <label>Incoming Rate <span id="rate-display">50 docs/s</span></label>
+          <input type="range" id="incoming-rate" min="10" max="200" value="50" oninput="updateMonitor()">
+        </div>
+        <div class="slider-item">
+          <label>Error Probability <span id="error-display">5%</span></label>
+          <input type="range" id="error-prob" min="0" max="50" value="5" oninput="updateMonitor()">
+        </div>
+      </div>
+
+      <div style="display: flex; gap: 12px; margin-bottom: 16px;">
+        <button class="demo-btn" id="start-monitor-btn" onclick="startMonitor()">▶ Start Monitoring</button>
+        <button class="btn" onclick="stopMonitor()">⏹ Stop</button>
+      </div>
+
+      <div class="chart-wrap">
+        <canvas id="throughputChart" height="200"></canvas>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== SECTION 8 ===== -->
+  <section id="s8">
+    <h2><span class="num">08</span> Idempotency</h2>
+    <p>An idempotent pipeline produces the same result whether you run it once or ten times. This is critical for reliability.</p>
+
+    <div class="analogy">
+      <div class="icon">🔑</div>
+      <p><strong>Elevator analogy:</strong> Pressing the "3rd floor" button once or twenty times has the same effect — you go to floor 3. An idempotent pipeline works the same way. Re-running it doesn't create duplicate documents or corrupt your index.</p>
+    </div>
+
+    <h3>How to achieve idempotency</h3>
+    <div class="grid-2">
+      <div class="card card-accent">
+        <h3>Document-level IDs</h3>
+        <p>Every document gets a deterministic ID derived from its content or source ID. Re-indexing the same document overwrites rather than duplicates.</p>
+      </div>
+      <div class="card card-green">
+        <h3>Upsert semantics</h3>
+        <p>Use <code>index</code> (not <code>create</code>) operations. If the doc exists, it's updated. If not, it's created. Same result either way.</p>
+      </div>
+      <div class="card card-yellow">
+        <h3>Checkpoint tracking</h3>
+        <p>Record exactly which records were processed. On restart, resume from the last checkpoint instead of starting over.</p>
+      </div>
+      <div class="card card-red">
+        <h3>Atomic swaps</h3>
+        <p>Build the entire new index, then swap the alias. The old index stays intact as a rollback point.</p>
+      </div>
+    </div>
+
+    <pre><code><span class="cm"># Idempotent upsert — safe to re-run</span>
+<span class="kw">for</span> doc <span class="kw">in</span> documents:
+    doc_id = <span class="fn">compute_id</span>(doc[<span class="str">"source"</span>], doc[<span class="str">"external_id"</span>])
+    index.<span class="fn">upsert</span>(id=doc_id, body=doc)  <span class="cm"># insert or overwrite</span></code></pre>
+
+    <h3>Deterministic ID Generation</h3>
+    <pre><code><span class="kw">import</span> hashlib
+
+<span class="kw">def</span> <span class="fn">compute_id</span>(source, external_id):
+    <span class="str">"""Generate a stable, deterministic document ID."""</span>
+    raw = <span class="str">f"{source}:{external_id}"</span>
+    <span class="kw">return</span> hashlib.<span class="fn">sha256</span>(raw.<span class="fn">encode</span>()).<span class="fn">hexdigest</span>()[:16]
+
+<span class="cm"># Same input always produces the same ID</span>
+<span class="fn">compute_id</span>(<span class="str">"postgres"</span>, <span class="str">"12345"</span>)  <span class="cm"># → "a3f2b8c91e4d7f06"</span>
+<span class="fn">compute_id</span>(<span class="str">"postgres"</span>, <span class="str">"12345"</span>)  <span class="cm"># → "a3f2b8c91e4d7f06"  (same!)</span></code></pre>
+
+    <table>
+      <thead><tr><th>Approach</th><th>Idempotent?</th><th>Trade-off</th></tr></thead>
+      <tbody>
+        <tr><td><code>index</code> with fixed ID</td><td style="color:var(--accent2);">Yes</td><td>Overwrites entire doc — safe but replaces everything</td></tr>
+        <tr><td><code>create</code> with fixed ID</td><td style="color:var(--accent3);">No</td><td>Fails if doc already exists — use for first-write only</td></tr>
+        <tr><td><code>update</code> with upsert</td><td style="color:var(--accent2);">Yes</td><td>Merges fields — good for partial updates</td></tr>
+        <tr><td>Auto-generated IDs</td><td style="color:var(--accent3);">No</td><td>Creates duplicates on re-run — avoid in pipelines</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ===== SECTION 9 ===== -->
+  <section id="s9">
+    <h2><span class="num">09</span> Key Takeaway</h2>
+
+    <div class="insight">
+      <div class="insight-title">Remember This</div>
+      <p>A search ETL pipeline is only as good as its weakest stage. <strong>Extract</strong> reliably, <strong>Transform</strong> defensively (validate everything), and <strong>Load</strong> efficiently (bulk operations). Build in retries, circuit breakers, and monitoring from day one — they're not optional in production.</p>
+    </div>
+
+    <div class="card card-accent">
+      <h3>Pipeline Health Checklist</h3>
+      <ul>
+        <li>Every document has a deterministic ID (idempotency)</li>
+        <li>Failed documents go to DLQ, not into the void</li>
+        <li>Throughput, error rate, and latency are monitored</li>
+        <li>Pipeline can be restarted mid-run without duplicates</li>
+        <li>Schema validation catches issues before they reach the index</li>
+      </ul>
+    </div>
+  </section>
+
+</div>
+
+<footer>ETL Pipeline for Search — Interactive Playground</footer>
+
+<script>
+/* ===== PIPELINE SIMULATOR ===== */
+const sampleDocs = [
+  { id: 'DOC-001', title: 'Product Guide v3.1', issue: null },
+  { id: 'DOC-002', title: 'API Reference', issue: null },
+  { id: 'DOC-003', title: '', issue: 'missing_title' },
+  { id: 'DOC-004', title: 'Release Notes 2024', issue: null },
+  { id: 'DOC-005', title: 'User Manual \u00e9\u00e8', issue: 'bad_encoding' },
+  { id: 'DOC-006', title: 'Getting Started', issue: null },
+  { id: 'DOC-007', title: 'FAQ Page', issue: null },
+  { id: 'DOC-008', title: null, issue: 'null_field' },
+  { id: 'DOC-009', title: 'Troubleshooting', issue: null },
+  { id: 'DOC-010', title: 'Best Practices', issue: null }
+];
+
+let pipelineRunning = false;
+
+function resetPipeline() {
+  pipelineRunning = false;
+  document.getElementById('extract-count').textContent = '0 docs';
+  document.getElementById('transform-count').textContent = '0 docs';
+  document.getElementById('load-count').textContent = '0 docs';
+  document.getElementById('success-count').textContent = '0';
+  document.getElementById('fail-count').textContent = '0';
+  document.getElementById('progress-count').textContent = '0';
+  document.getElementById('doc-flow').innerHTML = '';
+  document.getElementById('dlq-list').innerHTML = '<p style="font-style:italic;">No failed documents yet</p>';
+  document.querySelectorAll('.pipeline-stage-box').forEach(b => b.classList.remove('active'));
+  document.getElementById('run-pipeline-btn').disabled = false;
+}
+
+async function runPipeline() {
+  if (pipelineRunning) return;
+  pipelineRunning = true;
+  document.getElementById('run-pipeline-btn').disabled = true;
+  resetPipeline();
+  document.getElementById('run-pipeline-btn').disabled = true;
+
+  const flow = document.getElementById('doc-flow');
+  const dlqList = document.getElementById('dlq-list');
+  dlqList.innerHTML = '';
+
+  let successCount = 0, failCount = 0;
+
+  for (let i = 0; i < sampleDocs.length; i++) {
+    if (!pipelineRunning) break;
+    const doc = sampleDocs[i];
+    document.getElementById('progress-count').textContent = String(i + 1 - successCount - failCount);
+
+    const pill = document.createElement('div');
+    pill.className = 'doc-pill';
+    pill.innerHTML = `<span class="doc-name">${doc.id}</span><span class="doc-status">extracting…</span>`;
+    flow.prepend(pill);
+
+    // Extract
+    document.getElementById('stage-extract').classList.add('active');
+    document.getElementById('extract-count').textContent = `${i + 1} docs`;
+    await sleep(300);
+    pill.querySelector('.doc-status').textContent = 'transforming…';
+    document.getElementById('stage-extract').classList.remove('active');
+
+    // Transform
+    document.getElementById('stage-transform').classList.add('active');
+    document.getElementById('transform-count').textContent = `${i + 1} docs`;
+    await sleep(400);
+    document.getElementById('stage-transform').classList.remove('active');
+
+    if (doc.issue) {
+      pill.classList.add('fail');
+      pill.querySelector('.doc-status').textContent = `✗ ${formatIssue(doc.issue)}`;
+      failCount++;
+      document.getElementById('fail-count').textContent = String(failCount);
+      const dlqItem = document.createElement('div');
+      dlqItem.style.cssText = 'padding:6px 0; border-bottom:1px solid rgba(255,107,107,0.1);';
+      dlqItem.innerHTML = `<strong style="color:var(--accent3)">${doc.id}</strong> — ${formatIssue(doc.issue)}`;
+      dlqList.appendChild(dlqItem);
+    } else {
+      // Load
+      document.getElementById('stage-load').classList.add('active');
+      pill.querySelector('.doc-status').textContent = 'loading…';
+      await sleep(250);
+      pill.classList.add('success');
+      pill.querySelector('.doc-status').textContent = '✓ indexed';
+      successCount++;
+      document.getElementById('success-count').textContent = String(successCount);
+      document.getElementById('load-count').textContent = `${successCount} docs`;
+      document.getElementById('stage-load').classList.remove('active');
+    }
+    document.getElementById('progress-count').textContent = '0';
+  }
+  pipelineRunning = false;
+  document.getElementById('run-pipeline-btn').disabled = false;
+}
+
+function formatIssue(issue) {
+  const map = { missing_title: 'Missing required field: title', bad_encoding: 'Invalid UTF-8 encoding', null_field: 'Null required field' };
+  return map[issue] || issue;
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+/* ===== MONITORING DASHBOARD ===== */
+let monitorInterval = null;
+let throughputChart = null;
+let chartData = [];
+let chartLabels = [];
+let tickCount = 0;
+
+function initChart() {
+  const ctx = document.getElementById('throughputChart').getContext('2d');
+  throughputChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: [],
+      datasets: [
+        { label: 'Throughput (docs/s)', data: [], borderColor: '#00c9a7', backgroundColor: 'rgba(0,201,167,0.1)', fill: true, tension: 0.3, pointRadius: 2 },
+        { label: 'Errors (docs/s)', data: [], borderColor: '#ff6b6b', backgroundColor: 'rgba(255,107,107,0.1)', fill: true, tension: 0.3, pointRadius: 2 }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        x: { grid: { color: 'rgba(42,45,58,0.5)' }, ticks: { color: '#6d7290', maxTicksLimit: 10 } },
+        y: { grid: { color: 'rgba(42,45,58,0.5)' }, ticks: { color: '#6d7290' }, beginAtZero: true }
+      },
+      plugins: { legend: { labels: { color: '#9398ab', font: { family: 'Inter' } } } }
+    }
+  });
+}
+
+function updateMonitor() {
+  document.getElementById('rate-display').textContent = document.getElementById('incoming-rate').value + ' docs/s';
+  document.getElementById('error-display').textContent = document.getElementById('error-prob').value + '%';
+}
+
+function startMonitor() {
+  if (monitorInterval) return;
+  if (!throughputChart) initChart();
+  tickCount = 0;
+  chartData = [];
+  chartLabels = [];
+  throughputChart.data.labels = [];
+  throughputChart.data.datasets[0].data = [];
+  throughputChart.data.datasets[1].data = [];
+  throughputChart.update();
+
+  monitorInterval = setInterval(() => {
+    tickCount++;
+    const rate = parseInt(document.getElementById('incoming-rate').value);
+    const errorProb = parseInt(document.getElementById('error-prob').value) / 100;
+
+    const jitter = (Math.random() - 0.5) * rate * 0.3;
+    const actualThroughput = Math.max(0, Math.round(rate + jitter));
+    const errors = Math.round(actualThroughput * errorProb * (0.5 + Math.random()));
+    const successful = actualThroughput - errors;
+    const latency = Math.round(20 + (rate / 10) + Math.random() * 30 + errors * 5);
+
+    document.getElementById('throughput-val').textContent = successful;
+    document.getElementById('error-rate-val').textContent = (errors / Math.max(actualThroughput, 1) * 100).toFixed(1) + '%';
+    document.getElementById('latency-val').textContent = latency + 'ms';
+
+    const errPct = errors / Math.max(actualThroughput, 1);
+    document.getElementById('error-rate-val').style.color = errPct > 0.1 ? 'var(--accent3)' : errPct > 0.05 ? 'var(--accent4)' : 'var(--accent2)';
+    document.getElementById('latency-val').style.color = latency > 100 ? 'var(--accent3)' : latency > 50 ? 'var(--accent4)' : 'var(--accent2)';
+
+    throughputChart.data.labels.push(tickCount + 's');
+    throughputChart.data.datasets[0].data.push(successful);
+    throughputChart.data.datasets[1].data.push(errors);
+    if (throughputChart.data.labels.length > 30) {
+      throughputChart.data.labels.shift();
+      throughputChart.data.datasets[0].data.shift();
+      throughputChart.data.datasets[1].data.shift();
+    }
+    throughputChart.update('none');
+  }, 1000);
+}
+
+function stopMonitor() {
+  clearInterval(monitorInterval);
+  monitorInterval = null;
+}
+
+/* ===== TOC SCROLL HIGHLIGHTING ===== */
+(function() {
+  const sections = document.querySelectorAll('section[id]');
+  const tocLinks = document.querySelectorAll('.toc a');
+  function onScroll() {
+    let current = '';
+    sections.forEach(s => {
+      if (window.scrollY >= s.offsetTop - 120) current = s.id;
+    });
+    tocLinks.forEach(a => {
+      a.classList.toggle('active', a.getAttribute('href') === '#' + current);
+    });
+  }
+  window.addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+})();
+</script>
+</body>
+</html>

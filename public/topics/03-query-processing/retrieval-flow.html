@@ -1,0 +1,940 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Complete Retrieval Pipeline — Interactive Playground</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body, {
+    delimiters: [
+      {left: '$$', right: '$$', display: true},
+      {left: '\\[', right: '\\]', display: true},
+      {left: '$', right: '$', display: false},
+      {left: '\\(', right: '\\)', display: false}
+    ],
+    throwOnError: false
+  });"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../playground.css" />
+<style>
+  .stage-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px 24px;
+    margin: 12px 0;
+    border-left: 4px solid var(--accent);
+    transition: all 0.3s;
+  }
+  .stage-card.active { border-color: var(--accent2); background: rgba(0,201,167,0.05); }
+  .stage-card.done { border-color: var(--accent2); opacity: 0.7; }
+  .stage-card .stage-header {
+    display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;
+  }
+  .stage-card .stage-title { font-weight: 700; font-size: 0.95rem; }
+  .stage-card .stage-count {
+    font-family: 'JetBrains Mono', monospace; font-size: 0.85rem;
+    padding: 2px 10px; border-radius: 12px; font-weight: 600;
+  }
+  .stage-card .stage-count.in { background: rgba(108,99,255,0.15); color: var(--accent); }
+  .stage-card .stage-count.out { background: rgba(0,201,167,0.15); color: var(--accent2); }
+  .stage-docs {
+    display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px;
+  }
+  .stage-doc {
+    background: var(--code-bg); border: 1px solid var(--border);
+    padding: 4px 10px; border-radius: 6px; font-size: 0.78rem;
+    font-family: 'JetBrains Mono', monospace; transition: all 0.3s;
+  }
+  .stage-doc.entering { border-color: var(--accent); color: var(--accent); }
+  .stage-doc.leaving { border-color: var(--accent3); color: var(--accent3); opacity: 0.5; text-decoration: line-through; }
+  .stage-doc.kept { border-color: var(--accent2); color: var(--accent2); }
+  .stage-connector {
+    text-align: center; color: var(--text-dim); font-size: 1.3rem; padding: 4px 0;
+  }
+  .pipeline-input-row {
+    display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+  }
+  .pipeline-input-row input { flex: 1; min-width: 200px; }
+  .latency-metrics {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 10px; margin-top: 16px;
+  }
+  .latency-metric {
+    background: var(--code-bg); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); padding: 12px; text-align: center;
+  }
+  .latency-metric .lm-label { font-size: 0.72rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; }
+  .latency-metric .lm-value { font-size: 1.3rem; font-weight: 700; font-family: 'JetBrains Mono', monospace; color: var(--accent2); }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <a href="/" class="topbar-brand">
+    <div class="topbar-logo">RM</div>
+    <span class="topbar-label">Rahul Mrinal</span>
+  </a>
+  <a href="/blog" class="topbar-back">← Back to Blog</a>
+</div>
+
+<div class="hero">
+  <div class="container">
+    <h1>Complete Retrieval Pipeline</h1>
+    <p class="subtitle">Trace a query end-to-end from input to ranked results</p>
+    <div class="badges">
+      <span class="badge badge-hnsw">BM25</span>
+      <span class="badge badge-ivf">Vector</span>
+      <span class="badge badge-pq">Re-Ranking</span>
+    </div>
+  </div>
+</div>
+
+<nav class="toc">
+  <div class="toc-inner">
+    <a href="#s1">Big Picture</a>
+    <a href="#s2">Preprocessing</a>
+    <a href="#s3">Candidate Retrieval</a>
+    <a href="#s4">Score Fusion</a>
+    <a href="#s5">Filtering</a>
+    <a href="#s6">Re-Ranking</a>
+    <a href="#s7">Simulator</a>
+    <a href="#s8">Latency Budget</a>
+    <a href="#s9">Trade-offs</a>
+    <a href="#s10">Takeaway</a>
+  </div>
+</nav>
+
+<div class="container">
+
+  <!-- SECTION 1 -->
+  <section id="s1">
+    <h2><span class="num">01</span> The Big Picture</h2>
+    <p>A modern retrieval pipeline is a <strong>funnel</strong>: each stage narrows the candidate set while increasing the quality of scoring. The philosophy is simple — use cheap methods on many documents, expensive methods on few.</p>
+
+    <div class="analogy">
+      <div class="icon">🏟️</div>
+      <p><strong>Analogy:</strong> Hiring for a role. You start with 10,000 resumes (candidate retrieval), filter by hard requirements like degree and visa (filtering), do a quick phone screen (score fusion), then bring 5 finalists for a full-day onsite (re-ranking). Each stage costs more per candidate but runs on fewer.</p>
+    </div>
+
+    <div class="pipeline">
+      <div class="pipeline-node accent">Query</div>
+      <div class="pipeline-arrow">→</div>
+      <div class="pipeline-node">Preprocess</div>
+      <div class="pipeline-arrow">→</div>
+      <div class="pipeline-node green">Retrieval</div>
+      <div class="pipeline-arrow">→</div>
+      <div class="pipeline-node yellow">Fusion</div>
+      <div class="pipeline-arrow">→</div>
+      <div class="pipeline-node">Filter</div>
+      <div class="pipeline-arrow">→</div>
+      <div class="pipeline-node red">Re-Rank</div>
+      <div class="pipeline-arrow">→</div>
+      <div class="pipeline-node accent">Top K</div>
+    </div>
+
+    <div class="grid-2" style="margin-top:24px">
+      <div class="card card-accent">
+        <h3>Speed vs Quality</h3>
+        <p class="dim">Early stages trade quality for speed (BM25 over millions in ~5ms). Later stages trade speed for quality (cross-encoder on 10 docs in ~200ms).</p>
+      </div>
+      <div class="card card-green">
+        <h3>Recall Then Precision</h3>
+        <p class="dim">Retrieval maximises recall — better to include an irrelevant doc than miss a relevant one. Re-ranking maximises precision on the survivors.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- SECTION 2 -->
+  <section id="s2">
+    <h2><span class="num">02</span> Stage 1: Query Preprocessing</h2>
+    <p>Before the query reaches any index, we normalise it into canonical form. This step is critical for recall — a mismatch between query tokens and index tokens means zero matches.</p>
+
+    <h3>Tokenization</h3>
+    <p>Split on whitespace and punctuation, handling edge cases like contractions (<code>can't → [can, t]</code>), compound words, and special characters.</p>
+    <div class="grid-2">
+      <div class="card card-accent">
+        <strong>Simple whitespace split</strong>
+        <p class="dim">"New York pizza" → <code>["New", "York", "pizza"]</code></p>
+        <p class="dim">Fast, but breaks on punctuation and compound words.</p>
+      </div>
+      <div class="card card-green">
+        <strong>Language-aware tokenizer</strong>
+        <p class="dim">"I can't believe it's $9.99!" → <code>["I", "ca", "n't", "believe", "it", "'s", "$", "9.99", "!"]</code></p>
+        <p class="dim">Handles contractions, currency, numbers correctly.</p>
+      </div>
+    </div>
+
+    <h3>Lowercasing (Case Folding)</h3>
+    <p>Convert all tokens to lowercase so <code>"Python"</code>, <code>"PYTHON"</code>, and <code>"python"</code> all match the same index terms. Exception: entity-sensitive contexts where <code>WHO ≠ who</code>.</p>
+    <div class="card card-yellow">
+      <strong>When NOT to lowercase</strong>
+      <p class="dim">Entity-sensitive searches (e.g., "WHO" the organization vs "who" the pronoun), product names (iPhone), acronyms (AIDS vs aids). Some systems use <strong>truecasing</strong> — a learned model that preserves meaningful capitalization.</p>
+    </div>
+
+    <h3>Stemming / Lemmatization</h3>
+    <p>Reduce words to root forms. Porter stemmer: <code>running → run</code>, <code>better → better</code>. Lemmatizer: <code>better → good</code>. Stemming is faster; lemmatization is more accurate.</p>
+    <table>
+      <thead><tr><th>Approach</th><th>Method</th><th>Speed</th><th>Accuracy</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Porter Stemmer</strong></td><td>Rule-based suffix stripping</td><td>Very fast</td><td>Moderate (over-stems sometimes)</td></tr>
+        <tr><td><strong>Snowball Stemmer</strong></td><td>Improved rule-based</td><td>Fast</td><td>Good</td></tr>
+        <tr><td><strong>WordNet Lemmatizer</strong></td><td>Dictionary lookup + POS tag</td><td>Slower</td><td>High</td></tr>
+        <tr><td><strong>spaCy Lemmatizer</strong></td><td>Rule + exception tables</td><td>Moderate</td><td>High</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Stop Word Removal</h3>
+    <p>Remove ultra-common words (<code>the, is, at, which</code>) that add noise. Modern systems often skip this — BM25's IDF naturally down-weights them, and removing stop words can hurt phrase queries like "to be or not to be".</p>
+
+    <div class="pro-tip">
+      <div class="tip-header">When To Remove Stop Words</div>
+      <p class="dim">For BM25-based systems, stop word removal is mostly unnecessary — IDF handles it. For TF-IDF with no IDF discount, stop words dominate and must be removed. For embedding models, keep all tokens — the model was trained on full sentences.</p>
+    </div>
+
+    <h3>The Preprocessing Pipeline</h3>
+    <div class="pipeline">
+      <div class="pipeline-node accent">Raw Query</div>
+      <div class="pipeline-arrow">→</div>
+      <div class="pipeline-node">Tokenize</div>
+      <div class="pipeline-arrow">→</div>
+      <div class="pipeline-node green">Lowercase</div>
+      <div class="pipeline-arrow">→</div>
+      <div class="pipeline-node yellow">Remove Stops</div>
+      <div class="pipeline-arrow">→</div>
+      <div class="pipeline-node red">Stem/Lemma</div>
+      <div class="pipeline-arrow">→</div>
+      <div class="pipeline-node accent">Clean Tokens</div>
+    </div>
+
+    <div class="insight">
+      <div class="insight-title">Key Insight</div>
+      <p>The same preprocessing must be applied at both <strong>index time</strong> and <strong>query time</strong>. If you stem documents but not queries (or vice versa), matching breaks silently. This is the #1 cause of "search returns nothing" bugs.</p>
+    </div>
+  </section>
+
+  <!-- SECTION 3 -->
+  <section id="s3">
+    <h2><span class="num">03</span> Stage 2: Candidate Retrieval</h2>
+    <p>The goal here is <strong>high recall at low cost</strong>. We cast a wide net using two complementary strategies that cover each other's blind spots.</p>
+
+    <div class="grid-2">
+      <div class="card card-accent">
+        <h3>BM25 (Lexical)</h3>
+        <p class="dim">Looks up query terms in an inverted index. Extremely fast (&lt;10ms over millions). Excels at exact keyword matches but misses synonyms and semantic meaning.</p>
+        <p class="dim" style="margin-top:8px">$$\text{BM25}(q, d) = \sum_{t \in q} \text{IDF}(t) \cdot \frac{f(t,d) \cdot (k_1+1)}{f(t,d) + k_1 \cdot (1 - b + b \cdot \frac{|d|}{\text{avgdl}})}$$</p>
+      </div>
+      <div class="card card-green">
+        <h3>Vector Search (Semantic)</h3>
+        <p class="dim">Encode query into an embedding vector, then find nearest neighbours in vector space. Captures semantic similarity — "automobile" matches "car". Typically uses ANN indexes (HNSW, IVF).</p>
+        <p class="dim" style="margin-top:8px">$$\text{sim}(q, d) = \frac{\vec{q} \cdot \vec{d}}{||\vec{q}|| \cdot ||\vec{d}||}$$</p>
+      </div>
+    </div>
+
+    <h3>When Each Strategy Wins</h3>
+    <table>
+      <thead><tr><th>Scenario</th><th>BM25 Wins</th><th>Vector Wins</th></tr></thead>
+      <tbody>
+        <tr><td>Exact ID or code lookup</td><td><span class="badge badge-green">Strong</span></td><td><span class="badge badge-red">Weak</span></td></tr>
+        <tr><td>Rare technical terms</td><td><span class="badge badge-green">Strong</span></td><td><span class="badge badge-yellow">Moderate</span></td></tr>
+        <tr><td>Synonym matching</td><td><span class="badge badge-red">Weak</span></td><td><span class="badge badge-green">Strong</span></td></tr>
+        <tr><td>Conceptual/intent queries</td><td><span class="badge badge-red">Weak</span></td><td><span class="badge badge-green">Strong</span></td></tr>
+        <tr><td>Multi-lingual matching</td><td><span class="badge badge-red">None</span></td><td><span class="badge badge-green">Strong</span></td></tr>
+        <tr><td>Short keyword queries</td><td><span class="badge badge-green">Strong</span></td><td><span class="badge badge-yellow">Moderate</span></td></tr>
+        <tr><td>Long natural language</td><td><span class="badge badge-yellow">Moderate</span></td><td><span class="badge badge-green">Strong</span></td></tr>
+      </tbody>
+    </table>
+
+    <div class="pro-tip">
+      <div class="tip-header">Why Both?</div>
+      <p class="dim">BM25 is unbeatable for exact matches ("error code XJ-4402") while vector search handles semantic intent ("how to fix a broken screen"). Together they cover each other's blind spots. In practice, hybrid retrieval (BM25 + vector) outperforms either alone by 5-15% on standard benchmarks.</p>
+    </div>
+
+    <div class="analogy">
+      <div class="icon">🔍</div>
+      <p><strong>Analogy:</strong> BM25 is like searching for a book by exact title in a library catalog. Vector search is like asking a librarian "I need something about managing difficult team dynamics" — they understand the concept even though your words don't match any title exactly.</p>
+    </div>
+  </section>
+
+  <!-- SECTION 4 -->
+  <section id="s4">
+    <h2><span class="num">04</span> Stage 3: Score Fusion</h2>
+    <p>We now have two candidate lists with different score distributions. Fusion combines them into one ranked list.</p>
+
+    <h3>Reciprocal Rank Fusion (RRF)</h3>
+    <p>RRF ignores raw scores entirely and uses only rank positions. This elegantly handles the score distribution mismatch.</p>
+
+    <div class="formula-box">
+      $$\text{RRF}(d) = \sum_{r \in \text{rankers}} \frac{1}{k + \text{rank}_r(d)}$$
+      <div class="label">k = 60 is the standard constant that prevents high-ranked docs from dominating too aggressively</div>
+    </div>
+
+    <h3>Weighted Combination</h3>
+    <p>Alternatively, normalise scores to [0,1] and combine: $\text{score}(d) = \alpha \cdot \text{BM25}_{\text{norm}}(d) + (1-\alpha) \cdot \text{vec}_{\text{norm}}(d)$. Requires careful normalisation but lets you tune the balance.</p>
+
+    <div class="grid-2">
+      <div class="card card-accent">
+        <h3>RRF Pros</h3>
+        <ul>
+          <li>No normalisation needed</li>
+          <li>Robust to outlier scores</li>
+          <li>Parameter-free (k=60 works everywhere)</li>
+        </ul>
+      </div>
+      <div class="card card-green">
+        <h3>Weighted Combo Pros</h3>
+        <ul>
+          <li>More expressive — tune α per domain</li>
+          <li>Preserves score magnitude information</li>
+          <li>Can be learned end-to-end</li>
+        </ul>
+      </div>
+    </div>
+
+    <h3>RRF Worked Example</h3>
+    <div class="card">
+      <p class="dim">Given BM25 ranks: [D1, D3, D5, D2] and vector ranks: [D3, D1, D4, D2] with k=60:</p>
+      <table>
+        <thead><tr><th>Document</th><th>BM25 Rank</th><th>Vector Rank</th><th>RRF Score</th></tr></thead>
+        <tbody>
+          <tr><td><strong>D1</strong></td><td>1</td><td>2</td><td>1/61 + 1/62 = <strong>0.0325</strong></td></tr>
+          <tr><td><strong>D3</strong></td><td>2</td><td>1</td><td>1/62 + 1/61 = <strong>0.0325</strong></td></tr>
+          <tr><td><strong>D2</strong></td><td>4</td><td>4</td><td>1/64 + 1/64 = <strong>0.0313</strong></td></tr>
+          <tr><td><strong>D5</strong></td><td>3</td><td>—</td><td>1/63 + 1/160 = <strong>0.0221</strong></td></tr>
+          <tr><td><strong>D4</strong></td><td>—</td><td>3</td><td>1/160 + 1/63 = <strong>0.0221</strong></td></tr>
+        </tbody>
+      </table>
+      <p class="dim" style="margin-top:8px">D1 and D3 tie because they both appear at rank 1 and 2, just swapped. D2 ranks high because it appears in both lists. D5 and D4 rank lower because they each appear in only one.</p>
+    </div>
+
+    <div class="insight">
+      <div class="insight-title">Unranked Documents</div>
+      <p>When a document appears in only one retrieval path, assign a large default rank (e.g., 100) for the missing path. This ensures documents found by both methods are always scored higher than those found by only one — a natural way to reward agreement between rankers.</p>
+    </div>
+  </section>
+
+  <!-- SECTION 5 -->
+  <section id="s5">
+    <h2><span class="num">05</span> Stage 4: Filtering</h2>
+    <p>Hard constraints that documents must satisfy regardless of relevance score. A document with a perfect BM25 score is useless if it's in the wrong language or out of stock.</p>
+
+    <div class="card">
+      <h3>Common Filters</h3>
+      <table>
+        <thead><tr><th>Filter Type</th><th>Example</th><th>Implementation</th></tr></thead>
+        <tbody>
+          <tr><td>Category</td><td>category = "electronics"</td><td>Bitmap index</td></tr>
+          <tr><td>Range</td><td>price BETWEEN 10 AND 50</td><td>B-tree / sorted array</td></tr>
+          <tr><td>Boolean</td><td>in_stock = true</td><td>Bitset</td></tr>
+          <tr><td>Date</td><td>published &gt; 2024-01-01</td><td>Range tree</td></tr>
+          <tr><td>Geo</td><td>distance &lt; 10km</td><td>Geohash / R-tree</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="insight">
+      <div class="insight-title">Pre-filter vs Post-filter</div>
+      <p><strong>Pre-filtering</strong> narrows the search space before retrieval (faster, but can hurt recall if the filter is too aggressive). <strong>Post-filtering</strong> retrieves first, then removes non-matching docs (preserves recall but wastes compute on docs that get discarded).</p>
+    </div>
+  </section>
+
+  <!-- SECTION 6 -->
+  <section id="s6">
+    <h2><span class="num">06</span> Stage 5: Re-Ranking</h2>
+    <p>The final, most expensive stage. A powerful model (cross-encoder, LLM) scores each surviving candidate against the query with full attention.</p>
+
+    <div class="grid-2">
+      <div class="card card-accent">
+        <h3>Cross-Encoder</h3>
+        <p class="dim">Concatenates query + document and runs through a BERT-style transformer. Scores all token interactions (unlike bi-encoder which compresses each independently). 100-1000× slower than bi-encoder but significantly more accurate.</p>
+        <p class="dim" style="margin-top:8px"><strong>Input:</strong> <code>[CLS] query [SEP] document [SEP]</code></p>
+        <p class="dim"><strong>Output:</strong> Single relevance score from classification head</p>
+      </div>
+      <div class="card card-green">
+        <h3>Bi-Encoder vs Cross-Encoder</h3>
+        <p class="dim">A bi-encoder encodes query and document <em>independently</em> — fast (precompute doc embeddings) but misses fine-grained interactions. A cross-encoder sees both together — slow but captures nuanced relevance.</p>
+        <p class="dim" style="margin-top:8px"><strong>Bi-encoder:</strong> encode(q) · encode(d)</p>
+        <p class="dim"><strong>Cross-encoder:</strong> score(q ⊕ d)</p>
+      </div>
+    </div>
+
+    <h3>Why Not Use It Everywhere?</h3>
+    <p>A cross-encoder on 1M documents at 10ms each = 10,000 seconds. On 10 documents = 100ms. This is why the funnel exists — we use cheap retrieval to reduce the candidate set to a manageable size, then apply expensive re-ranking.</p>
+
+    <div class="arch-diagram">
+      <div class="arch-section-label">The Cost Funnel</div>
+      <div class="arch-row">
+        <div class="arch-box accent">1M docs</div>
+        <div class="arch-arrow">→</div>
+        <div class="arch-box green">BM25 top-100<br><span class="arch-label">~5ms</span></div>
+        <div class="arch-arrow">→</div>
+        <div class="arch-box yellow">Fused top-20<br><span class="arch-label">~2ms</span></div>
+        <div class="arch-arrow">→</div>
+        <div class="arch-box red">Re-rank top-5<br><span class="arch-label">~150ms</span></div>
+      </div>
+    </div>
+
+    <h3>Popular Re-Ranking Models</h3>
+    <table>
+      <thead><tr><th>Model</th><th>Type</th><th>Latency (10 docs)</th><th>Quality</th></tr></thead>
+      <tbody>
+        <tr><td><strong>ms-marco-MiniLM</strong></td><td>Cross-encoder</td><td>~50ms</td><td>Good baseline</td></tr>
+        <tr><td><strong>Cohere Rerank</strong></td><td>API cross-encoder</td><td>~100ms</td><td>Production-grade</td></tr>
+        <tr><td><strong>BGE Reranker v2</strong></td><td>Cross-encoder</td><td>~80ms</td><td>Strong multilingual</td></tr>
+        <tr><td><strong>GPT-4 / Claude</strong></td><td>LLM-as-judge</td><td>~2000ms</td><td>Highest quality</td></tr>
+        <tr><td><strong>ColBERT v2</strong></td><td>Late interaction</td><td>~30ms</td><td>Good speed/quality</td></tr>
+      </tbody>
+    </table>
+
+    <div class="insight">
+      <div class="insight-title">LLM Re-Ranking</div>
+      <p>A growing trend is using LLMs to re-rank by presenting candidates and asking "which is most relevant?" This is incredibly expensive but yields the best results. Practical for &lt;5 candidates in high-value scenarios (e.g., RAG for enterprise assistants).</p>
+    </div>
+  </section>
+
+  <!-- SECTION 7: PIPELINE SIMULATOR -->
+  <section id="s7">
+    <h2><span class="num">07</span> Pipeline Simulator</h2>
+    <p>Type a query and watch it flow through every stage of the retrieval pipeline. See which documents enter and leave at each step.</p>
+
+    <div class="playground" id="pipeline-sim">
+      <h4>Interactive Pipeline Simulator</h4>
+      <div class="pipeline-input-row">
+        <input type="text" class="demo-input" id="sim-query" placeholder="Try: wireless noise cancelling headphones" value="wireless noise cancelling headphones" />
+        <button class="demo-btn" id="sim-run">Run Pipeline</button>
+      </div>
+
+      <div class="card" style="margin-top:16px;margin-bottom:8px">
+        <p class="dim" style="margin:0;font-size:0.85rem"><strong>Corpus:</strong> 20 preset product documents spanning electronics, gaming, health, peripherals, and accessories. The simulator applies real BM25 scoring, vector similarity, RRF fusion, category/stock filtering, and cross-encoder-style re-ranking.</p>
+      </div>
+
+      <div style="margin:12px 0">
+        <p class="dim" style="font-size:0.82rem"><strong>Try these queries:</strong></p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">
+          <button class="btn" onclick="document.getElementById('sim-query').value='sony headphones';document.getElementById('sim-run').click()">sony headphones</button>
+          <button class="btn" onclick="document.getElementById('sim-query').value='budget wireless audio';document.getElementById('sim-run').click()">budget wireless audio</button>
+          <button class="btn" onclick="document.getElementById('sim-query').value='gaming headset microphone';document.getElementById('sim-run').click()">gaming headset microphone</button>
+          <button class="btn" onclick="document.getElementById('sim-query').value='bluetooth earbuds';document.getElementById('sim-run').click()">bluetooth earbuds</button>
+          <button class="btn" onclick="document.getElementById('sim-query').value='noise cancelling sleep';document.getElementById('sim-run').click()">noise cancelling sleep</button>
+        </div>
+      </div>
+
+      <div id="sim-stages" style="margin-top:24px"></div>
+    </div>
+
+    <div class="insight">
+      <div class="insight-title">What to Notice</div>
+      <p>Pay attention to how BM25 and vector search produce <em>different</em> candidate lists — some documents appear in both (high confidence), others in only one (the union is the key to hybrid search). Watch how filtering removes documents regardless of score, and how re-ranking reshuffles the final order compared to fusion.</p>
+    </div>
+  </section>
+
+  <!-- SECTION 8: LATENCY BUDGET -->
+  <section id="s8">
+    <h2><span class="num">08</span> Latency Budget</h2>
+    <p>Where does the time go? Adjust candidate counts to see how each stage's latency changes and where the budget is spent. Most production systems target a total latency of <strong>200–500ms</strong> for search.</p>
+
+    <div class="playground">
+      <h4>Latency Budget Explorer</h4>
+      <div class="slider-group">
+        <div class="slider-item">
+          <label><span>Candidate Count</span><span id="lat-cand-val">1000</span></label>
+          <input type="range" id="lat-cand" min="100" max="10000" step="100" value="1000" />
+        </div>
+        <div class="slider-item">
+          <label><span>Re-rank Count</span><span id="lat-rerank-val">20</span></label>
+          <input type="range" id="lat-rerank" min="10" max="100" step="5" value="20" />
+        </div>
+      </div>
+      <div class="chart-wrap">
+        <canvas id="latency-chart"></canvas>
+      </div>
+      <div class="latency-metrics" id="latency-metrics"></div>
+    </div>
+
+    <h3>Latency Budget Rules of Thumb</h3>
+    <div class="grid-2">
+      <div class="card card-accent">
+        <h3>Autocomplete (50ms)</h3>
+        <p class="dim">Must feel instant. No re-ranking, no vector search. Prefix trie + top-K by popularity. Every millisecond matters at keystroke speed.</p>
+      </div>
+      <div class="card card-green">
+        <h3>Full Search (200-500ms)</h3>
+        <p class="dim">Users tolerate 200-500ms for a full page of results. Budget: ~20ms retrieval, ~5ms fusion, ~5ms filtering, ~150-400ms re-ranking. Parallelise BM25 and vector retrieval.</p>
+      </div>
+    </div>
+    <div class="grid-2">
+      <div class="card card-yellow">
+        <h3>RAG Pipeline (1-3s)</h3>
+        <p class="dim">Retrieval feeds into an LLM, so users are already expecting a few seconds. You can afford expensive re-ranking (cross-encoder on 50+ docs) and even LLM-based re-ranking.</p>
+      </div>
+      <div class="card card-red">
+        <h3>Batch/Analytics (minutes)</h3>
+        <p class="dim">Offline evaluation, data labelling, corpus reindexing. No latency constraint. Use the most accurate models available. Re-rank thousands of candidates if needed.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- SECTION 9 -->
+  <section id="s9">
+    <h2><span class="num">09</span> Design Trade-offs</h2>
+    <p>Every stage balances competing goals. Understanding these trade-offs is the difference between a search system that works and one that delights users.</p>
+
+    <h3>The Fundamental Tensions</h3>
+    <div class="grid-2">
+      <div class="card card-accent">
+        <h3>Recall vs Precision</h3>
+        <p class="dim">Early stages maximise recall (include everything possibly relevant). Later stages maximise precision (show only the best). These are inherently at odds — improving one typically hurts the other.</p>
+      </div>
+      <div class="card card-green">
+        <h3>Latency vs Quality</h3>
+        <p class="dim">Better scoring models (cross-encoders, LLMs) produce higher quality rankings but cost more time. The pipeline exists to apply expensive methods only where they matter most.</p>
+      </div>
+    </div>
+    <div class="grid-2">
+      <div class="card card-yellow">
+        <h3>Freshness vs Relevance</h3>
+        <p class="dim">New documents haven't been seen by enough users to have good engagement signals. Over-indexing on freshness hurts relevance; ignoring it means stale results. Balance with time-decay boosting.</p>
+      </div>
+      <div class="card card-red">
+        <h3>Simplicity vs Accuracy</h3>
+        <p class="dim">Each additional pipeline stage adds complexity, more failure modes, and harder debugging. A simpler 3-stage pipeline that's well-tuned often beats a complex 7-stage one that's poorly maintained.</p>
+      </div>
+    </div>
+
+    <h3>Stage-by-Stage Performance</h3>
+
+    <table class="comparison">
+      <thead>
+        <tr><th>Stage</th><th>Recall</th><th>Precision</th><th>Latency</th><th>Cost per Doc</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>BM25 Retrieval</strong></td>
+          <td><span class="badge badge-green">High</span></td>
+          <td><span class="badge badge-red">Low</span></td>
+          <td><span class="badge badge-green">~5ms</span></td>
+          <td><span class="badge badge-green">~0.001ms</span></td>
+        </tr>
+        <tr>
+          <td><strong>Vector Retrieval</strong></td>
+          <td><span class="badge badge-green">High</span></td>
+          <td><span class="badge badge-yellow">Medium</span></td>
+          <td><span class="badge badge-yellow">~20ms</span></td>
+          <td><span class="badge badge-yellow">~0.01ms</span></td>
+        </tr>
+        <tr>
+          <td><strong>Score Fusion</strong></td>
+          <td><span class="badge badge-green">High</span></td>
+          <td><span class="badge badge-yellow">Medium</span></td>
+          <td><span class="badge badge-green">~2ms</span></td>
+          <td><span class="badge badge-green">~0.1ms</span></td>
+        </tr>
+        <tr>
+          <td><strong>Filtering</strong></td>
+          <td><span class="badge badge-yellow">Reduces</span></td>
+          <td><span class="badge badge-green">Increases</span></td>
+          <td><span class="badge badge-green">~1ms</span></td>
+          <td><span class="badge badge-green">~0.01ms</span></td>
+        </tr>
+        <tr>
+          <td><strong>Re-Ranking</strong></td>
+          <td><span class="badge badge-yellow">Same</span></td>
+          <td><span class="badge badge-green">High</span></td>
+          <td><span class="badge badge-red">~200ms</span></td>
+          <td><span class="badge badge-red">~10ms</span></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="insight">
+      <div class="insight-title">The 80/20 Rule</div>
+      <p>Re-ranking typically uses 80% of the latency budget but processes only 1% of the documents. If your total latency budget is 300ms, plan to spend ~200ms on re-ranking and divide the remaining 100ms among all other stages.</p>
+    </div>
+
+    <h3>Metrics to Track Per Stage</h3>
+    <table>
+      <thead><tr><th>Metric</th><th>What It Measures</th><th>Target</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Recall@K</strong></td><td>% of relevant docs in top K candidates</td><td>&gt;95% after retrieval</td></tr>
+        <tr><td><strong>NDCG@10</strong></td><td>Ranking quality in final results</td><td>&gt;0.6 after re-ranking</td></tr>
+        <tr><td><strong>P50 / P99 latency</strong></td><td>Time per stage</td><td>Total &lt;300ms P99</td></tr>
+        <tr><td><strong>Empty result rate</strong></td><td>% of queries with 0 results after filtering</td><td>&lt;2%</td></tr>
+        <tr><td><strong>Candidate overlap</strong></td><td>% of docs in both BM25 and vector results</td><td>30-60% (too high = redundant)</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- SECTION 10 -->
+  <section id="s10">
+    <h2><span class="num">10</span> Key Takeaway</h2>
+    <div class="card card-green">
+      <h3>The Funnel Principle</h3>
+      <p class="dim">Modern retrieval is a multi-stage funnel where each stage trades off speed for quality. Start broad and cheap (BM25 over millions), progressively narrow and score more expensively (cross-encoder on a handful), and apply hard constraints at the right stage. The key design decision is where to draw each boundary — too aggressive early filtering kills recall, too much re-ranking blows the latency budget.</p>
+    </div>
+
+    <h3>Pipeline Design Checklist</h3>
+    <table>
+      <thead><tr><th>Decision</th><th>Consideration</th><th>Default Choice</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>How many candidates to retrieve?</strong></td>
+          <td>More = better recall, higher latency</td>
+          <td>100-1000 for BM25, 50-200 for vector</td>
+        </tr>
+        <tr>
+          <td><strong>BM25, vector, or both?</strong></td>
+          <td>Both covers more query types</td>
+          <td>Hybrid with RRF fusion</td>
+        </tr>
+        <tr>
+          <td><strong>Pre-filter or post-filter?</strong></td>
+          <td>Hard constraints pre, soft post</td>
+          <td>Hybrid: security pre, availability post</td>
+        </tr>
+        <tr>
+          <td><strong>How many to re-rank?</strong></td>
+          <td>More = better precision, higher cost</td>
+          <td>10-50 with cross-encoder</td>
+        </tr>
+        <tr>
+          <td><strong>Which re-ranker?</strong></td>
+          <td>Speed vs quality trade-off</td>
+          <td>MiniLM cross-encoder for most; Cohere/Jina API for production</td>
+        </tr>
+        <tr>
+          <td><strong>Final top-K?</strong></td>
+          <td>User attention drops fast</td>
+          <td>5-10 results per page</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>Common Pipeline Configurations</h3>
+    <div class="grid-2">
+      <div class="card card-accent">
+        <h3>E-Commerce Search</h3>
+        <p class="dim"><strong>Pre-filter:</strong> category, availability, region</p>
+        <p class="dim"><strong>Retrieve:</strong> BM25 (product titles) + vector (descriptions)</p>
+        <p class="dim"><strong>Fuse:</strong> Weighted combo (α=0.6 for BM25)</p>
+        <p class="dim"><strong>Re-rank:</strong> Cross-encoder + business rules (margin, sponsored)</p>
+        <p class="dim"><strong>Budget:</strong> 200ms total</p>
+      </div>
+      <div class="card card-green">
+        <h3>RAG / Knowledge Base</h3>
+        <p class="dim"><strong>Pre-filter:</strong> document access permissions</p>
+        <p class="dim"><strong>Retrieve:</strong> Vector primary, BM25 for exact terms</p>
+        <p class="dim"><strong>Fuse:</strong> RRF (score distributions vary widely)</p>
+        <p class="dim"><strong>Re-rank:</strong> Cross-encoder on top 20, then LLM on top 5</p>
+        <p class="dim"><strong>Budget:</strong> 1-2s (LLM generation dominates anyway)</p>
+      </div>
+    </div>
+    <div class="grid-2">
+      <div class="card card-yellow">
+        <h3>Web Search (Google-scale)</h3>
+        <p class="dim"><strong>Pre-filter:</strong> language, SafeSearch, region</p>
+        <p class="dim"><strong>Retrieve:</strong> Inverted index (billions of pages)</p>
+        <p class="dim"><strong>Fuse:</strong> Multi-signal combination (PageRank, freshness, etc.)</p>
+        <p class="dim"><strong>Re-rank:</strong> Deep neural ranker on top 100</p>
+        <p class="dim"><strong>Budget:</strong> 500ms including rendering</p>
+      </div>
+      <div class="card card-red">
+        <h3>Semantic Code Search</h3>
+        <p class="dim"><strong>Pre-filter:</strong> repository, language, file type</p>
+        <p class="dim"><strong>Retrieve:</strong> Vector (code embeddings) + BM25 (identifier names)</p>
+        <p class="dim"><strong>Fuse:</strong> RRF with repo-level boost</p>
+        <p class="dim"><strong>Re-rank:</strong> Code-specialized cross-encoder</p>
+        <p class="dim"><strong>Budget:</strong> 300ms for interactive, unlimited for batch</p>
+      </div>
+    </div>
+
+    <div class="analogy">
+      <div class="icon">🎯</div>
+      <p><strong>Remember:</strong> You can always add more stages to a pipeline, but you can never recover documents that were dropped too early. When in doubt, retrieve more candidates and let re-ranking sort them out.</p>
+    </div>
+  </section>
+
+</div>
+
+<footer>
+  <p>Complete Retrieval Pipeline — Interactive Playground &copy; Rahul Mrinal</p>
+</footer>
+
+<script>
+(function() {
+  // ==========================================
+  // PRESET DOCUMENT CORPUS
+  // ==========================================
+  const DOCS = [
+    { id: 'D01', title: 'Sony WH-1000XM5 Wireless NC Headphones', category: 'electronics', price: 348, inStock: true, tags: ['wireless', 'noise', 'cancelling', 'headphones', 'sony', 'bluetooth', 'audio'] },
+    { id: 'D02', title: 'Bose QuietComfort 45 Headphones', category: 'electronics', price: 279, inStock: true, tags: ['wireless', 'noise', 'cancelling', 'headphones', 'bose', 'bluetooth'] },
+    { id: 'D03', title: 'Apple AirPods Max', category: 'electronics', price: 549, inStock: false, tags: ['wireless', 'noise', 'cancelling', 'headphones', 'apple', 'premium'] },
+    { id: 'D04', title: 'Sennheiser Momentum 4 Wireless', category: 'electronics', price: 299, inStock: true, tags: ['wireless', 'noise', 'cancelling', 'headphones', 'sennheiser'] },
+    { id: 'D05', title: 'JBL Tune 760NC Wireless Headphones', category: 'electronics', price: 99, inStock: true, tags: ['wireless', 'noise', 'cancelling', 'headphones', 'jbl', 'budget'] },
+    { id: 'D06', title: 'Beats Studio Pro Wireless', category: 'electronics', price: 349, inStock: true, tags: ['wireless', 'noise', 'cancelling', 'beats', 'headphones'] },
+    { id: 'D07', title: 'Audio-Technica ATH-M50x Wired', category: 'electronics', price: 149, inStock: true, tags: ['wired', 'headphones', 'studio', 'audio-technica', 'monitoring'] },
+    { id: 'D08', title: 'Sony WF-1000XM5 Wireless Earbuds', category: 'electronics', price: 298, inStock: true, tags: ['wireless', 'noise', 'cancelling', 'earbuds', 'sony'] },
+    { id: 'D09', title: 'Logitech G Pro X Gaming Headset', category: 'gaming', price: 129, inStock: true, tags: ['wired', 'headset', 'gaming', 'logitech', 'microphone'] },
+    { id: 'D10', title: 'Samsung Galaxy Buds2 Pro', category: 'electronics', price: 189, inStock: false, tags: ['wireless', 'noise', 'cancelling', 'earbuds', 'samsung'] },
+    { id: 'D11', title: 'Wireless Bluetooth Speaker JBL Charge 5', category: 'electronics', price: 179, inStock: true, tags: ['wireless', 'bluetooth', 'speaker', 'jbl', 'portable'] },
+    { id: 'D12', title: 'Noise Cancelling Earplugs for Sleep', category: 'health', price: 29, inStock: true, tags: ['noise', 'cancelling', 'earplugs', 'sleep'] },
+    { id: 'D13', title: 'Soundcore Life Q35 Wireless NC', category: 'electronics', price: 79, inStock: true, tags: ['wireless', 'noise', 'cancelling', 'headphones', 'soundcore', 'budget'] },
+    { id: 'D14', title: 'Beyerdynamic DT 990 Pro Open-Back', category: 'electronics', price: 159, inStock: true, tags: ['wired', 'headphones', 'open-back', 'beyerdynamic', 'studio'] },
+    { id: 'D15', title: 'Marshall Major IV Wireless', category: 'electronics', price: 149, inStock: true, tags: ['wireless', 'headphones', 'marshall', 'retro'] },
+    { id: 'D16', title: 'Wireless Mouse Logitech MX Master 3S', category: 'peripherals', price: 99, inStock: true, tags: ['wireless', 'mouse', 'logitech', 'ergonomic'] },
+    { id: 'D17', title: 'Bose 700 Wireless NC Headphones', category: 'electronics', price: 379, inStock: false, tags: ['wireless', 'noise', 'cancelling', 'headphones', 'bose', 'premium'] },
+    { id: 'D18', title: 'Skullcandy Crusher ANC 2 Wireless', category: 'electronics', price: 159, inStock: true, tags: ['wireless', 'noise', 'cancelling', 'headphones', 'skullcandy', 'bass'] },
+    { id: 'D19', title: 'Cable Management Noise Reducer Kit', category: 'accessories', price: 19, inStock: true, tags: ['cable', 'noise', 'reducer', 'management'] },
+    { id: 'D20', title: 'AKG K371 Closed-Back Studio Headphones', category: 'electronics', price: 129, inStock: true, tags: ['wired', 'headphones', 'studio', 'akg', 'closed-back'] },
+  ];
+
+  function tokenize(query) {
+    return query.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(t => t.length > 0);
+  }
+
+  function stem(word) {
+    const stems = { headphones: 'headphon', wireless: 'wireless', noise: 'nois', cancelling: 'cancel', running: 'run', earbuds: 'earbud' };
+    return stems[word] || word.replace(/ing$/, '').replace(/s$/, '').replace(/ed$/, '');
+  }
+
+  function bm25Score(queryTokens, doc) {
+    let score = 0;
+    const avgTagLen = 6;
+    const k1 = 1.2, b = 0.75;
+    queryTokens.forEach(qt => {
+      const tf = doc.tags.filter(t => t.includes(qt) || stem(t).includes(stem(qt))).length;
+      if (tf > 0) {
+        const idf = Math.log(1 + (DOCS.length - tf + 0.5) / (tf + 0.5));
+        const num = tf * (k1 + 1);
+        const den = tf + k1 * (1 - b + b * (doc.tags.length / avgTagLen));
+        score += idf * (num / den);
+      }
+    });
+    return score;
+  }
+
+  function vectorScore(queryTokens, doc) {
+    let overlap = 0;
+    queryTokens.forEach(qt => {
+      doc.tags.forEach(t => {
+        if (t === qt) overlap += 1.0;
+        else if (t.includes(qt) || qt.includes(t)) overlap += 0.5;
+        else if (stem(t) === stem(qt)) overlap += 0.7;
+      });
+    });
+    const titleLower = doc.title.toLowerCase();
+    queryTokens.forEach(qt => {
+      if (titleLower.includes(qt)) overlap += 0.8;
+    });
+    return Math.min(overlap / (queryTokens.length * 1.5), 1.0);
+  }
+
+  function rrfScore(bm25Rank, vecRank) {
+    const k = 60;
+    return 1 / (k + bm25Rank) + 1 / (k + vecRank);
+  }
+
+  function runSimulator() {
+    const query = document.getElementById('sim-query').value.trim();
+    if (!query) return;
+    const container = document.getElementById('sim-stages');
+    container.innerHTML = '';
+    const tokens = tokenize(query);
+    const stemmed = tokens.map(stem);
+
+    // Stage 1: Preprocessing
+    addStage(container, 'Stage 1: Preprocessing', `"${query}" → tokens: [${tokens.join(', ')}] → stemmed: [${stemmed.join(', ')}]`, null, null, 'accent');
+
+    // Stage 2: BM25 candidates
+    const bm25Scored = DOCS.map(d => ({ ...d, bm25: bm25Score(tokens, d) })).filter(d => d.bm25 > 0).sort((a, b) => b.bm25 - a.bm25);
+    const bm25Top = bm25Scored.slice(0, 20);
+    addStage(container, 'Stage 2a: BM25 Candidates', `Scanned ${DOCS.length} docs → ${bm25Scored.length} have nonzero BM25 → top 20 kept`, DOCS.length, bm25Top.length, 'accent', bm25Top);
+
+    // Stage 3: Vector candidates
+    const vecScored = DOCS.map(d => ({ ...d, vec: vectorScore(tokens, d) })).filter(d => d.vec > 0.1).sort((a, b) => b.vec - a.vec);
+    const vecTop = vecScored.slice(0, 20);
+    addStage(container, 'Stage 2b: Vector Candidates', `Encoded query to embedding → ANN search → ${vecTop.length} candidates`, DOCS.length, vecTop.length, 'green', vecTop);
+
+    // Stage 4: Fusion (RRF)
+    const allIds = new Set([...bm25Top.map(d => d.id), ...vecTop.map(d => d.id)]);
+    const fused = [];
+    allIds.forEach(id => {
+      const bIdx = bm25Top.findIndex(d => d.id === id);
+      const vIdx = vecTop.findIndex(d => d.id === id);
+      const bRank = bIdx >= 0 ? bIdx + 1 : 100;
+      const vRank = vIdx >= 0 ? vIdx + 1 : 100;
+      const doc = DOCS.find(d => d.id === id);
+      fused.push({ ...doc, rrf: rrfScore(bRank, vRank), bRank, vRank });
+    });
+    fused.sort((a, b) => b.rrf - a.rrf);
+    const fusedTop = fused.slice(0, 15);
+    addStage(container, 'Stage 3: Score Fusion (RRF)', `Merged ${allIds.size} unique docs → RRF ranked → top 15`, allIds.size, fusedTop.length, 'yellow', fusedTop);
+
+    // Stage 5: Filtering
+    const filtered = fusedTop.filter(d => d.category === 'electronics' && d.inStock);
+    const removedByFilter = fusedTop.filter(d => !(d.category === 'electronics' && d.inStock));
+    addStage(container, 'Stage 4: Filtering', `Applied: category=electronics AND in_stock=true → ${fusedTop.length - filtered.length} removed`, fusedTop.length, filtered.length, 'red', filtered, removedByFilter);
+
+    // Stage 6: Re-ranking
+    const reranked = filtered.map(d => {
+      let rerankScore = d.rrf * 100;
+      const titleLower = d.title.toLowerCase();
+      tokens.forEach(t => { if (titleLower.includes(t)) rerankScore += 15; });
+      if (d.tags.includes('headphones')) rerankScore += 10;
+      return { ...d, finalScore: Math.round(rerankScore * 100) / 100 };
+    }).sort((a, b) => b.finalScore - a.finalScore).slice(0, 5);
+    addStage(container, 'Stage 5: Re-Ranking (Cross-Encoder)', `Cross-encoder scored ${filtered.length} docs → top 5 returned`, filtered.length, reranked.length, 'accent2', reranked, null, true);
+  }
+
+  function addStage(container, title, description, inCount, outCount, color, docs, removed, isFinal) {
+    if (container.children.length > 0) {
+      const conn = document.createElement('div');
+      conn.className = 'stage-connector';
+      conn.textContent = '↓';
+      container.appendChild(conn);
+    }
+    const card = document.createElement('div');
+    card.className = 'stage-card';
+    card.style.borderLeftColor = `var(--${color === 'accent2' ? 'accent2' : color})`;
+
+    let header = `<div class="stage-header"><div class="stage-title">${title}</div>`;
+    if (inCount !== null && outCount !== null) {
+      header += `<div><span class="stage-count in">${inCount} in</span> → <span class="stage-count out">${outCount} out</span></div>`;
+    }
+    header += '</div>';
+
+    let body = `<p class="dim" style="font-size:0.88rem;margin:0">${description}</p>`;
+
+    if (docs && docs.length > 0) {
+      body += '<div class="stage-docs">';
+      docs.forEach((d, i) => {
+        const cls = isFinal ? 'kept' : 'entering';
+        const label = isFinal ? `#${i+1} ${d.id}` : d.id;
+        const tip = d.title;
+        body += `<div class="stage-doc ${cls}" title="${tip}">${label}</div>`;
+      });
+      if (removed && removed.length > 0) {
+        removed.forEach(d => {
+          body += `<div class="stage-doc leaving" title="${d.title} (filtered out)">${d.id}</div>`;
+        });
+      }
+      body += '</div>';
+    }
+
+    card.innerHTML = header + body;
+    container.appendChild(card);
+  }
+
+  document.getElementById('sim-run').addEventListener('click', runSimulator);
+  runSimulator();
+
+  // ==========================================
+  // LATENCY BUDGET CHART
+  // ==========================================
+  const latCand = document.getElementById('lat-cand');
+  const latRerank = document.getElementById('lat-rerank');
+  const latCandVal = document.getElementById('lat-cand-val');
+  const latRerankVal = document.getElementById('lat-rerank-val');
+
+  function getLatencies(candidateCount, rerankCount) {
+    return {
+      'Preprocessing': 2,
+      'BM25 Retrieval': Math.round(0.005 * candidateCount + 3),
+      'Vector ANN': Math.round(0.02 * candidateCount + 8),
+      'Score Fusion': Math.round(0.001 * candidateCount + 1),
+      'Filtering': Math.round(0.0005 * candidateCount + 0.5),
+      'Re-Ranking': Math.round(rerankCount * 10 + 5),
+    };
+  }
+
+  const stageColors = ['#6c63ff', '#00c9a7', '#54a0ff', '#ffd93d', '#ff9f43', '#ff6b6b'];
+
+  const latCtx = document.getElementById('latency-chart').getContext('2d');
+  const latChart = new Chart(latCtx, {
+    type: 'bar',
+    data: {
+      labels: [],
+      datasets: [{
+        label: 'Latency (ms)',
+        data: [],
+        backgroundColor: stageColors,
+        borderColor: stageColors,
+        borderWidth: 1,
+        borderRadius: 4,
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: ctx => `${ctx.parsed.x} ms`
+          }
+        }
+      },
+      scales: {
+        x: {
+          title: { display: true, text: 'Milliseconds', color: '#9398ab' },
+          ticks: { color: '#9398ab' },
+          grid: { color: 'rgba(42,45,58,0.4)' },
+        },
+        y: {
+          ticks: { color: '#e8eaf0', font: { size: 12 } },
+          grid: { display: false },
+        }
+      }
+    }
+  });
+
+  function updateLatencyChart() {
+    const cand = parseInt(latCand.value);
+    const rerank = parseInt(latRerank.value);
+    latCandVal.textContent = cand.toLocaleString();
+    latRerankVal.textContent = rerank;
+
+    const latencies = getLatencies(cand, rerank);
+    const labels = Object.keys(latencies);
+    const data = Object.values(latencies);
+    const total = data.reduce((a, b) => a + b, 0);
+
+    latChart.data.labels = labels;
+    latChart.data.datasets[0].data = data;
+    latChart.update();
+
+    const metricsEl = document.getElementById('latency-metrics');
+    metricsEl.innerHTML = `
+      <div class="latency-metric"><div class="lm-label">Total Latency</div><div class="lm-value">${total}ms</div></div>
+      <div class="latency-metric"><div class="lm-label">Re-rank Share</div><div class="lm-value">${Math.round(latencies['Re-Ranking'] / total * 100)}%</div></div>
+      <div class="latency-metric"><div class="lm-label">Retrieval Share</div><div class="lm-value">${Math.round((latencies['BM25 Retrieval'] + latencies['Vector ANN']) / total * 100)}%</div></div>
+      <div class="latency-metric"><div class="lm-label">SLA OK? (&lt;500ms)</div><div class="lm-value" style="color:${total < 500 ? 'var(--accent2)' : 'var(--accent3)'}">${total < 500 ? 'YES' : 'NO'}</div></div>
+    `;
+  }
+
+  latCand.addEventListener('input', updateLatencyChart);
+  latRerank.addEventListener('input', updateLatencyChart);
+  updateLatencyChart();
+
+  // ==========================================
+  // TOC SCROLL HIGHLIGHTING
+  // ==========================================
+  const sections = document.querySelectorAll('section[id]');
+  const navLinks = document.querySelectorAll('.toc a');
+  window.addEventListener('scroll', () => {
+    let current = '';
+    sections.forEach(s => {
+      if (window.scrollY >= s.offsetTop - 140) current = s.id;
+    });
+    navLinks.forEach(a => {
+      a.classList.toggle('active', a.getAttribute('href') === '#' + current);
+    });
+  });
+})();
+</script>
+</body>
+</html>

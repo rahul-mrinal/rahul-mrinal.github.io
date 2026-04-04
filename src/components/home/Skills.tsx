@@ -13,7 +13,7 @@ export default function Skills() {
           animate={isVisible ? { opacity: 1, y: 0 } : {}}
           transition={{ duration: 0.7 }}
         >
-          <h2 className="text-sm font-semibold uppercase tracking-widest text-[#ff6b6b] mb-3">
+          <h2 className="text-sm font-semibold uppercase tracking-widest text-accent-rose mb-3">
             Skills
           </h2>
           <h3 className="text-3xl sm:text-4xl font-bold text-white mb-12">

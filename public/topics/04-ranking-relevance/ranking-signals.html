@@ -1,0 +1,852 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Ranking Signals: The Complete Catalog — Interactive Playground</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body, {
+    delimiters: [
+      {left: '$$', right: '$$', display: true},
+      {left: '\\[', right: '\\]', display: true},
+      {left: '$', right: '$', display: false},
+      {left: '\\(', right: '\\)', display: false}
+    ],
+    throwOnError: false
+  });"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../playground.css" />
+<style>
+  .signal-icon {
+    width: 48px; height: 48px; border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.5rem; flex-shrink: 0; margin-bottom: 12px;
+  }
+  .signal-list { list-style: none; padding: 0; margin: 12px 0; }
+  .signal-list li {
+    padding: 8px 0; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 10px;
+    font-size: 0.92rem;
+  }
+  .signal-list li:last-child { border-bottom: none; }
+  .signal-dot {
+    width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+  }
+  .preset-tabs { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; }
+  .preset-tab {
+    background: var(--surface2); border: 1px solid var(--border);
+    padding: 8px 20px; border-radius: 20px; font-size: 0.85rem;
+    font-weight: 600; cursor: pointer; transition: all 0.2s; color: var(--text-dim);
+    font-family: 'Inter', sans-serif;
+  }
+  .preset-tab:hover { border-color: var(--accent); color: var(--accent); }
+  .preset-tab.active { color: var(--accent); border-color: var(--accent); background: rgba(108,99,255,0.1); }
+  .scorecard-row {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 0; border-bottom: 1px solid var(--border);
+  }
+  .scorecard-row:last-child { border-bottom: none; }
+  .scorecard-label { flex: 1; font-weight: 600; font-size: 0.92rem; }
+  .scorecard-weight {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.85rem; color: var(--accent); min-width: 40px; text-align: right;
+  }
+  .scorecard-bar {
+    width: 120px; height: 6px; background: var(--surface2);
+    border-radius: 3px; overflow: hidden; flex-shrink: 0;
+  }
+  .scorecard-fill { height: 100%; border-radius: 3px; transition: width 0.4s ease; }
+  .radar-wrap { max-width: 480px; margin: 0 auto; }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <a href="/" class="topbar-brand">
+    <div class="topbar-logo">RM</div>
+    <span class="topbar-label">Rahul Mrinal</span>
+  </a>
+  <a href="/blog" class="topbar-back">← Back to Blog</a>
+</div>
+
+<div class="hero">
+  <h1>Ranking Signals</h1>
+  <p class="subtitle">Six categories of signals that determine search relevance</p>
+  <div class="badges">
+    <span class="badge badge-hnsw">Keyword</span>
+    <span class="badge badge-ivf">Semantic</span>
+    <span class="badge badge-pq">Behavioral</span>
+  </div>
+</div>
+
+<nav class="toc">
+  <div class="toc-inner">
+    <a href="#s1">What is a Signal?</a>
+    <a href="#s2">Keyword</a>
+    <a href="#s3">Semantic</a>
+    <a href="#s4">Popularity</a>
+    <a href="#s5">Freshness</a>
+    <a href="#s6">Quality</a>
+    <a href="#s7">Personal</a>
+    <a href="#s8">Signal Mixer</a>
+    <a href="#s9">Scorecard</a>
+    <a href="#s10">Takeaway</a>
+  </div>
+</nav>
+
+<div class="container">
+
+  <!-- ===== SECTION 1 ===== -->
+  <section id="s1">
+    <h2><span class="num">01</span> What is a Signal?</h2>
+    <p class="lead">A ranking signal is any feature or measurement that contributes to determining how relevant a document is to a query. Modern search systems combine dozens of signals to produce a final ranking.</p>
+
+    <div class="analogy">
+      <div class="icon">📡</div>
+      <p><strong>Analogy:</strong> Think of ranking like a hiring committee. Each committee member (signal) evaluates the candidate (document) from a different angle — resume keywords, cultural fit, experience, references. The final hiring decision combines all perspectives with different weights.</p>
+    </div>
+
+    <div class="formula-box">
+      <p>$$\text{score}(d, q) = \sum_{i=1}^{N} w_i \cdot \text{signal}_i(d, q)$$</p>
+      <div class="label">Each signal contributes its weight × value to the final score</div>
+    </div>
+
+    <h3>The Six Signal Categories</h3>
+    <div class="grid-3">
+      <div class="card card-accent">
+        <div class="signal-icon" style="background:rgba(108,99,255,0.15)">🔤</div>
+        <h3 style="color:var(--accent);margin:0 0 4px">Keyword</h3>
+        <p class="dim">BM25, exact match, phrase match</p>
+      </div>
+      <div class="card card-green">
+        <div class="signal-icon" style="background:rgba(0,201,167,0.15)">🧠</div>
+        <h3 style="color:var(--accent2);margin:0 0 4px">Semantic</h3>
+        <p class="dim">Vector similarity, cross-encoder</p>
+      </div>
+      <div class="card card-yellow">
+        <div class="signal-icon" style="background:rgba(255,217,61,0.15)">📊</div>
+        <h3 style="color:var(--accent4);margin:0 0 4px">Popularity</h3>
+        <p class="dim">Clicks, purchases, views</p>
+      </div>
+      <div class="card card-red">
+        <div class="signal-icon" style="background:rgba(255,107,107,0.15)">⏰</div>
+        <h3 style="color:var(--accent3);margin:0 0 4px">Freshness</h3>
+        <p class="dim">Recency, trending velocity</p>
+      </div>
+      <div class="card" style="border-left:3px solid var(--blue)">
+        <div class="signal-icon" style="background:rgba(84,160,255,0.15)">⭐</div>
+        <h3 style="color:var(--blue);margin:0 0 4px">Quality</h3>
+        <p class="dim">Ratings, spam score, length</p>
+      </div>
+      <div class="card" style="border-left:3px solid var(--pink)">
+        <div class="signal-icon" style="background:rgba(243,104,224,0.15)">👤</div>
+        <h3 style="color:var(--pink);margin:0 0 4px">Personal</h3>
+        <p class="dim">User history, collaborative filtering</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== SECTION 2 ===== -->
+  <section id="s2">
+    <h2><span class="num">02</span> Keyword Signals</h2>
+    <p class="lead">The foundation of search — does the document contain the words the user typed?</p>
+
+    <div class="grid-2">
+      <div class="card card-accent">
+        <h3 style="color:var(--accent)">BM25</h3>
+        <p>The gold standard for keyword matching. Considers term frequency, document length normalization, and inverse document frequency.</p>
+        <div class="formula-box compact" style="margin-top:12px">
+          <p>$$\text{BM25} = \text{IDF} \times \frac{tf \cdot (k_1 + 1)}{tf + k_1 \cdot (1 - b + b \cdot \frac{|D|}{avgdl})}$$</p>
+        </div>
+      </div>
+      <div class="card card-green">
+        <h3 style="color:var(--accent2)">Exact Match</h3>
+        <p>Binary signal — does the document contain the <em>exact</em> query string? Critical for product search (SKU, model numbers) and navigational queries.</p>
+        <div class="result-box" style="margin-top:12px">
+          <div style="font-size:0.85rem;color:var(--text-dim)">
+            Query: "iPhone 15 Pro Max"<br>
+            Exact: <span style="color:var(--accent2)">1</span> if title = "iPhone 15 Pro Max"<br>
+            Partial: <span style="color:var(--accent4)">0</span> if title = "iPhone 15 Pro"
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <h3>Phrase Match</h3>
+    <p>A middle ground between exact match and bag-of-words BM25. Rewards documents where query terms appear close together and in order.</p>
+    <div class="card card-yellow">
+      <p><strong>Example:</strong> Query "machine learning" should rank a document with "...advances in <mark>machine learning</mark> have..." above one with "...the machine was learning to..."</p>
+      <p class="dim" style="margin-top:8px">Implemented via phrase queries in Elasticsearch/Lucene or proximity scoring.</p>
+    </div>
+
+    <h3>Keyword Signal Comparison</h3>
+    <table class="comparison">
+      <thead>
+        <tr>
+          <th>Signal</th>
+          <th>Precision</th>
+          <th>Recall</th>
+          <th>Latency</th>
+          <th>When to Use</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>BM25</strong></td>
+          <td>Medium</td>
+          <td>High</td>
+          <td>~1ms</td>
+          <td>Default first-stage retrieval</td>
+        </tr>
+        <tr>
+          <td><strong>Exact Match</strong></td>
+          <td>Very High</td>
+          <td>Very Low</td>
+          <td>&lt;1ms</td>
+          <td>SKU, model number, ID lookups</td>
+        </tr>
+        <tr>
+          <td><strong>Phrase Match</strong></td>
+          <td>High</td>
+          <td>Medium</td>
+          <td>~2ms</td>
+          <td>Multi-word queries, named entities</td>
+        </tr>
+        <tr>
+          <td><strong>Fuzzy Match</strong></td>
+          <td>Low</td>
+          <td>Very High</td>
+          <td>~5ms</td>
+          <td>Handling typos and misspellings</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="insight">
+      <div class="insight-title">Layered Keyword Strategy</div>
+      <p>Production systems often layer keyword signals: first try exact match (instant, highest precision), then phrase match, then BM25 as fallback. Boost exact matches 3× over phrase matches and 5× over bag-of-words BM25 hits.</p>
+    </div>
+  </section>
+
+  <!-- ===== SECTION 3 ===== -->
+  <section id="s3">
+    <h2><span class="num">03</span> Semantic Signals</h2>
+    <p class="lead">Understand meaning, not just words. Semantic signals capture conceptual similarity even when the exact terms don't match.</p>
+
+    <div class="grid-2">
+      <div class="card card-green">
+        <h3 style="color:var(--accent2)">Bi-Encoder (Vector Search)</h3>
+        <p>Encode query and document independently into dense vectors. Score = cosine similarity.</p>
+        <ul class="signal-list">
+          <li><span class="signal-dot" style="background:var(--accent2)"></span><strong>Speed:</strong> Fast — pre-computed doc embeddings, only encode query at runtime</li>
+          <li><span class="signal-dot" style="background:var(--accent2)"></span><strong>Quality:</strong> Good — captures semantic similarity broadly</li>
+          <li><span class="signal-dot" style="background:var(--accent2)"></span><strong>Best for:</strong> First-stage retrieval (top-100 candidates)</li>
+        </ul>
+      </div>
+      <div class="card card-accent">
+        <h3 style="color:var(--accent)">Cross-Encoder (Reranker)</h3>
+        <p>Feed query + document together into a transformer. Produces a single relevance score.</p>
+        <ul class="signal-list">
+          <li><span class="signal-dot" style="background:var(--accent)"></span><strong>Speed:</strong> Slow — must run for every query-doc pair</li>
+          <li><span class="signal-dot" style="background:var(--accent)"></span><strong>Quality:</strong> Excellent — captures nuanced interactions</li>
+          <li><span class="signal-dot" style="background:var(--accent)"></span><strong>Best for:</strong> Reranking top-20 candidates from first stage</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="arch-diagram">
+      <div class="arch-label-row">Two-Stage Retrieval</div>
+      <div class="arch-row">
+        <div class="arch-box accent">Query</div>
+        <div class="arch-arrow">→</div>
+        <div class="arch-box green">Bi-Encoder<div class="arch-label">Top 100</div></div>
+        <div class="arch-arrow">→</div>
+        <div class="arch-box yellow">Cross-Encoder<div class="arch-label">Re-rank top 20</div></div>
+        <div class="arch-arrow">→</div>
+        <div class="arch-box red">Final Top 10</div>
+      </div>
+    </div>
+
+    <h3>Popular Embedding Models</h3>
+    <table class="comparison">
+      <thead>
+        <tr>
+          <th>Model</th>
+          <th>Dimensions</th>
+          <th>Type</th>
+          <th>MTEB Score</th>
+          <th>Speed</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>all-MiniLM-L6-v2</strong></td>
+          <td>384</td>
+          <td>Bi-Encoder</td>
+          <td>~56</td>
+          <td>Very Fast</td>
+        </tr>
+        <tr>
+          <td><strong>text-embedding-3-large</strong></td>
+          <td>3072</td>
+          <td>Bi-Encoder</td>
+          <td>~65</td>
+          <td>API-based</td>
+        </tr>
+        <tr>
+          <td><strong>e5-large-v2</strong></td>
+          <td>1024</td>
+          <td>Bi-Encoder</td>
+          <td>~62</td>
+          <td>Medium</td>
+        </tr>
+        <tr>
+          <td><strong>cross-encoder/ms-marco</strong></td>
+          <td>N/A</td>
+          <td>Cross-Encoder</td>
+          <td>~70</td>
+          <td>Slow (reranker)</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="pro-tip">
+      <div class="tip-header">Choosing the Right Model</div>
+      <p>For most use cases, start with a fast bi-encoder (MiniLM) for retrieval and add a cross-encoder reranker for the final top-20. The two-stage approach gives you both speed and quality — the bi-encoder casts a wide net, the cross-encoder picks the best fish.</p>
+    </div>
+  </section>
+
+  <!-- ===== SECTION 4 ===== -->
+  <section id="s4">
+    <h2><span class="num">04</span> Popularity Signals</h2>
+    <p class="lead">What other users found useful is likely useful for you too. Popularity signals encode collective wisdom.</p>
+
+    <div class="grid-2">
+      <div class="card card-yellow">
+        <h3 style="color:var(--accent4)">Click-Through Rate (CTR)</h3>
+        <p>% of impressions that result in clicks. Position-normalized CTR accounts for the fact that position 1 always gets more clicks.</p>
+        <div class="formula-box compact" style="margin-top:8px">
+          <p>$$\text{nCTR}(d) = \frac{\text{clicks}(d)}{\text{impressions}(d) \times \text{pos\_bias}(\text{rank}(d))}$$</p>
+        </div>
+      </div>
+      <div class="card card-green">
+        <h3 style="color:var(--accent2)">Purchase / Conversion Rate</h3>
+        <p>For e-commerce: how often a product is purchased after being viewed. Stronger signal than clicks because it indicates true satisfaction.</p>
+      </div>
+    </div>
+
+    <h3>Dwell Time</h3>
+    <p>How long a user stays on the result page. Short dwell (&lt;10s) suggests irrelevant result (pogo-sticking). Long dwell (&gt;30s) suggests satisfied user.</p>
+
+    <div class="pro-tip">
+      <div class="tip-header">Cold Start Problem</div>
+      <p>New documents have zero clicks. Use a smoothed estimator like (clicks + α) / (impressions + β) where α and β are small constants (Bayesian smoothing) to avoid biasing against new content.</p>
+    </div>
+
+    <h3>Popularity Signal Decay</h3>
+    <p>Raw click counts are biased toward old documents (more time to accumulate clicks). Use time-windowed popularity instead:</p>
+    <div class="grid-2">
+      <div class="card card-yellow">
+        <h3 style="color:var(--accent4)">Rolling Window</h3>
+        <p>Count clicks from the last N days only. Common windows: 7 days (volatile), 30 days (stable), 90 days (conservative).</p>
+      </div>
+      <div class="card card-accent">
+        <h3 style="color:var(--accent)">Exponential Decay</h3>
+        <p>Recent clicks count more than old ones:<br>$\text{score} = \sum_i e^{-\lambda \cdot t_i}$ where $t_i$ is days since click $i$.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== SECTION 5 ===== -->
+  <section id="s5">
+    <h2><span class="num">05</span> Freshness Signals</h2>
+    <p class="lead">For news, social media, and time-sensitive search, newer content is more relevant — even if older content has better keyword matches.</p>
+
+    <div class="grid-2">
+      <div class="card card-red">
+        <h3 style="color:var(--accent3)">Recency</h3>
+        <p>How recently the document was published or updated. Apply a decay function (linear, exponential, or Gaussian) to reduce scores over time.</p>
+        <div class="result-box" style="margin-top:8px">
+          <div style="font-size:0.85rem;color:var(--text-dim)">
+            Today: <span style="color:var(--accent2)">1.0</span><br>
+            1 week ago: <span style="color:var(--accent4)">0.85</span><br>
+            1 month ago: <span style="color:var(--accent3)">0.45</span><br>
+            1 year ago: <span style="color:var(--text-muted)">0.05</span>
+          </div>
+        </div>
+      </div>
+      <div class="card card-accent">
+        <h3 style="color:var(--accent)">Trending Velocity</h3>
+        <p>Rate of engagement growth. A document published yesterday with 1,000 views is trending more than one from last week with 5,000 views.</p>
+        <div class="formula-box compact" style="margin-top:8px">
+          <p>$$\text{velocity} = \frac{\text{views}_{\text{last 24h}}}{\text{views}_{\text{last 7d}} / 7}$$</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="insight">
+      <div class="insight-title">When Freshness Hurts</div>
+      <p>Not all queries benefit from freshness. "Python tutorial" should return the best tutorial, not the newest one. Use query classification to detect time-sensitive queries ("election results 2024") vs. evergreen queries ("how to sort a list in Python").</p>
+    </div>
+  </section>
+
+  <!-- ===== SECTION 6 ===== -->
+  <section id="s6">
+    <h2><span class="num">06</span> Quality Signals</h2>
+    <p class="lead">Not all content is created equal. Quality signals separate authoritative sources from thin content and spam.</p>
+
+    <div class="grid-2">
+      <div class="card" style="border-left:3px solid var(--blue)">
+        <h3 style="color:var(--blue)">User Ratings</h3>
+        <p>Average star rating (1-5). Use Bayesian average to avoid "1 review, 5 stars" dominating:</p>
+        <div class="formula-box compact" style="margin-top:8px">
+          <p>$$\bar{R} = \frac{v \cdot R + m \cdot C}{v + m}$$</p>
+          <div class="label">v = votes, R = avg rating, m = minimum votes, C = global avg</div>
+        </div>
+      </div>
+      <div class="card card-red">
+        <h3 style="color:var(--accent3)">Spam Score</h3>
+        <p>Probability that content is spam, keyword-stuffed, or AI-generated without review. Use as a negative signal to demote low-quality results.</p>
+        <ul class="signal-list">
+          <li><span class="signal-dot" style="background:var(--accent3)"></span>Keyword density > 3% → suspicious</li>
+          <li><span class="signal-dot" style="background:var(--accent3)"></span>No outbound links → potential thin content</li>
+          <li><span class="signal-dot" style="background:var(--accent3)"></span>Duplicate content across pages → SEO spam</li>
+        </ul>
+      </div>
+    </div>
+
+    <h3>Content Depth</h3>
+    <p>Longer, more detailed content tends to be more authoritative. But length alone isn't quality — combine with readability score, number of images/code blocks, and structured headings.</p>
+
+    <div class="analogy">
+      <div class="icon">🏆</div>
+      <p><strong>Analogy:</strong> Quality signals are like a restaurant health inspection. A restaurant might have great food (relevance), be popular (click signals), and be new (freshness) — but if the health inspector gives it a low score, you'd think twice. Quality signals protect users from spam, thin content, and unreliable sources.</p>
+    </div>
+
+    <table class="comparison">
+      <thead>
+        <tr><th>Signal</th><th>Range</th><th>Direction</th><th>Notes</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Star Rating</td><td>1 - 5</td><td>Higher = better</td><td>Use Bayesian avg</td></tr>
+        <tr><td>Word Count</td><td>0 - ∞</td><td>More ≠ better</td><td>Log-scale, cap at 5k</td></tr>
+        <tr><td>Spam Score</td><td>0 - 1</td><td>Lower = better</td><td>Threshold at 0.7</td></tr>
+        <tr><td>Readability</td><td>0 - 100</td><td>Higher = easier</td><td>Flesch-Kincaid</td></tr>
+        <tr><td>Authority</td><td>0 - 100</td><td>Higher = better</td><td>Domain authority / PageRank</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ===== SECTION 7 ===== -->
+  <section id="s7">
+    <h2><span class="num">07</span> Personal Signals</h2>
+    <p class="lead">The same query can have different ideal results for different users. Personalization signals tailor rankings to individual preferences.</p>
+
+    <div class="grid-2">
+      <div class="card" style="border-left:3px solid var(--pink)">
+        <h3 style="color:var(--pink)">User History</h3>
+        <p>What has this user clicked, purchased, or bookmarked before? Weight results from categories and brands the user has shown interest in.</p>
+        <pre><code><span class="cm">// Boost score for preferred categories</span>
+<span class="kw">for</span> cat <span class="kw">in</span> user.recent_categories:
+    <span class="kw">if</span> doc.category == cat:
+        score *= <span class="num">1.3</span></code></pre>
+      </div>
+      <div class="card card-accent">
+        <h3 style="color:var(--accent)">Collaborative Filtering</h3>
+        <p>"Users similar to you also liked..." Find users with similar click/purchase patterns and boost results they engaged with.</p>
+        <pre><code><span class="cm">// Item-based CF</span>
+sim_items = <span class="fn">find_similar_items</span>(
+    user.purchase_history
+)
+<span class="kw">for</span> item <span class="kw">in</span> results:
+    <span class="kw">if</span> item <span class="kw">in</span> sim_items:
+        score *= <span class="num">1.2</span></code></pre>
+      </div>
+    </div>
+
+    <div class="pro-tip">
+      <div class="tip-header">Privacy &amp; Filter Bubbles</div>
+      <p>Personalization must be balanced with diversity. Over-personalized results create filter bubbles where users never see new categories. Blend personalized results with a "diversity slot" (e.g., every 5th result is from an unexplored category).</p>
+    </div>
+
+    <h3>Personalization Maturity Levels</h3>
+    <table class="comparison">
+      <thead>
+        <tr>
+          <th>Level</th>
+          <th>Signal Source</th>
+          <th>Complexity</th>
+          <th>Privacy Risk</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>L0: None</strong></td>
+          <td>Same results for everyone</td>
+          <td>Zero</td>
+          <td>None</td>
+        </tr>
+        <tr>
+          <td><strong>L1: Segment</strong></td>
+          <td>User type (premium, free), locale</td>
+          <td>Low</td>
+          <td>Low</td>
+        </tr>
+        <tr>
+          <td><strong>L2: History</strong></td>
+          <td>Click/purchase history, preferences</td>
+          <td>Medium</td>
+          <td>Medium</td>
+        </tr>
+        <tr>
+          <td><strong>L3: Real-Time</strong></td>
+          <td>Session behavior, current context</td>
+          <td>High</td>
+          <td>High</td>
+        </tr>
+        <tr>
+          <td><strong>L4: Collaborative</strong></td>
+          <td>Similar users' behavior patterns</td>
+          <td>Very High</td>
+          <td>High</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>Location &amp; Context</h3>
+    <p>Implicit signals from the user's environment:</p>
+    <div class="grid-3">
+      <div class="card">
+        <h3 style="margin:0 0 6px">Device</h3>
+        <p class="dim">Mobile users prefer shorter content. Desktop users can handle data tables.</p>
+      </div>
+      <div class="card">
+        <h3 style="margin:0 0 6px">Location</h3>
+        <p class="dim">Boost local results for queries with local intent ("restaurants", "plumber").</p>
+      </div>
+      <div class="card">
+        <h3 style="margin:0 0 6px">Time of Day</h3>
+        <p class="dim">Morning searches may be informational, evening searches more transactional.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== SECTION 8: SIGNAL MIXER PLAYGROUND ===== -->
+  <section id="s8">
+    <h2><span class="num">08</span> Signal Mixer</h2>
+    <p class="lead">Adjust the weight of each signal category and watch the radar chart reshape. Use presets to see how different search types prioritize different signals.</p>
+
+    <h3>How to Read the Radar</h3>
+    <p>Each axis represents a signal category (0–10). A larger shape means the system relies on more signal types. A pointy shape indicates specialization. Try the presets to see how different domains create different shapes:</p>
+    <div class="grid-2" style="margin-bottom:20px">
+      <div class="card card-accent">
+        <h3 style="color:var(--accent)">E-Commerce</h3>
+        <p class="dim">High on Keyword + Popularity + Quality. Users search for products with specific terms, and best-sellers should rank first.</p>
+      </div>
+      <div class="card card-red">
+        <h3 style="color:var(--accent3)">News Search</h3>
+        <p class="dim">Dominated by Freshness. Yesterday's breaking news is worthless today. Semantic helps catch related stories.</p>
+      </div>
+    </div>
+
+    <div class="playground">
+      <h4>Signal Mixer Playground</h4>
+
+      <div class="preset-tabs" id="preset-tabs">
+        <button class="preset-tab active" data-preset="balanced">Balanced</button>
+        <button class="preset-tab" data-preset="ecommerce">E-Commerce</button>
+        <button class="preset-tab" data-preset="news">News Search</button>
+        <button class="preset-tab" data-preset="knowledge">Knowledge Base</button>
+        <button class="preset-tab" data-preset="social">Social Feed</button>
+      </div>
+
+      <div class="slider-group" style="grid-template-columns:1fr 1fr 1fr">
+        <div class="slider-item">
+          <label><span>🔤 Keyword</span><span id="sig-kw-val">5</span></label>
+          <input type="range" id="sig-kw" min="0" max="10" step="1" value="5">
+        </div>
+        <div class="slider-item">
+          <label><span>🧠 Semantic</span><span id="sig-sem-val">5</span></label>
+          <input type="range" id="sig-sem" min="0" max="10" step="1" value="5">
+        </div>
+        <div class="slider-item">
+          <label><span>📊 Popularity</span><span id="sig-pop-val">5</span></label>
+          <input type="range" id="sig-pop" min="0" max="10" step="1" value="5">
+        </div>
+        <div class="slider-item">
+          <label><span>⏰ Freshness</span><span id="sig-fresh-val">5</span></label>
+          <input type="range" id="sig-fresh" min="0" max="10" step="1" value="5">
+        </div>
+        <div class="slider-item">
+          <label><span>⭐ Quality</span><span id="sig-qual-val">5</span></label>
+          <input type="range" id="sig-qual" min="0" max="10" step="1" value="5">
+        </div>
+        <div class="slider-item">
+          <label><span>👤 Personal</span><span id="sig-pers-val">5</span></label>
+          <input type="range" id="sig-pers" min="0" max="10" step="1" value="5">
+        </div>
+      </div>
+
+      <div class="radar-wrap">
+        <div class="chart-wrap">
+          <canvas id="radar-chart"></canvas>
+        </div>
+      </div>
+
+      <div id="signal-scorecard" style="margin-top:16px"></div>
+    </div>
+  </section>
+
+  <!-- ===== SECTION 9 ===== -->
+  <section id="s9">
+    <h2><span class="num">09</span> Building a Scorecard</h2>
+    <p class="lead">How to combine signals into a final ranking score in production.</p>
+
+    <h3>Step 1: Normalize Each Signal</h3>
+    <p>Each signal operates on a different scale. Normalize to [0, 1] before combining:</p>
+    <div class="grid-2">
+      <div class="card card-accent">
+        <h3 style="color:var(--accent)">Min-Max Scaling</h3>
+        <p>$\text{norm}(x) = \frac{x - x_{\min}}{x_{\max} - x_{\min}}$</p>
+        <p class="dim">Simple, but sensitive to outliers.</p>
+      </div>
+      <div class="card card-green">
+        <h3 style="color:var(--accent2)">Percentile Ranking</h3>
+        <p>$\text{norm}(x) = \text{percentile}(x, \text{all values})$</p>
+        <p class="dim">Robust to outliers, preserves relative ordering.</p>
+      </div>
+    </div>
+
+    <h3>Step 2: Weight and Sum</h3>
+    <div class="formula-box">
+      <p>$$\text{final}(d) = \sum_{i=1}^{6} w_i \cdot \text{norm}(\text{signal}_i(d))$$</p>
+      <div class="label">Where $\sum w_i = 1$ (weights are normalized to sum to 1)</div>
+    </div>
+
+    <h3>Step 3: Iterate</h3>
+    <div class="pipeline">
+      <div class="pipeline-node accent">Set Weights</div>
+      <div class="pipeline-arrow">→</div>
+      <div class="pipeline-node green">Offline Eval</div>
+      <div class="pipeline-arrow">→</div>
+      <div class="pipeline-node yellow">A/B Test</div>
+      <div class="pipeline-arrow">→</div>
+      <div class="pipeline-node red">Ship or Revert</div>
+    </div>
+
+    <div class="insight">
+      <div class="insight-title">Don't Over-Engineer</div>
+      <p>Start with 2–3 signals (keyword + popularity + freshness). Add more signals only when you can measure their impact. Each additional signal adds complexity and potential for unexpected interactions.</p>
+    </div>
+
+    <h3>Example Scorecard</h3>
+    <p>Here's how a production e-commerce scorecard might look:</p>
+
+    <div class="meta-doc">
+      <span class="meta-bracket">{</span><br>
+      &nbsp;&nbsp;<span class="meta-key">"query"</span>: <span class="meta-str">"running shoes"</span>,<br>
+      &nbsp;&nbsp;<span class="meta-key">"document"</span>: <span class="meta-str">"Nike Air Zoom Pegasus 40"</span>,<br>
+      &nbsp;&nbsp;<span class="meta-key">"signals"</span>: <span class="meta-bracket">{</span><br>
+      &nbsp;&nbsp;&nbsp;&nbsp;<span class="meta-key">"bm25_title"</span>: <span class="meta-num">12.4</span> <span class="cm">→ norm: 0.82</span>,<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;<span class="meta-key">"vector_sim"</span>: <span class="meta-num">0.89</span> <span class="cm">→ norm: 0.89</span>,<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;<span class="meta-key">"click_rate"</span>: <span class="meta-num">0.15</span> <span class="cm">→ norm: 0.75</span>,<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;<span class="meta-key">"freshness"</span>: <span class="meta-num">0.92</span> <span class="cm">→ norm: 0.92</span>,<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;<span class="meta-key">"rating"</span>: <span class="meta-num">4.6</span> <span class="cm">→ norm: 0.92</span>,<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;<span class="meta-key">"user_affinity"</span>: <span class="meta-num">0.7</span> <span class="cm">→ norm: 0.70</span><br>
+      &nbsp;&nbsp;<span class="meta-bracket">}</span>,<br>
+      &nbsp;&nbsp;<span class="meta-key">"weights"</span>: <span class="meta-bracket">[</span><span class="meta-num">0.25, 0.15, 0.20, 0.10, 0.20, 0.10</span><span class="meta-bracket">]</span>,<br>
+      &nbsp;&nbsp;<span class="meta-key">"final_score"</span>: <span class="meta-num">0.833</span><br>
+      <span class="meta-bracket">}</span>
+    </div>
+
+    <div class="formula-box compact">
+      <p>$$0.25 \times 0.82 + 0.15 \times 0.89 + 0.20 \times 0.75 + 0.10 \times 0.92 + 0.20 \times 0.92 + 0.10 \times 0.70 = 0.833$$</p>
+    </div>
+  </section>
+
+  <!-- ===== SECTION 10 ===== -->
+  <section id="s10">
+    <h2><span class="num">10</span> Key Takeaway</h2>
+
+    <div class="insight">
+      <div class="insight-title">The Bottom Line</div>
+      <p>No single signal is sufficient. <strong>Keyword signals</strong> catch what users type, <strong>semantic signals</strong> catch what they mean, <strong>popularity signals</strong> encode collective wisdom, <strong>freshness</strong> handles time-sensitivity, <strong>quality</strong> filters noise, and <strong>personalization</strong> tailors results. The art is in finding the right mix for your use case — and that mix will be different for e-commerce, news, knowledge bases, and social feeds.</p>
+    </div>
+
+    <div class="grid-2">
+      <div class="card card-green">
+        <h3 style="color:var(--accent2)">Start Simple</h3>
+        <ul>
+          <li>BM25 + popularity as your baseline</li>
+          <li>Add vector search for semantic coverage</li>
+          <li>Measure before and after each signal</li>
+        </ul>
+      </div>
+      <div class="card card-accent">
+        <h3 style="color:var(--accent)">Scale Up</h3>
+        <ul>
+          <li>Add freshness for time-sensitive domains</li>
+          <li>Introduce personalization with guardrails</li>
+          <li>Train an LTR model to learn optimal weights</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<footer>Ranking Signals: The Complete Catalog — Interactive Playground &copy; Rahul Mrinal</footer>
+
+<script>
+(function() {
+  // ==========================================
+  // SIGNAL CATEGORIES & PRESETS
+  // ==========================================
+  const SIGNALS = ['Keyword', 'Semantic', 'Popularity', 'Freshness', 'Quality', 'Personal'];
+  const SIGNAL_IDS = ['kw', 'sem', 'pop', 'fresh', 'qual', 'pers'];
+  const SIGNAL_COLORS = ['#6c63ff', '#00c9a7', '#ffd93d', '#ff6b6b', '#54a0ff', '#f368e0'];
+
+  const PRESETS = {
+    balanced:   { kw: 5, sem: 5, pop: 5, fresh: 5, qual: 5, pers: 5 },
+    ecommerce:  { kw: 7, sem: 4, pop: 9, fresh: 2, qual: 8, pers: 7 },
+    news:       { kw: 4, sem: 6, pop: 5, fresh: 10, qual: 6, pers: 3 },
+    knowledge:  { kw: 8, sem: 9, pop: 2, fresh: 1, qual: 9, pers: 2 },
+    social:     { kw: 2, sem: 5, pop: 7, fresh: 8, qual: 3, pers: 10 }
+  };
+
+  const sliders = {};
+  const valSpans = {};
+  SIGNAL_IDS.forEach(id => {
+    sliders[id] = document.getElementById('sig-' + id);
+    valSpans[id] = document.getElementById('sig-' + id + '-val');
+  });
+
+  let radarChart = null;
+
+  function getValues() {
+    return SIGNAL_IDS.map(id => parseInt(sliders[id].value));
+  }
+
+  function setValues(preset) {
+    SIGNAL_IDS.forEach(id => {
+      sliders[id].value = preset[id];
+      valSpans[id].textContent = preset[id];
+    });
+  }
+
+  function renderRadar() {
+    const values = getValues();
+
+    SIGNAL_IDS.forEach((id, i) => {
+      valSpans[id].textContent = values[i];
+    });
+
+    if (radarChart) radarChart.destroy();
+    const ctx = document.getElementById('radar-chart').getContext('2d');
+    radarChart = new Chart(ctx, {
+      type: 'radar',
+      data: {
+        labels: SIGNALS,
+        datasets: [{
+          label: 'Signal Weights',
+          data: values,
+          backgroundColor: 'rgba(108, 99, 255, 0.15)',
+          borderColor: '#6c63ff',
+          borderWidth: 2,
+          pointBackgroundColor: SIGNAL_COLORS,
+          pointBorderColor: SIGNAL_COLORS,
+          pointRadius: 6,
+          pointHoverRadius: 8
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: { display: false }
+        },
+        scales: {
+          r: {
+            min: 0,
+            max: 10,
+            ticks: {
+              stepSize: 2,
+              color: '#6d7290',
+              backdropColor: 'transparent',
+              font: { size: 10, family: 'JetBrains Mono' }
+            },
+            grid: { color: 'rgba(42,45,58,0.6)' },
+            angleLines: { color: 'rgba(42,45,58,0.6)' },
+            pointLabels: {
+              color: '#9398ab',
+              font: { size: 12, family: 'Inter', weight: 600 }
+            }
+          }
+        }
+      }
+    });
+
+    renderScorecard(values);
+  }
+
+  function renderScorecard(values) {
+    const total = values.reduce((a, b) => a + b, 0) || 1;
+    const container = document.getElementById('signal-scorecard');
+    container.innerHTML = '<div class="result-box"><div class="result-label">Weight Distribution</div>' +
+      values.map((v, i) => {
+        const pct = ((v / total) * 100).toFixed(1);
+        return `<div class="scorecard-row">
+          <span class="signal-dot" style="background:${SIGNAL_COLORS[i]};width:10px;height:10px;border-radius:50%;flex-shrink:0"></span>
+          <span class="scorecard-label">${SIGNALS[i]}</span>
+          <span class="scorecard-weight">${pct}%</span>
+          <div class="scorecard-bar">
+            <div class="scorecard-fill" style="width:${v * 10}%;background:${SIGNAL_COLORS[i]}"></div>
+          </div>
+        </div>`;
+      }).join('') + '</div>';
+  }
+
+  // Preset buttons
+  document.getElementById('preset-tabs').addEventListener('click', (e) => {
+    const btn = e.target.closest('.preset-tab');
+    if (!btn) return;
+    document.querySelectorAll('.preset-tab').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const preset = PRESETS[btn.dataset.preset];
+    if (preset) {
+      setValues(preset);
+      renderRadar();
+    }
+  });
+
+  // Slider listeners
+  SIGNAL_IDS.forEach(id => {
+    sliders[id].addEventListener('input', () => {
+      document.querySelectorAll('.preset-tab').forEach(b => b.classList.remove('active'));
+      renderRadar();
+    });
+  });
+
+  renderRadar();
+
+  // ==========================================
+  // TOC SCROLL HIGHLIGHTING
+  // ==========================================
+  const sections = document.querySelectorAll('section[id]');
+  const navLinks = document.querySelectorAll('.toc a');
+  window.addEventListener('scroll', () => {
+    let current = '';
+    sections.forEach(s => {
+      if (window.scrollY >= s.offsetTop - 140) current = s.id;
+    });
+    navLinks.forEach(a => {
+      a.classList.toggle('active', a.getAttribute('href') === '#' + current);
+    });
+  }, { passive: true });
+})();
+</script>
+</body>
+</html>

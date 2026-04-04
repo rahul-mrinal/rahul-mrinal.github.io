@@ -1,0 +1,836 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Index Update Strategies</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js" onload="renderMathInElement(document.body, {
+    delimiters: [
+      {left: '$$', right: '$$', display: true},
+      {left: '\\[', right: '\\]', display: true},
+      {left: '$', right: '$', display: false},
+      {left: '\\(', right: '\\)', display: false}
+    ],
+    throwOnError: false
+  });"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../playground.css" />
+  <style>
+    .strategy-radio-group {
+      display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px;
+    }
+    .strategy-radio {
+      display: none;
+    }
+    .strategy-radio-label {
+      background: var(--surface2); border: 1px solid var(--border);
+      padding: 8px 18px; border-radius: 20px; font-size: 0.85rem;
+      font-weight: 500; cursor: pointer; transition: all 0.2s; color: var(--text-dim);
+    }
+    .strategy-radio:checked + .strategy-radio-label {
+      color: var(--accent); border-color: var(--accent); background: rgba(108,99,255,0.1);
+    }
+    .timeline-container { margin: 24px 0; }
+    .timeline-step {
+      display: flex; align-items: center; gap: 12px; margin: 8px 0;
+      font-size: 0.88rem;
+    }
+    .timeline-step .step-num {
+      width: 28px; height: 28px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.78rem; font-weight: 700; flex-shrink: 0;
+      border: 2px solid var(--border); color: var(--text-muted);
+    }
+    .timeline-step .step-label { flex: 1; color: var(--text-dim); }
+    .timeline-step .step-bar-wrap { flex: 2; height: 24px; background: var(--surface2); border-radius: 4px; overflow: hidden; position: relative; }
+    .timeline-step .step-bar {
+      height: 100%; border-radius: 4px; transition: width 0.6s ease;
+      display: flex; align-items: center; padding-left: 8px;
+      font-size: 0.72rem; font-weight: 600; color: #fff;
+    }
+    .strategy-overview-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+    .strategy-card-mini {
+      background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 16px; text-align: center; transition: all 0.2s; cursor: default;
+    }
+    .strategy-card-mini:hover { border-color: var(--accent); transform: translateY(-2px); }
+    .strategy-card-mini .s-icon { font-size: 1.6rem; margin-bottom: 8px; }
+    .strategy-card-mini .s-name { font-weight: 700; font-size: 0.9rem; margin-bottom: 4px; }
+    .strategy-card-mini .s-desc { font-size: 0.78rem; color: var(--text-dim); }
+    .cdc-flow { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 16px 0; }
+    .cdc-node {
+      background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius-sm);
+      padding: 8px 14px; font-size: 0.82rem; font-weight: 600;
+    }
+    .cdc-arrow { color: var(--text-dim); font-size: 1.2rem; }
+    @media (max-width: 700px) {
+      .strategy-overview-cards { grid-template-columns: 1fr 1fr; }
+    }
+    @media (max-width: 480px) {
+      .strategy-overview-cards { grid-template-columns: 1fr; }
+      .timeline-step { flex-wrap: wrap; }
+      .timeline-step .step-bar-wrap { flex: 1 1 100%; }
+    }
+  </style>
+</head>
+
+<body>
+<div class="topbar">
+  <a href="/" class="topbar-brand">
+    <div class="topbar-logo">RM</div>
+    <span class="topbar-label">Rahul Mrinal</span>
+  </a>
+  <a href="/blog" class="topbar-back">← Back to Blog</a>
+</div>
+
+<div class="hero">
+  <div class="container">
+    <h1>Index Update Strategies</h1>
+    <p class="subtitle">Full reindex, partial update, upsert, and alias swap</p>
+    <div class="badges">
+      <span class="badge badge-hnsw">Reindex</span>
+      <span class="badge badge-ivf">Upsert</span>
+      <span class="badge badge-pq">Alias Swap</span>
+    </div>
+  </div>
+</div>
+
+<nav class="toc">
+  <div class="toc-inner">
+    <a href="#s1">Overview</a>
+    <a href="#s2">Full Reindex</a>
+    <a href="#s3">Partial Update</a>
+    <a href="#s4">Upsert</a>
+    <a href="#s5">Alias Swap</a>
+    <a href="#s6">Comparison</a>
+    <a href="#s7">Delta Detection</a>
+    <a href="#s8">Hybrid</a>
+    <a href="#s9">Decision Matrix</a>
+    <a href="#s10">Takeaway</a>
+  </div>
+</nav>
+
+<div class="container">
+
+  <!-- ===== SECTION 1 ===== -->
+  <section id="s1">
+    <h2><span class="num">01</span> The Four Strategies</h2>
+    <p>When your source data changes, you need to update the search index. There are four fundamental strategies, each with different trade-offs in speed, safety, and complexity.</p>
+
+    <div class="strategy-overview-cards">
+      <div class="strategy-card-mini">
+        <div class="s-icon">🔄</div>
+        <div class="s-name">Full Reindex</div>
+        <div class="s-desc">Rebuild everything from scratch</div>
+      </div>
+      <div class="strategy-card-mini">
+        <div class="s-icon">✏️</div>
+        <div class="s-name">Partial Update</div>
+        <div class="s-desc">Update only changed fields</div>
+      </div>
+      <div class="strategy-card-mini">
+        <div class="s-icon">🔀</div>
+        <div class="s-name">Upsert</div>
+        <div class="s-desc">Insert or update by ID</div>
+      </div>
+      <div class="strategy-card-mini">
+        <div class="s-icon">🎯</div>
+        <div class="s-name">Alias Swap</div>
+        <div class="s-desc">Build new, swap atomically</div>
+      </div>
+    </div>
+
+    <div class="analogy">
+      <div class="icon">📖</div>
+      <p><strong>Book analogy:</strong> Full Reindex = reprint the entire book. Partial Update = use white-out and retype one paragraph. Upsert = replace a specific page. Alias Swap = print a new edition, then swap it onto the shelf while no one's looking.</p>
+    </div>
+  </section>
+
+  <!-- ===== SECTION 2 ===== -->
+  <section id="s2">
+    <h2><span class="num">02</span> Full Reindex</h2>
+    <p>The simplest strategy: delete the old index, create a new one, and re-ingest every document from scratch.</p>
+
+    <div class="grid-2">
+      <div class="card card-green">
+        <h3>Pros</h3>
+        <ul>
+          <li>Simplest to implement</li>
+          <li>Guarantees consistency — no stale data</li>
+          <li>Good for mapping/schema changes</li>
+          <li>No delta tracking needed</li>
+        </ul>
+      </div>
+      <div class="card card-red">
+        <h3>Cons</h3>
+        <ul>
+          <li>Slowest — must process every document</li>
+          <li>Resource-intensive (CPU, memory, I/O)</li>
+          <li>Downtime risk during rebuild</li>
+          <li>Doesn't scale beyond ~10M docs easily</li>
+        </ul>
+      </div>
+    </div>
+
+    <pre><code><span class="cm"># Full reindex — nuclear option</span>
+<span class="kw">def</span> <span class="fn">full_reindex</span>(source, index_name):
+    new_index = <span class="fn">create_index</span>(index_name + <span class="str">"_v2"</span>)
+    <span class="kw">for</span> batch <span class="kw">in</span> <span class="fn">fetch_all</span>(source, batch_size=<span class="op">1000</span>):
+        new_index.<span class="fn">bulk_insert</span>(batch)
+    <span class="fn">swap_alias</span>(index_name, new_index)  <span class="cm"># atomic switch</span>
+    <span class="fn">delete_index</span>(index_name + <span class="str">"_v1"</span>)    <span class="cm"># cleanup</span></code></pre>
+
+    <div class="insight">
+      <div class="insight-title">When to Use</div>
+      <p>Full reindex is the right choice when you're changing the index mapping/schema, have a small dataset (&lt;1M docs), or need to guarantee zero stale data. Combine with alias swap to avoid downtime.</p>
+    </div>
+
+    <h3>Performance Characteristics</h3>
+    <table>
+      <thead><tr><th>Dataset Size</th><th>Estimated Duration</th><th>RAM Needed</th></tr></thead>
+      <tbody>
+        <tr><td>100K docs</td><td>~30 seconds</td><td>~512MB</td></tr>
+        <tr><td>1M docs</td><td>~5 minutes</td><td>~2GB</td></tr>
+        <tr><td>10M docs</td><td>~45 minutes</td><td>~8GB</td></tr>
+        <tr><td>100M docs</td><td>~6-8 hours</td><td>~32GB+</td></tr>
+      </tbody>
+    </table>
+
+    <div class="pro-tip">
+      <div class="tip-header">Speed Up Full Reindex</div>
+      <p>Disable replicas (<code>number_of_replicas: 0</code>), increase refresh interval (<code>refresh_interval: -1</code>), and use bulk API with 1000-2000 doc batches. Restore settings after the reindex completes. This alone can cut indexing time by 40-60%.</p>
+    </div>
+  </section>
+
+  <!-- ===== SECTION 3 ===== -->
+  <section id="s3">
+    <h2><span class="num">03</span> Partial Update</h2>
+    <p>Update only the fields that changed, leaving the rest of the document intact. Fast for field-level changes, but requires knowing exactly what changed.</p>
+
+    <pre><code><span class="cm"># Partial update — change only what's different</span>
+client.<span class="fn">update</span>(
+    index=<span class="str">"products"</span>,
+    id=<span class="str">"prod_123"</span>,
+    body={
+        <span class="str">"doc"</span>: {
+            <span class="str">"price"</span>: <span class="op">29.99</span>,
+            <span class="str">"stock_count"</span>: <span class="op">42</span>,
+            <span class="str">"last_updated"</span>: <span class="str">"2024-03-15T10:30:00Z"</span>
+        }
+    }
+)</code></pre>
+
+    <div class="grid-2">
+      <div class="card card-green">
+        <h3>Advantages</h3>
+        <ul>
+          <li>Very fast — minimal data transferred</li>
+          <li>Low resource usage</li>
+          <li>Great for frequently changing fields (prices, stock)</li>
+        </ul>
+      </div>
+      <div class="card card-red">
+        <h3>Gotchas</h3>
+        <ul>
+          <li>Internally, Elasticsearch re-indexes the entire document anyway</li>
+          <li>Requires <code>_source</code> to be stored</li>
+          <li>Can't change field mappings</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="pro-tip">
+      <div class="tip-header">Pro Tip</div>
+      <p>Partial updates in Elasticsearch use <strong>optimistic concurrency</strong> via version numbers. If two updates hit the same doc, one will retry. Use <code>retry_on_conflict: 3</code> to handle this automatically.</p>
+    </div>
+
+    <h3>Scripted Updates</h3>
+    <p>For computed fields, use server-side scripts to update values atomically without read-modify-write cycles:</p>
+    <pre><code><span class="cm"># Scripted partial update — atomic increment</span>
+client.<span class="fn">update</span>(
+    index=<span class="str">"products"</span>,
+    id=<span class="str">"prod_123"</span>,
+    body={
+        <span class="str">"script"</span>: {
+            <span class="str">"source"</span>: <span class="str">"ctx._source.view_count += params.inc"</span>,
+            <span class="str">"params"</span>: { <span class="str">"inc"</span>: <span class="op">1</span> }
+        }
+    }
+)</code></pre>
+
+    <table>
+      <thead><tr><th>Update Type</th><th>Method</th><th>Use Case</th></tr></thead>
+      <tbody>
+        <tr><td>Field replacement</td><td><code>doc</code> parameter</td><td>Price changes, status updates</td></tr>
+        <tr><td>Computed update</td><td><code>script</code> parameter</td><td>Counters, aggregations, conditional logic</td></tr>
+        <tr><td>Conditional update</td><td>Script with <code>if</code></td><td>Only update if value is stale/lower</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ===== SECTION 4 ===== -->
+  <section id="s4">
+    <h2><span class="num">04</span> Upsert</h2>
+    <p>The "insert or update" pattern. If the document exists, update it. If it doesn't, create it. This is the workhorse of incremental pipelines.</p>
+
+    <pre><code><span class="cm"># Upsert — idempotent by design</span>
+client.<span class="fn">update</span>(
+    index=<span class="str">"products"</span>,
+    id=<span class="str">"prod_456"</span>,
+    body={
+        <span class="str">"doc"</span>: { <span class="str">"title"</span>: <span class="str">"Widget Pro"</span>, <span class="str">"price"</span>: <span class="op">49.99</span> },
+        <span class="str">"doc_as_upsert"</span>: <span class="op">true</span>
+    }
+)</code></pre>
+
+    <div class="card card-accent">
+      <h3>Why Upsert Wins for Pipelines</h3>
+      <ul>
+        <li><strong>Idempotent:</strong> Run it once or ten times, same result</li>
+        <li><strong>No existence check needed:</strong> The engine handles it</li>
+        <li><strong>Works with bulk API:</strong> Efficient at scale</li>
+        <li><strong>Handles both new and updated documents in one pass</strong></li>
+      </ul>
+    </div>
+
+    <table>
+      <thead><tr><th>Operation</th><th>Doc Exists</th><th>Doc Missing</th></tr></thead>
+      <tbody>
+        <tr><td><code>index</code></td><td>Overwrites entire doc</td><td>Creates new doc</td></tr>
+        <tr><td><code>update</code></td><td>Merges fields</td><td>Error (404)</td></tr>
+        <tr><td><code>upsert</code></td><td>Merges fields</td><td>Creates new doc</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ===== SECTION 5 ===== -->
+  <section id="s5">
+    <h2><span class="num">05</span> Alias Swap</h2>
+    <p>The gold standard for zero-downtime reindexing. Build a completely new index behind the scenes, then swap the alias pointer in a single atomic operation.</p>
+
+    <div class="arch-diagram">
+      <div class="arch-section-label">Before Swap</div>
+      <div class="arch-row">
+        <div class="arch-box accent">products (alias)</div>
+        <div class="arch-arrow">→</div>
+        <div class="arch-box green">products_v1 (live)</div>
+      </div>
+      <div class="arch-row" style="margin-top: 8px;">
+        <div class="arch-box" style="visibility: hidden;">placeholder</div>
+        <div class="arch-arrow" style="visibility: hidden;">→</div>
+        <div class="arch-box yellow">products_v2 (building…)</div>
+      </div>
+      <div class="arch-section-label" style="margin-top: 24px;">After Swap</div>
+      <div class="arch-row">
+        <div class="arch-box accent">products (alias)</div>
+        <div class="arch-arrow">→</div>
+        <div class="arch-box green">products_v2 (live)</div>
+      </div>
+      <div class="arch-row" style="margin-top: 8px;">
+        <div class="arch-box" style="visibility: hidden;">placeholder</div>
+        <div class="arch-arrow" style="visibility: hidden;">→</div>
+        <div class="arch-box red">products_v1 (delete or keep as backup)</div>
+      </div>
+    </div>
+
+    <pre><code><span class="cm"># Atomic alias swap — zero downtime</span>
+client.indices.<span class="fn">update_aliases</span>(body={
+    <span class="str">"actions"</span>: [
+        { <span class="str">"remove"</span>: { <span class="str">"index"</span>: <span class="str">"products_v1"</span>, <span class="str">"alias"</span>: <span class="str">"products"</span> }},
+        { <span class="str">"add"</span>:    { <span class="str">"index"</span>: <span class="str">"products_v2"</span>, <span class="str">"alias"</span>: <span class="str">"products"</span> }}
+    ]
+})</code></pre>
+
+    <div class="card card-green">
+      <h3>Key Benefits</h3>
+      <ul>
+        <li><strong>Zero downtime:</strong> Users always query a complete, consistent index</li>
+        <li><strong>Instant rollback:</strong> Just swap the alias back to the old version</li>
+        <li><strong>Schema changes supported:</strong> New index can have different mappings</li>
+        <li><strong>No partial data:</strong> Users never see a half-built index</li>
+      </ul>
+    </div>
+
+    <h3>Complete Alias Swap Procedure</h3>
+    <pre><code><span class="cm"># Full alias swap workflow</span>
+<span class="kw">def</span> <span class="fn">alias_swap_reindex</span>(client, alias, source_db):
+    old_index = <span class="fn">get_current_index</span>(client, alias)
+    new_index = <span class="str">f"{alias}_v{int(time.time())}"</span>
+
+    <span class="cm"># 1. Create new index with optimized settings</span>
+    client.indices.<span class="fn">create</span>(new_index, body={
+        <span class="str">"settings"</span>: { <span class="str">"refresh_interval"</span>: <span class="str">"-1"</span>, <span class="str">"number_of_replicas"</span>: <span class="op">0</span> }
+    })
+
+    <span class="cm"># 2. Bulk index all documents</span>
+    <span class="kw">for</span> batch <span class="kw">in</span> <span class="fn">fetch_all</span>(source_db, batch_size=<span class="op">1000</span>):
+        <span class="fn">bulk_index</span>(client, new_index, batch)
+
+    <span class="cm"># 3. Restore production settings</span>
+    client.indices.<span class="fn">put_settings</span>(new_index, body={
+        <span class="str">"refresh_interval"</span>: <span class="str">"1s"</span>, <span class="str">"number_of_replicas"</span>: <span class="op">1</span>
+    })
+
+    <span class="cm"># 4. Atomic swap</span>
+    client.indices.<span class="fn">update_aliases</span>(body={
+        <span class="str">"actions"</span>: [
+            { <span class="str">"remove"</span>: { <span class="str">"index"</span>: old_index, <span class="str">"alias"</span>: alias }},
+            { <span class="str">"add"</span>:    { <span class="str">"index"</span>: new_index, <span class="str">"alias"</span>: alias }}
+        ]
+    })
+
+    <span class="cm"># 5. Keep old index for rollback (delete later)</span>
+    <span class="fn">log</span>(<span class="str">f"Swapped {old_index} → {new_index}"</span>)</code></pre>
+
+    <div class="analogy">
+      <div class="icon">🎭</div>
+      <p><strong>Stage curtain analogy:</strong> Alias swap is like a theater stage with two sides on a revolving platform. While the audience watches Act 1 on the front stage, stagehands build the Act 2 set on the back. When ready, the platform rotates — the audience sees a seamless transition. If Act 2's set has a problem, rotate back instantly.</p>
+    </div>
+  </section>
+
+  <!-- ===== SECTION 6: COMPARISON PLAYGROUND ===== -->
+  <section id="s6">
+    <h2><span class="num">06</span> Strategy Comparison</h2>
+    <p>Select a strategy and adjust the parameters to see how each approach behaves with your workload.</p>
+
+    <div class="playground">
+      <h4>Interactive Strategy Comparison</h4>
+
+      <div class="strategy-radio-group">
+        <input type="radio" name="strategy" id="strat-full" value="full" class="strategy-radio" checked>
+        <label for="strat-full" class="strategy-radio-label">🔄 Full Reindex</label>
+        <input type="radio" name="strategy" id="strat-partial" value="partial" class="strategy-radio">
+        <label for="strat-partial" class="strategy-radio-label">✏️ Partial Update</label>
+        <input type="radio" name="strategy" id="strat-upsert" value="upsert" class="strategy-radio">
+        <label for="strat-upsert" class="strategy-radio-label">🔀 Upsert</label>
+        <input type="radio" name="strategy" id="strat-alias" value="alias" class="strategy-radio">
+        <label for="strat-alias" class="strategy-radio-label">🎯 Alias Swap</label>
+      </div>
+
+      <div class="slider-group">
+        <div class="slider-item">
+          <label>Total Documents <span id="doc-count-display">1,000,000</span></label>
+          <input type="range" id="doc-count-slider" min="100000" max="10000000" step="100000" value="1000000" oninput="updateComparison()">
+        </div>
+        <div class="slider-item">
+          <label>Update Rate <span id="update-rate-display">10%</span></label>
+          <input type="range" id="update-rate-slider" min="1" max="100" value="10" oninput="updateComparison()">
+        </div>
+      </div>
+
+      <div class="timeline-container" id="timeline-container"></div>
+
+      <div class="chart-wrap" style="margin-top: 20px;">
+        <canvas id="comparisonChart" height="260"></canvas>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== SECTION 7 ===== -->
+  <section id="s7">
+    <h2><span class="num">07</span> Delta Detection</h2>
+    <p>Before you can do incremental updates, you need to know <em>what changed</em>. There are three main approaches.</p>
+
+    <div class="grid-3">
+      <div class="card card-accent">
+        <h3>Timestamps</h3>
+        <p>Every record has an <code>updated_at</code> column. Query: <code>WHERE updated_at &gt; last_run</code>. Simple but requires every table to have timestamps.</p>
+      </div>
+      <div class="card card-green">
+        <h3>CDC (Change Data Capture)</h3>
+        <p>Read the database's write-ahead log to capture every insert, update, and delete as it happens. Tools: Debezium, Maxwell, AWS DMS.</p>
+      </div>
+      <div class="card card-yellow">
+        <h3>Checksums</h3>
+        <p>Hash each record and compare with the last known hash. If different, re-index. Works with any data source but requires storing previous hashes.</p>
+      </div>
+    </div>
+
+    <h3>CDC Flow</h3>
+    <div class="cdc-flow">
+      <div class="cdc-node" style="color: var(--accent);">Database</div>
+      <div class="cdc-arrow">→</div>
+      <div class="cdc-node" style="color: var(--accent2);">WAL / Binlog</div>
+      <div class="cdc-arrow">→</div>
+      <div class="cdc-node" style="color: var(--accent4);">Debezium</div>
+      <div class="cdc-arrow">→</div>
+      <div class="cdc-node" style="color: var(--pink);">Kafka</div>
+      <div class="cdc-arrow">→</div>
+      <div class="cdc-node" style="color: var(--accent);">Consumer</div>
+      <div class="cdc-arrow">→</div>
+      <div class="cdc-node" style="color: var(--accent2);">Search Index</div>
+    </div>
+
+    <table>
+      <thead><tr><th>Method</th><th>Latency</th><th>Handles Deletes</th><th>Complexity</th></tr></thead>
+      <tbody>
+        <tr><td>Timestamps</td><td>Minutes</td><td>No (need soft-deletes)</td><td>Low</td></tr>
+        <tr><td>CDC</td><td>Seconds</td><td>Yes</td><td>High</td></tr>
+        <tr><td>Checksums</td><td>Minutes</td><td>Yes (missing = deleted)</td><td>Medium</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Timestamp-based Delta Code</h3>
+    <pre><code><span class="cm"># Timestamp-based delta detection</span>
+<span class="kw">def</span> <span class="fn">detect_changes_by_timestamp</span>(db, last_run_time):
+    query = <span class="str">"""
+        SELECT * FROM products
+        WHERE updated_at > %s
+        ORDER BY updated_at ASC
+    """</span>
+    changed_docs = db.<span class="fn">execute</span>(query, [last_run_time])
+    <span class="kw">return</span> changed_docs
+
+<span class="cm"># Checksum-based delta detection</span>
+<span class="kw">def</span> <span class="fn">detect_changes_by_checksum</span>(db, hash_store):
+    all_docs = db.<span class="fn">execute</span>(<span class="str">"SELECT id, * FROM products"</span>)
+    changed = []
+    <span class="kw">for</span> doc <span class="kw">in</span> all_docs:
+        current_hash = <span class="fn">hashlib.md5</span>(<span class="fn">json.dumps</span>(doc).<span class="fn">encode</span>()).<span class="fn">hexdigest</span>()
+        <span class="kw">if</span> hash_store.<span class="fn">get</span>(doc[<span class="str">"id"</span>]) != current_hash:
+            changed.<span class="fn">append</span>(doc)
+            hash_store[doc[<span class="str">"id"</span>]] = current_hash
+    <span class="kw">return</span> changed</code></pre>
+
+    <div class="pro-tip">
+      <div class="tip-header">Handling Deletes</div>
+      <p>Timestamps can't detect deleted records — the row is gone. Solutions: use <strong>soft deletes</strong> (a <code>deleted_at</code> column), <strong>CDC</strong> (captures DELETE events), or <strong>full reconciliation</strong> (compare source IDs against index IDs, delete missing ones).</p>
+    </div>
+  </section>
+
+  <!-- ===== SECTION 8 ===== -->
+  <section id="s8">
+    <h2><span class="num">08</span> Hybrid Approach</h2>
+    <p>Most production systems use a combination: a nightly batch reindex for consistency plus real-time deltas for freshness.</p>
+
+    <div class="arch-diagram">
+      <div class="arch-section-label">Hybrid Pipeline</div>
+      <div class="arch-row">
+        <div class="arch-box accent">CDC Stream</div>
+        <div class="arch-arrow">→</div>
+        <div class="arch-box green">Real-time Upserts</div>
+        <div class="arch-arrow">→</div>
+        <div class="arch-box" style="border-color: var(--accent2);">Live Index</div>
+      </div>
+      <div class="arch-label-row">+ (in parallel)</div>
+      <div class="arch-row">
+        <div class="arch-box yellow">Nightly Job</div>
+        <div class="arch-arrow">→</div>
+        <div class="arch-box red">Full Reindex</div>
+        <div class="arch-arrow">→</div>
+        <div class="arch-box" style="border-color: var(--accent2);">Alias Swap</div>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <div class="card card-accent">
+        <h3>Real-time Layer</h3>
+        <ul>
+          <li>CDC captures changes within seconds</li>
+          <li>Upserts keep the live index current</li>
+          <li>Handles 95% of freshness needs</li>
+          <li>Low latency, high throughput</li>
+        </ul>
+      </div>
+      <div class="card card-green">
+        <h3>Batch Layer</h3>
+        <ul>
+          <li>Nightly full reindex catches anything missed</li>
+          <li>Fixes any drift or inconsistency</li>
+          <li>Applies schema/mapping changes</li>
+          <li>Alias swap ensures zero downtime</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="insight">
+      <div class="insight-title">Lambda Architecture for Search</div>
+      <p>This pattern mirrors the Lambda Architecture from stream processing: a <strong>speed layer</strong> (real-time CDC) plus a <strong>batch layer</strong> (nightly reindex). The batch layer acts as the source of truth that corrects any inconsistencies from the speed layer.</p>
+    </div>
+
+    <h3>Hybrid Implementation Skeleton</h3>
+    <pre><code><span class="cm"># Hybrid: Real-time CDC + Nightly Batch</span>
+<span class="kw">class</span> <span class="fn">HybridIndexUpdater</span>:
+    <span class="kw">def</span> <span class="fn">__init__</span>(self, client, alias):
+        self.client = client
+        self.alias = alias
+
+    <span class="kw">def</span> <span class="fn">handle_cdc_event</span>(self, event):
+        <span class="str">"""Real-time: process individual change events."""</span>
+        <span class="kw">if</span> event.op == <span class="str">"DELETE"</span>:
+            self.client.<span class="fn">delete</span>(index=self.alias, id=event.doc_id)
+        <span class="kw">else</span>:
+            self.client.<span class="fn">index</span>(
+                index=self.alias,
+                id=event.doc_id,
+                body=event.after
+            )
+
+    <span class="kw">def</span> <span class="fn">nightly_reconcile</span>(self, source_db):
+        <span class="str">"""Batch: full reindex with alias swap."""</span>
+        new_index = <span class="fn">create_fresh_index</span>(self.client)
+        <span class="fn">bulk_load_all</span>(self.client, new_index, source_db)
+        <span class="fn">atomic_alias_swap</span>(self.client, self.alias, new_index)
+        <span class="fn">cleanup_old_indices</span>(self.client, keep_last=<span class="op">2</span>)</code></pre>
+
+    <div class="card card-yellow">
+      <h3>When Real-time and Batch Disagree</h3>
+      <p>Occasionally, the real-time layer and batch layer will have conflicting data. The resolution strategy is simple: <strong>batch wins</strong>. The nightly reindex reads from the source of truth (the database) and rebuilds a clean, consistent index. Any stale data from missed CDC events gets automatically corrected.</p>
+    </div>
+  </section>
+
+  <!-- ===== SECTION 9 ===== -->
+  <section id="s9">
+    <h2><span class="num">09</span> Decision Matrix</h2>
+    <p>Choosing the right strategy depends on your requirements. Use this matrix to guide your decision.</p>
+
+    <table class="comparison">
+      <thead>
+        <tr>
+          <th>Dimension</th>
+          <th>Full Reindex</th>
+          <th>Partial Update</th>
+          <th>Upsert</th>
+          <th>Alias Swap</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Freshness</strong></td>
+          <td>Hours</td>
+          <td>Seconds</td>
+          <td>Seconds</td>
+          <td>Minutes–Hours</td>
+        </tr>
+        <tr>
+          <td><strong>Complexity</strong></td>
+          <td style="color:var(--accent2);">Low</td>
+          <td style="color:var(--accent4);">Medium</td>
+          <td style="color:var(--accent4);">Medium</td>
+          <td style="color:var(--accent4);">Medium</td>
+        </tr>
+        <tr>
+          <td><strong>Downtime Risk</strong></td>
+          <td style="color:var(--accent3);">High</td>
+          <td style="color:var(--accent2);">None</td>
+          <td style="color:var(--accent2);">None</td>
+          <td style="color:var(--accent2);">None</td>
+        </tr>
+        <tr>
+          <td><strong>Rollback Safety</strong></td>
+          <td style="color:var(--accent3);">Low</td>
+          <td style="color:var(--accent3);">Low</td>
+          <td style="color:var(--accent4);">Medium</td>
+          <td style="color:var(--accent2);">High</td>
+        </tr>
+        <tr>
+          <td><strong>Schema Changes</strong></td>
+          <td style="color:var(--accent2);">Yes</td>
+          <td style="color:var(--accent3);">No</td>
+          <td style="color:var(--accent3);">No</td>
+          <td style="color:var(--accent2);">Yes</td>
+        </tr>
+        <tr>
+          <td><strong>Handles Deletes</strong></td>
+          <td style="color:var(--accent2);">Yes (implicit)</td>
+          <td style="color:var(--accent3);">No</td>
+          <td style="color:var(--accent3);">No</td>
+          <td style="color:var(--accent2);">Yes (implicit)</td>
+        </tr>
+        <tr>
+          <td><strong>Best For</strong></td>
+          <td>Small datasets, schema changes</td>
+          <td>High-frequency field updates</td>
+          <td>Incremental pipeline ingestion</td>
+          <td>Zero-downtime production deploys</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="pro-tip">
+      <div class="tip-header">Decision Guide</div>
+      <p><strong>&lt;1M docs?</strong> Full reindex + alias swap is probably fine. <strong>Need sub-minute freshness?</strong> CDC + upsert. <strong>Frequent schema changes?</strong> Alias swap. <strong>Just updating prices/stock?</strong> Partial update. <strong>Most systems?</strong> Hybrid (nightly batch + real-time upserts).</p>
+    </div>
+
+    <h3>Decision Flowchart</h3>
+    <div class="arch-diagram">
+      <div class="arch-section-label">Choose Your Strategy</div>
+      <div class="arch-row">
+        <div class="arch-box accent">Dataset &lt; 1M?</div>
+      </div>
+      <div class="arch-label-row">YES ↙ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ↘ NO</div>
+      <div class="arch-row">
+        <div class="arch-box green">Full Reindex + Alias Swap</div>
+        <div class="arch-box yellow">Need real-time?</div>
+      </div>
+      <div class="arch-row" style="justify-content: flex-end;">
+        <div style="text-align: center; font-size: 0.75rem; color: var(--text-dim); width: 200px;">YES ↙ &nbsp;&nbsp; ↘ NO</div>
+      </div>
+      <div class="arch-row" style="justify-content: flex-end;">
+        <div class="arch-box" style="border-color: var(--pink); color: var(--pink);">CDC + Upsert</div>
+        <div class="arch-box" style="border-color: var(--orange); color: var(--orange);">Nightly Batch</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== SECTION 10 ===== -->
+  <section id="s10">
+    <h2><span class="num">10</span> Key Takeaway</h2>
+
+    <div class="insight">
+      <div class="insight-title">Remember This</div>
+      <p>There is no single "best" index update strategy — each has trade-offs. <strong>Alias swap</strong> is non-negotiable for zero-downtime production systems. <strong>Upsert</strong> is the workhorse for incremental pipelines. And the <strong>hybrid approach</strong> (real-time deltas + nightly batch) gives you the best of both worlds: freshness <em>and</em> consistency.</p>
+    </div>
+
+    <div class="card card-accent">
+      <h3>Quick Reference</h3>
+      <ul>
+        <li>Always use alias-based access — never query raw index names</li>
+        <li>Implement delta detection before building incremental pipelines</li>
+        <li>Test your rollback procedure — swap back should take &lt;1 second</li>
+        <li>Monitor index lag: how far behind is the index from the source?</li>
+        <li>Use the hybrid approach for production systems with &gt;1M documents</li>
+      </ul>
+    </div>
+  </section>
+
+</div>
+
+<footer>Index Update Strategies — Interactive Playground</footer>
+
+<script>
+/* ===== STRATEGY COMPARISON ===== */
+let comparisonChart = null;
+
+function initComparisonChart() {
+  const ctx = document.getElementById('comparisonChart').getContext('2d');
+  comparisonChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: ['Full Reindex', 'Partial Update', 'Upsert', 'Alias Swap'],
+      datasets: [
+        { label: 'Total Time (min)', data: [0,0,0,0], backgroundColor: 'rgba(108,99,255,0.6)', borderColor: '#6c63ff', borderWidth: 1 },
+        { label: 'Downtime (min)', data: [0,0,0,0], backgroundColor: 'rgba(255,107,107,0.6)', borderColor: '#ff6b6b', borderWidth: 1 },
+        { label: 'Complexity (1-10)', data: [0,0,0,0], backgroundColor: 'rgba(255,217,61,0.6)', borderColor: '#ffd93d', borderWidth: 1 },
+        { label: 'Rollback Safety (1-10)', data: [0,0,0,0], backgroundColor: 'rgba(0,201,167,0.6)', borderColor: '#00c9a7', borderWidth: 1 }
+      ]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        x: { grid: { color: 'rgba(42,45,58,0.5)' }, ticks: { color: '#6d7290' }, beginAtZero: true },
+        y: { grid: { color: 'rgba(42,45,58,0.5)' }, ticks: { color: '#9398ab', font: { family: 'Inter', weight: '600' } } }
+      },
+      plugins: { legend: { labels: { color: '#9398ab', font: { family: 'Inter' } } } }
+    }
+  });
+}
+
+function getStrategySteps(strategy, totalDocs, updateRate) {
+  const updatedDocs = Math.round(totalDocs * updateRate / 100);
+  const docsK = (totalDocs / 1000).toFixed(0) + 'K';
+  const updK = (updatedDocs / 1000).toFixed(0) + 'K';
+
+  const strategies = {
+    full: [
+      { label: 'Create new index', duration: 5, color: 'var(--accent)' },
+      { label: `Re-ingest all ${docsK} docs`, duration: Math.round(totalDocs / 20000), color: 'var(--accent2)' },
+      { label: 'Build search structures', duration: Math.round(totalDocs / 100000) + 2, color: 'var(--accent4)' },
+      { label: 'Swap alias pointer', duration: 1, color: 'var(--pink)' }
+    ],
+    partial: [
+      { label: 'Detect changed documents', duration: Math.round(totalDocs / 500000) + 1, color: 'var(--accent)' },
+      { label: `Send ${updK} partial updates`, duration: Math.round(updatedDocs / 50000) + 1, color: 'var(--accent2)' },
+      { label: 'Force merge segments', duration: Math.round(updatedDocs / 100000) + 1, color: 'var(--accent4)' }
+    ],
+    upsert: [
+      { label: 'Detect changed documents', duration: Math.round(totalDocs / 500000) + 1, color: 'var(--accent)' },
+      { label: `Bulk upsert ${updK} docs`, duration: Math.round(updatedDocs / 30000) + 1, color: 'var(--accent2)' },
+      { label: 'Refresh index', duration: 1, color: 'var(--accent4)' }
+    ],
+    alias: [
+      { label: 'Create new index (v2)', duration: 5, color: 'var(--accent)' },
+      { label: `Re-ingest all ${docsK} docs`, duration: Math.round(totalDocs / 20000), color: 'var(--accent2)' },
+      { label: 'Build search structures', duration: Math.round(totalDocs / 100000) + 2, color: 'var(--accent4)' },
+      { label: 'Atomic alias swap', duration: 1, color: 'var(--pink)' },
+      { label: 'Delete old index (optional)', duration: 2, color: 'var(--accent3)' }
+    ]
+  };
+  return strategies[strategy];
+}
+
+function updateComparison() {
+  const totalDocs = parseInt(document.getElementById('doc-count-slider').value);
+  const updateRate = parseInt(document.getElementById('update-rate-slider').value);
+  document.getElementById('doc-count-display').textContent = totalDocs.toLocaleString();
+  document.getElementById('update-rate-display').textContent = updateRate + '%';
+
+  const selected = document.querySelector('input[name="strategy"]:checked').value;
+  const steps = getStrategySteps(selected, totalDocs, updateRate);
+
+  const container = document.getElementById('timeline-container');
+  const maxDuration = Math.max(...steps.map(s => s.duration), 1);
+
+  container.innerHTML = steps.map((step, i) => {
+    const pct = Math.min((step.duration / maxDuration) * 100, 100);
+    return `<div class="timeline-step">
+      <div class="step-num" style="border-color:${step.color}; color:${step.color};">${i + 1}</div>
+      <div class="step-label">${step.label}</div>
+      <div class="step-bar-wrap">
+        <div class="step-bar" style="width:${pct}%; background:${step.color};">${step.duration}m</div>
+      </div>
+    </div>`;
+  }).join('');
+
+  updateChart(totalDocs, updateRate);
+}
+
+function updateChart(totalDocs, updateRate) {
+  if (!comparisonChart) initComparisonChart();
+  const updatedDocs = Math.round(totalDocs * updateRate / 100);
+
+  const fullTime = Math.round(totalDocs / 20000) + 8;
+  const partialTime = Math.round(updatedDocs / 50000) + Math.round(totalDocs / 500000) + 3;
+  const upsertTime = Math.round(updatedDocs / 30000) + Math.round(totalDocs / 500000) + 3;
+  const aliasTime = Math.round(totalDocs / 20000) + 10;
+
+  comparisonChart.data.datasets[0].data = [fullTime, partialTime, upsertTime, aliasTime];
+  comparisonChart.data.datasets[1].data = [Math.round(fullTime * 0.7), 0, 0, 0];
+  comparisonChart.data.datasets[2].data = [2, 5, 4, 5];
+  comparisonChart.data.datasets[3].data = [3, 2, 4, 9];
+  comparisonChart.update();
+}
+
+document.querySelectorAll('input[name="strategy"]').forEach(r => {
+  r.addEventListener('change', updateComparison);
+});
+
+updateComparison();
+
+/* ===== TOC SCROLL HIGHLIGHTING ===== */
+(function() {
+  const sections = document.querySelectorAll('section[id]');
+  const tocLinks = document.querySelectorAll('.toc a');
+  function onScroll() {
+    let current = '';
+    sections.forEach(s => {
+      if (window.scrollY >= s.offsetTop - 120) current = s.id;
+    });
+    tocLinks.forEach(a => {
+      a.classList.toggle('active', a.getAttribute('href') === '#' + current);
+    });
+  }
+  window.addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+})();
+</script>
+</body>
+</html>

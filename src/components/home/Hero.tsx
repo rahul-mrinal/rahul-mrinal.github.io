@@ -7,13 +7,13 @@ export default function Hero() {
     <section className="relative min-h-screen flex items-center justify-center overflow-hidden">
       {/* Animated background orbs */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-1/4 left-1/4 w-[500px] h-[500px] rounded-full bg-[#6c63ff]/8 blur-[120px] animate-float" />
+        <div className="absolute top-1/4 left-1/4 w-[500px] h-[500px] rounded-full bg-accent/8 blur-[120px] animate-float" />
         <div
-          className="absolute bottom-1/4 right-1/4 w-[400px] h-[400px] rounded-full bg-[#00c9a7]/6 blur-[100px] animate-float"
+          className="absolute bottom-1/4 right-1/4 w-[400px] h-[400px] rounded-full bg-accent-teal/6 blur-[100px] animate-float"
           style={{ animationDelay: "3s" }}
         />
         <div
-          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full bg-[#ff6b6b]/4 blur-[140px]"
+          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full bg-accent-rose/4 blur-[140px]"
           style={{ animation: "pulse-glow 8s ease-in-out infinite" }}
         />
       </div>
@@ -34,8 +34,8 @@ export default function Hero() {
           transition={{ duration: 0.6 }}
           className="mb-6"
         >
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-[#2a2d3a] bg-[#12131a]/60 text-sm text-[#9398ab]">
-            <span className="w-2 h-2 rounded-full bg-[#00c9a7] animate-pulse" />
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-border bg-bg-secondary/60 text-sm text-text-secondary">
+            <span className="w-2 h-2 rounded-full bg-accent-teal animate-pulse" />
             {profile.location}
           </div>
         </motion.div>
@@ -54,7 +54,7 @@ export default function Hero() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.7, delay: 0.25 }}
-          className="text-xl sm:text-2xl text-[#9398ab] font-light mb-4 leading-relaxed"
+          className="text-xl sm:text-2xl text-text-secondary font-light mb-4 leading-relaxed"
         >
           {profile.title}
         </motion.p>
@@ -76,7 +76,7 @@ export default function Hero() {
         >
           <a
             href="#blog-preview"
-            className="px-6 py-3 rounded-xl bg-gradient-to-r from-[#6c63ff] to-[#5a52e0] text-white font-semibold text-sm hover:shadow-lg hover:shadow-[#6c63ff]/20 hover:-translate-y-0.5 transition-all"
+            className="px-6 py-3 rounded-xl bg-gradient-to-r from-accent to-[#5a52e0] text-white font-semibold text-sm hover:shadow-lg hover:shadow-accent/20 hover:-translate-y-0.5 transition-all"
           >
             Read the Blog
           </a>
@@ -84,7 +84,7 @@ export default function Hero() {
             href={profile.linkedin}
             target="_blank"
             rel="noopener noreferrer"
-            className="px-6 py-3 rounded-xl border border-[#2a2d3a] text-[#9398ab] font-semibold text-sm hover:border-[#6c63ff] hover:text-white hover:-translate-y-0.5 transition-all flex items-center gap-2"
+            className="px-6 py-3 rounded-xl border border-border text-text-secondary font-semibold text-sm hover:border-accent hover:text-white hover:-translate-y-0.5 transition-all flex items-center gap-2"
           >
             <FiLinkedin size={16} />
             LinkedIn
@@ -102,7 +102,7 @@ export default function Hero() {
         <motion.div
           animate={{ y: [0, 8, 0] }}
           transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-          className="text-[#9398ab]/40"
+          className="text-text-secondary/40"
         >
           <FiArrowDown size={20} />
         </motion.div>

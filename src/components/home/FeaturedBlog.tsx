@@ -3,13 +3,8 @@ import { Link } from "react-router-dom";
 import { useScrollReveal } from "../../hooks/useScrollReveal";
 import { CATEGORIES, getSeriesByCategory } from "../../data/series";
 import { blogPosts } from "../../data/blogPosts";
-import { FiArrowRight, FiBookOpen, FiSearch, FiCpu, FiTerminal } from "react-icons/fi";
-
-const CATEGORY_ICONS: Record<string, React.ReactNode> = {
-  search: <FiSearch size={22} />,
-  cpu: <FiCpu size={22} />,
-  terminal: <FiTerminal size={22} />,
-};
+import { CATEGORY_ICONS_LARGE as CATEGORY_ICONS } from "../../data/categoryIcons";
+import { FiArrowRight, FiBookOpen } from "react-icons/fi";
 
 export default function FeaturedBlog() {
   const { ref, isVisible } = useScrollReveal();
@@ -23,13 +18,13 @@ export default function FeaturedBlog() {
           transition={{ duration: 0.7 }}
           className="mb-12"
         >
-          <h2 className="text-sm font-semibold uppercase tracking-widest text-[#6c63ff] mb-3">
+          <h2 className="text-sm font-semibold uppercase tracking-widest text-accent mb-3">
             Blog
           </h2>
           <h3 className="text-3xl sm:text-4xl font-bold text-white mb-4">
             Technical Writing
           </h3>
-          <p className="text-[#9398ab] text-lg max-w-2xl">
+          <p className="text-text-secondary text-lg max-w-2xl">
             Deep-dive blog series on search engineering, AI systems, developer
             tools, and more. New topics added regularly.
           </p>
@@ -85,10 +80,10 @@ export default function FeaturedBlog() {
                       </span>
                     )}
                   </div>
-                  <h4 className="text-white font-semibold text-lg mb-2 group-hover:text-[#6c63ff] transition-colors">
+                  <h4 className="text-white font-semibold text-lg mb-2 group-hover:text-accent transition-colors">
                     {cat.title}
                   </h4>
-                  <p className="text-[#9398ab] text-sm line-clamp-2 mb-4">
+                  <p className="text-text-secondary text-sm line-clamp-2 mb-4">
                     {cat.description}
                   </p>
 
@@ -127,14 +122,14 @@ export default function FeaturedBlog() {
         >
           <Link
             to="/blog"
-            className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-[#6c63ff] to-[#5a52e0] text-white font-semibold text-sm hover:shadow-lg hover:shadow-[#6c63ff]/20 hover:-translate-y-0.5 transition-all"
+            className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-accent to-[#5a52e0] text-white font-semibold text-sm hover:shadow-lg hover:shadow-accent/20 hover:-translate-y-0.5 transition-all"
           >
             <FiBookOpen size={16} />
             View All Posts
           </Link>
           <Link
             to="/blog/search-fundamentals/what-is-search"
-            className="inline-flex items-center gap-2 px-6 py-3 rounded-xl border border-[#2a2d3a] text-[#9398ab] font-semibold text-sm hover:border-[#6c63ff] hover:text-white hover:-translate-y-0.5 transition-all"
+            className="inline-flex items-center gap-2 px-6 py-3 rounded-xl border border-border text-text-secondary font-semibold text-sm hover:border-accent hover:text-white hover:-translate-y-0.5 transition-all"
           >
             Start Reading
             <FiArrowRight size={14} />

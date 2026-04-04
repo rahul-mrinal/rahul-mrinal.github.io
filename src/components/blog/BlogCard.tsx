@@ -1,8 +1,16 @@
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
-import { FiClock, FiArrowRight } from "react-icons/fi";
+import { FiClock, FiCalendar, FiArrowRight } from "react-icons/fi";
 import { getSeriesById } from "../../data/series";
 import type { BlogPostMeta } from "../../data/blogPosts";
+
+function formatDate(dateStr: string): string {
+  return new Date(dateStr).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
 
 interface BlogCardProps {
   post: BlogPostMeta;
@@ -38,20 +46,24 @@ export default function BlogCard({ post, index }: BlogCardProps) {
             <FiClock size={12} />
             {post.readTime}
           </span>
+          <span className="flex items-center gap-1 text-xs text-[#6d7290]">
+            <FiCalendar size={12} />
+            {formatDate(post.publishDate)}
+          </span>
         </div>
 
-        <h3 className="text-white font-semibold text-lg mb-2 group-hover:text-[#6c63ff] transition-colors">
+        <h3 className="text-white font-semibold text-lg mb-2 group-hover:text-accent transition-colors">
           {post.title}
         </h3>
 
-        <p className="text-[#9398ab] text-sm line-clamp-2 mb-4">{post.description}</p>
+        <p className="text-text-secondary text-sm line-clamp-2 mb-4">{post.description}</p>
 
         <div className="flex items-center justify-between">
           <div className="flex flex-wrap gap-1.5">
             {post.tags.slice(0, 3).map((tag) => (
               <span
                 key={tag}
-                className="text-[10px] font-medium uppercase tracking-wider text-[#6d7290] bg-[#1a1c25] px-2 py-0.5 rounded"
+                className="text-[10px] font-medium uppercase tracking-wider text-[#6d7290] bg-bg-tertiary px-2 py-0.5 rounded"
               >
                 {tag}
               </span>
@@ -59,7 +71,7 @@ export default function BlogCard({ post, index }: BlogCardProps) {
           </div>
           <FiArrowRight
             size={14}
-            className="text-[#6d7290] group-hover:text-[#6c63ff] group-hover:translate-x-1 transition-all"
+            className="text-[#6d7290] group-hover:text-accent group-hover:translate-x-1 transition-all"
           />
         </div>
       </Link>

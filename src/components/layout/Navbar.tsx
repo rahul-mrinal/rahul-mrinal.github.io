@@ -14,9 +14,16 @@ export default function Navbar() {
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [activeSection, setActiveSection] = useState<string | null>(null);
+  const [prevPathname, setPrevPathname] = useState("");
   const location = useLocation();
   const navigate = useNavigate();
   const isHome = location.pathname === "/";
+
+  if (location.pathname !== prevPathname) {
+    setPrevPathname(location.pathname);
+    setMobileOpen(false);
+    if (!isHome) setActiveSection(null);
+  }
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 40);
@@ -24,12 +31,8 @@ export default function Navbar() {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  // Track which section is currently in view using IntersectionObserver
   useEffect(() => {
-    if (!isHome) {
-      setActiveSection(null);
-      return;
-    }
+    if (!isHome) return;
 
     const observers: IntersectionObserver[] = [];
     const visibleSections = new Map<string, number>();
@@ -47,7 +50,6 @@ export default function Navbar() {
               visibleSections.delete(id);
             }
 
-            // Find the most visible section
             if (visibleSections.size > 0) {
               let maxRatio = 0;
               let maxSection = "";
@@ -73,24 +75,23 @@ export default function Navbar() {
     return () => observers.forEach((obs) => obs.disconnect());
   }, [isHome]);
 
-  useEffect(() => {
-    setMobileOpen(false);
-  }, [location]);
-
   const scrollToSection = useCallback(
     (id: string) => {
       setMobileOpen(false);
       if (isHome) {
-        // Already on home - just scroll
         const el = document.getElementById(id);
         if (el) el.scrollIntoView({ behavior: "smooth" });
       } else {
-        // Navigate to home first, then scroll after the page renders
         navigate("/");
-        setTimeout(() => {
+        const waitForElement = (attempts = 0) => {
           const el = document.getElementById(id);
-          if (el) el.scrollIntoView({ behavior: "smooth" });
-        }, 100);
+          if (el) {
+            el.scrollIntoView({ behavior: "smooth" });
+          } else if (attempts < 20) {
+            requestAnimationFrame(() => waitForElement(attempts + 1));
+          }
+        };
+        requestAnimationFrame(() => waitForElement());
       }
     },
     [isHome, navigate]
@@ -120,13 +121,13 @@ export default function Navbar() {
       animate={{ y: 0 }}
       transition={{ duration: 0.6, ease: "easeOut" }}
       className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${scrolled
-          ? "bg-[#0a0b10]/80 backdrop-blur-xl border-b border-[#2a2d3a]/60 shadow-lg shadow-black/10"
+          ? "bg-bg-primary/80 backdrop-blur-xl border-b border-border/60 shadow-lg shadow-black/10"
           : "bg-transparent"
         }`}
     >
       <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
         <Link to="/" onClick={handleHomeClick} className="flex items-center gap-2 group">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#6c63ff] to-[#00c9a7] flex items-center justify-center text-white font-bold text-sm group-hover:scale-110 transition-transform">
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-accent to-accent-teal flex items-center justify-center text-white font-bold text-sm group-hover:scale-110 transition-transform">
             RM
           </div>
           <span className="font-semibold text-white hidden sm:inline">Rahul Mrinal</span>
@@ -147,20 +148,20 @@ export default function Navbar() {
                 onClick={item.href === "/" ? handleHomeClick : undefined}
                 className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${isActive
                     ? "text-white bg-white/10"
-                    : "text-[#9398ab] hover:text-white hover:bg-white/5"
+                    : "text-text-secondary hover:text-white hover:bg-white/5"
                   }`}
               >
                 {item.label}
               </Link>
             );
           })}
-          {HOME_SECTIONS.slice(0, 4).map((id) => (
+          {isHome && HOME_SECTIONS.slice(0, 4).map((id) => (
             <button
               key={id}
               onClick={() => scrollToSection(id)}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors capitalize ${activeSection === id
                   ? "text-white bg-white/10"
-                  : "text-[#9398ab] hover:text-white hover:bg-white/5"
+                  : "text-text-secondary hover:text-white hover:bg-white/5"
                 }`}
             >
               {id.replace("-", " ")}
@@ -171,7 +172,7 @@ export default function Navbar() {
         {/* Mobile toggle */}
         <button
           onClick={() => setMobileOpen(!mobileOpen)}
-          className="md:hidden p-2 text-[#9398ab] hover:text-white transition-colors"
+          className="md:hidden p-2 text-text-secondary hover:text-white transition-colors"
         >
           {mobileOpen ? <FiX size={22} /> : <FiMenu size={22} />}
         </button>
@@ -184,7 +185,7 @@ export default function Navbar() {
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
-            className="md:hidden bg-[#12131a]/95 backdrop-blur-xl border-b border-[#2a2d3a] overflow-hidden"
+            className="md:hidden bg-bg-secondary/95 backdrop-blur-xl border-b border-border overflow-hidden"
           >
             <div className="px-6 py-4 flex flex-col gap-1">
               {NAV_ITEMS.map((item) => {
@@ -200,20 +201,20 @@ export default function Navbar() {
                     onClick={item.href === "/" ? handleHomeClick : undefined}
                     className={`px-4 py-3 rounded-lg text-sm font-medium transition-colors ${isActive
                         ? "text-white bg-white/10"
-                        : "text-[#9398ab] hover:text-white hover:bg-white/5"
+                        : "text-text-secondary hover:text-white hover:bg-white/5"
                       }`}
                   >
                     {item.label}
                   </Link>
                 );
               })}
-              {HOME_SECTIONS.map((id) => (
+              {isHome && HOME_SECTIONS.map((id) => (
                 <button
                   key={id}
                   onClick={() => scrollToSection(id)}
                   className={`px-4 py-3 rounded-lg text-sm font-medium transition-colors capitalize text-left ${activeSection === id
                       ? "text-white bg-white/10"
-                      : "text-[#9398ab] hover:text-white hover:bg-white/5"
+                      : "text-text-secondary hover:text-white hover:bg-white/5"
                     }`}
                 >
                   {id.replace("-", " ")}

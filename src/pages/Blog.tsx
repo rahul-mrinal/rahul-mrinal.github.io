@@ -1,24 +1,17 @@
 import { useState, useMemo } from "react";
 import { useSearchParams, Link } from "react-router-dom";
 import { motion } from "framer-motion";
-import { FiArrowRight, FiSearch, FiCpu, FiTerminal } from "react-icons/fi";
+import { FiArrowRight, FiSearch, FiX } from "react-icons/fi";
 import BlogCard from "../components/blog/BlogCard";
 import { blogPosts } from "../data/blogPosts";
 import { CATEGORIES, SERIES, getSeriesByCategory } from "../data/series";
-
-const CATEGORY_ICONS: Record<string, React.ReactNode> = {
-  search: <FiSearch size={16} />,
-  cpu: <FiCpu size={16} />,
-  terminal: <FiTerminal size={16} />,
-};
+import { CATEGORY_ICONS } from "../data/categoryIcons";
 
 export default function Blog() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const initialCategory = searchParams.get("category");
-  const initialSeries = searchParams.get("series");
-
-  const [activeCategory, setActiveCategory] = useState<string | null>(initialCategory);
-  const [activeSeries, setActiveSeries] = useState<string | null>(initialSeries);
+  const activeCategory = searchParams.get("category");
+  const activeSeries = searchParams.get("series");
+  const [searchQuery, setSearchQuery] = useState("");
 
   const visibleSeries = useMemo(() => {
     if (activeCategory) return getSeriesByCategory(activeCategory);
@@ -26,17 +19,25 @@ export default function Blog() {
   }, [activeCategory]);
 
   const filteredPosts = useMemo(() => {
-    if (activeSeries) return blogPosts.filter((p) => p.series === activeSeries);
-    if (activeCategory) {
+    let posts = blogPosts;
+    if (activeSeries) posts = posts.filter((p) => p.series === activeSeries);
+    else if (activeCategory) {
       const seriesIds = new Set(visibleSeries.map((s) => s.id));
-      return blogPosts.filter((p) => seriesIds.has(p.series));
+      posts = posts.filter((p) => seriesIds.has(p.series));
     }
-    return blogPosts;
-  }, [activeSeries, activeCategory, visibleSeries]);
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      posts = posts.filter(
+        (p) =>
+          p.title.toLowerCase().includes(q) ||
+          p.description.toLowerCase().includes(q) ||
+          p.tags.some((t) => t.toLowerCase().includes(q))
+      );
+    }
+    return posts;
+  }, [activeSeries, activeCategory, visibleSeries, searchQuery]);
 
   const handleCategoryChange = (id: string | null) => {
-    setActiveCategory(id);
-    setActiveSeries(null);
     if (id) {
       setSearchParams({ category: id });
     } else {
@@ -45,7 +46,6 @@ export default function Blog() {
   };
 
   const handleSeriesChange = (id: string | null) => {
-    setActiveSeries(id);
     if (id) {
       const params: Record<string, string> = { series: id };
       if (activeCategory) params.category = activeCategory;
@@ -61,6 +61,7 @@ export default function Blog() {
 
   return (
     <main className="min-h-screen pt-24 pb-16 px-6">
+      <title>Blog - Rahul Mrinal</title>
       <div className="max-w-6xl mx-auto">
         {/* Header */}
         <motion.div
@@ -70,10 +71,37 @@ export default function Blog() {
           className="mb-10"
         >
           <h1 className="text-4xl sm:text-5xl font-bold text-white mb-4">Blog</h1>
-          <p className="text-[#9398ab] text-lg max-w-2xl">
+          <p className="text-text-secondary text-lg max-w-2xl">
             Deep-dive technical writing on search engineering, AI systems,
             developer tools, and more.
           </p>
+        </motion.div>
+
+        {/* Search */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.05 }}
+          className="mb-8"
+        >
+          <div className="relative max-w-md">
+            <FiSearch size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#6d7290]" />
+            <input
+              type="text"
+              placeholder="Search posts by title, topic, or tag..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-11 pr-10 py-2.5 rounded-xl bg-bg-secondary border border-border text-white text-sm placeholder-[#6d7290] focus:outline-none focus:border-accent/50 transition-colors"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-[#6d7290] hover:text-white transition-colors"
+              >
+                <FiX size={16} />
+              </button>
+            )}
+          </div>
         </motion.div>
 
         {/* Category tabs */}
@@ -89,7 +117,7 @@ export default function Blog() {
               className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium transition-all ${
                 activeCategory === null
                   ? "bg-white/10 text-white border border-white/20"
-                  : "text-[#9398ab] border border-[#2a2d3a] hover:border-white/20 hover:text-white"
+                  : "text-text-secondary border border-border hover:border-white/20 hover:text-white"
               }`}
             >
               All Topics
@@ -151,7 +179,7 @@ export default function Blog() {
             <h3 className="text-white font-semibold text-xl mb-2">
               {activeCategoryData.title}
             </h3>
-            <p className="text-[#9398ab] mb-4">{activeCategoryData.description}</p>
+            <p className="text-text-secondary mb-4">{activeCategoryData.description}</p>
             <span
               className="inline-block text-xs font-semibold uppercase tracking-widest px-4 py-1.5 rounded-full"
               style={{
@@ -178,7 +206,7 @@ export default function Blog() {
                 className={`px-3.5 py-1.5 rounded-full text-xs font-medium transition-all ${
                   activeSeries === null
                     ? "bg-white/8 text-white border border-white/15"
-                    : "text-[#6d7290] border border-[#2a2d3a] hover:text-white hover:border-white/15"
+                    : "text-[#6d7290] border border-border hover:text-white hover:border-white/15"
                 }`}
               >
                 All Series
@@ -218,19 +246,19 @@ export default function Blog() {
           >
             <Link
               to="/blog/search-fundamentals/what-is-search"
-              className="glass-card rounded-xl p-6 flex items-center justify-between gap-4 hover:border-[#6c63ff]/40 transition-all group"
+              className="glass-card rounded-xl p-6 flex items-center justify-between gap-4 hover:border-accent/40 transition-all group"
             >
               <div>
-                <span className="text-xs font-semibold uppercase tracking-widest text-[#6c63ff] block mb-1">
+                <span className="text-xs font-semibold uppercase tracking-widest text-accent block mb-1">
                   Start from the beginning
                 </span>
-                <span className="text-white font-semibold text-lg group-hover:text-[#6c63ff] transition-colors">
+                <span className="text-white font-semibold text-lg group-hover:text-accent transition-colors">
                   Search Fundamentals: What is Search?
                 </span>
               </div>
               <FiArrowRight
                 size={20}
-                className="text-[#6d7290] group-hover:text-[#6c63ff] group-hover:translate-x-1 transition-all flex-shrink-0"
+                className="text-[#6d7290] group-hover:text-accent group-hover:translate-x-1 transition-all flex-shrink-0"
               />
             </Link>
           </motion.div>
@@ -244,7 +272,7 @@ export default function Blog() {
         </div>
 
         {filteredPosts.length === 0 && !activeCategoryData && (
-          <div className="text-center py-20 text-[#9398ab]">
+          <div className="text-center py-20 text-text-secondary">
             No posts found.
           </div>
         )}

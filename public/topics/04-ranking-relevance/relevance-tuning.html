@@ -1,0 +1,900 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Relevance Tuning — Interactive Playground</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body, {
+    delimiters: [
+      {left: '$$', right: '$$', display: true},
+      {left: '\\[', right: '\\]', display: true},
+      {left: '$', right: '$', display: false},
+      {left: '\\(', right: '\\)', display: false}
+    ],
+    throwOnError: false
+  });"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../playground.css" />
+<style>
+  .product-card {
+    background: var(--code-bg); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); padding: 14px 18px; margin: 8px 0;
+    transition: all 0.3s ease; position: relative;
+  }
+  .product-card:hover { border-color: rgba(108,99,255,0.3); }
+  .product-card .p-rank {
+    position: absolute; top: -8px; left: 14px;
+    background: var(--accent); color: #fff;
+    font-size: 0.72rem; padding: 2px 10px; border-radius: 10px; font-weight: 700;
+  }
+  .product-card .p-title { font-weight: 700; font-size: 0.95rem; margin-bottom: 4px; }
+  .product-card .p-desc { color: var(--text-dim); font-size: 0.85rem; }
+  .product-card .p-tags { margin-top: 6px; }
+  .product-card .p-tag {
+    display: inline-block; background: rgba(108,99,255,0.12); color: var(--accent);
+    padding: 2px 10px; border-radius: 12px; font-size: 0.75rem; font-weight: 500;
+    margin: 2px 4px 2px 0; border: 1px solid rgba(108,99,255,0.2);
+  }
+  .product-card .p-score {
+    position: absolute; top: 14px; right: 18px;
+    font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 1.1rem;
+    color: var(--accent2);
+  }
+  .product-card .p-breakdown {
+    margin-top: 8px; font-size: 0.78rem; color: var(--text-dim);
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .product-card .p-meta {
+    display: flex; gap: 16px; margin-top: 8px; font-size: 0.78rem; color: var(--text-dim);
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .decay-select {
+    display: flex; gap: 8px; margin-bottom: 16px;
+  }
+  .decay-option {
+    background: var(--surface2); border: 1px solid var(--border);
+    padding: 8px 18px; border-radius: 20px; font-size: 0.85rem;
+    font-weight: 500; cursor: pointer; transition: all 0.2s; color: var(--text-dim);
+    font-family: 'Inter', sans-serif;
+  }
+  .decay-option.active {
+    color: var(--accent); border-color: var(--accent); background: rgba(108,99,255,0.1);
+  }
+  .ab-metric {
+    text-align: center; padding: 20px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius);
+  }
+  .ab-metric .ab-label { font-size: 0.75rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; }
+  .ab-metric .ab-value { font-size: 1.8rem; font-weight: 700; font-family: 'JetBrains Mono', monospace; margin-top: 4px; }
+  .ab-metric .ab-delta { font-size: 0.85rem; margin-top: 2px; }
+  .workflow-step {
+    display: flex; align-items: flex-start; gap: 16px; margin: 16px 0;
+  }
+  .workflow-num {
+    width: 36px; height: 36px; border-radius: 50%;
+    background: var(--accent); color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.85rem; font-weight: 700; flex-shrink: 0;
+  }
+  .workflow-content {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); padding: 16px 20px; flex: 1;
+  }
+  .workflow-content h4 { margin: 0 0 6px; font-size: 0.95rem; }
+  .workflow-content p { color: var(--text-dim); font-size: 0.88rem; margin: 0; }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <a href="/" class="topbar-brand">
+    <div class="topbar-logo">RM</div>
+    <span class="topbar-label">Rahul Mrinal</span>
+  </a>
+  <a href="/blog" class="topbar-back">← Back to Blog</a>
+</div>
+
+<div class="hero">
+  <h1>Relevance Tuning</h1>
+  <p class="subtitle">Field boosting, function scoring, and A/B testing for search quality</p>
+  <div class="badges">
+    <span class="badge badge-hnsw">Field Boost</span>
+    <span class="badge badge-ivf">Function Score</span>
+    <span class="badge badge-pq">A/B Testing</span>
+  </div>
+</div>
+
+<nav class="toc">
+  <div class="toc-inner">
+    <a href="#s1">Why Tune?</a>
+    <a href="#s2">Field Boosting</a>
+    <a href="#s3">Function Scoring</a>
+    <a href="#s4">Recency Decay</a>
+    <a href="#s5">Query-Time Boost</a>
+    <a href="#s6">A/B Testing</a>
+    <a href="#s7">Workflow</a>
+    <a href="#s8">Takeaway</a>
+  </div>
+</nav>
+
+<div class="container">
+
+  <!-- ===== SECTION 1 ===== -->
+  <section id="s1">
+    <h2><span class="num">01</span> Why Tune?</h2>
+    <p class="lead">Default BM25 ranking treats all fields equally. In practice, a match in the title is far more valuable than a match deep in the description.</p>
+
+    <div class="analogy">
+      <div class="icon">🎯</div>
+      <p><strong>Analogy:</strong> Imagine searching for a book. If the word "Python" appears in the title, the book is almost certainly about Python. If it appears once in a 500-page description, it might be a passing mention. Relevance tuning teaches the search engine this difference.</p>
+    </div>
+
+    <div class="grid-2">
+      <div class="card card-red">
+        <h3 style="color:var(--accent3)">Without Tuning</h3>
+        <p>Query "wireless headphones" returns a laptop accessory guide (mentions "wireless headphones" once in a long description) above actual wireless headphones products.</p>
+      </div>
+      <div class="card card-green">
+        <h3 style="color:var(--accent2)">With Tuning</h3>
+        <p>Title-boosted search correctly ranks products with "wireless headphones" in their title at the top, followed by tag matches, then description matches.</p>
+      </div>
+    </div>
+
+    <h3>Three Layers of Tuning</h3>
+    <div class="pipeline">
+      <div class="pipeline-node accent">Field Boosting</div>
+      <div class="pipeline-arrow">→</div>
+      <div class="pipeline-node green">Function Scoring</div>
+      <div class="pipeline-arrow">→</div>
+      <div class="pipeline-node yellow">Query-Time Boost</div>
+    </div>
+    <p class="dim" style="text-align:center;font-size:0.85rem">Each layer refines the ranking further, from static field weights to dynamic query-specific adjustments.</p>
+
+    <h3>Impact of Tuning: Before &amp; After</h3>
+    <table class="comparison">
+      <thead>
+        <tr>
+          <th>Metric</th>
+          <th>Before Tuning</th>
+          <th>After Tuning</th>
+          <th>Improvement</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>NDCG@10</strong></td>
+          <td>0.42</td>
+          <td>0.67</td>
+          <td style="color:var(--accent2);font-weight:700">+59.5%</td>
+        </tr>
+        <tr>
+          <td><strong>Click-Through Rate</strong></td>
+          <td>12.3%</td>
+          <td>18.7%</td>
+          <td style="color:var(--accent2);font-weight:700">+52.0%</td>
+        </tr>
+        <tr>
+          <td><strong>Zero-Result Rate</strong></td>
+          <td>8.1%</td>
+          <td>5.2%</td>
+          <td style="color:var(--accent2);font-weight:700">-35.8%</td>
+        </tr>
+        <tr>
+          <td><strong>MRR (Mean Reciprocal Rank)</strong></td>
+          <td>0.38</td>
+          <td>0.55</td>
+          <td style="color:var(--accent2);font-weight:700">+44.7%</td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="dim">Representative improvements from field boosting + recency decay on an e-commerce search system. Actual results vary by domain.</p>
+  </section>
+
+  <!-- ===== SECTION 2: FIELD BOOSTING PLAYGROUND ===== -->
+  <section id="s2">
+    <h2><span class="num">02</span> Field Boosting</h2>
+    <p class="lead">Weight different fields differently. A title match should count more than a description match.</p>
+
+    <div class="formula-box">
+      <p>$$\text{score}(d, q) = \sum_{f \in \text{fields}} \text{boost}_f \cdot \text{BM25}(d_f, q)$$</p>
+      <div class="label">boost_f controls how much field f contributes to the total score</div>
+    </div>
+
+    <h3>Typical Boost Ranges by Domain</h3>
+    <table class="comparison">
+      <thead>
+        <tr>
+          <th>Domain</th>
+          <th>Title Boost</th>
+          <th>Description</th>
+          <th>Tags/Categories</th>
+          <th>Body/Content</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>E-Commerce</strong></td>
+          <td>5–8×</td>
+          <td>1×</td>
+          <td>3–4×</td>
+          <td>0.5×</td>
+        </tr>
+        <tr>
+          <td><strong>Documentation</strong></td>
+          <td>3–5×</td>
+          <td>1×</td>
+          <td>2×</td>
+          <td>1×</td>
+        </tr>
+        <tr>
+          <td><strong>News Articles</strong></td>
+          <td>4–6×</td>
+          <td>2×</td>
+          <td>1.5×</td>
+          <td>1×</td>
+        </tr>
+        <tr>
+          <td><strong>Knowledge Base</strong></td>
+          <td>3–4×</td>
+          <td>1.5×</td>
+          <td>2–3×</td>
+          <td>1×</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="analogy">
+      <div class="icon">🎛️</div>
+      <p><strong>Analogy:</strong> Field boosting is like an audio mixer. Each field is a track (vocals, bass, drums). The boost slider controls how loud that track is in the final mix. Too much title boost and you drown out everything else; too little and important matches get buried.</p>
+    </div>
+
+    <div class="playground">
+      <h4>Field Boosting Playground</h4>
+
+      <div style="margin-bottom:16px">
+        <label style="font-size:0.82rem;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:6px">Search Query</label>
+        <input type="text" class="demo-input" id="fb-query" value="wireless headphones" placeholder="Enter search query..." style="max-width:400px">
+      </div>
+
+      <div class="slider-group" style="grid-template-columns:1fr 1fr 1fr">
+        <div class="slider-item">
+          <label><span>Title Boost</span><span id="fb-title-val">5.0</span></label>
+          <input type="range" id="fb-title" min="1" max="10" step="0.5" value="5">
+        </div>
+        <div class="slider-item">
+          <label><span>Description Boost</span><span id="fb-desc-val">1.0</span></label>
+          <input type="range" id="fb-desc" min="0.5" max="5" step="0.5" value="1">
+        </div>
+        <div class="slider-item">
+          <label><span>Tags Boost</span><span id="fb-tags-val">2.0</span></label>
+          <input type="range" id="fb-tags" min="0.5" max="5" step="0.5" value="2">
+        </div>
+      </div>
+
+      <div id="fb-results"></div>
+    </div>
+  </section>
+
+  <!-- ===== SECTION 3: FUNCTION SCORING PLAYGROUND ===== -->
+  <section id="s3">
+    <h2><span class="num">03</span> Function Scoring</h2>
+    <p class="lead">Combine text relevance with business signals — recency, popularity, and quality — to produce a composite score.</p>
+
+    <div class="formula-box">
+      <p>$$\text{final}(d) = w_r \cdot \text{relevance}(d) + w_f \cdot \text{freshness}(d) + w_p \cdot \text{popularity}(d)$$</p>
+      <div class="label">Weights control the trade-off between relevance, recency, and popularity</div>
+    </div>
+
+    <h3>Score Combination Strategies</h3>
+    <div class="grid-2">
+      <div class="card card-accent">
+        <h3 style="color:var(--accent)">Additive</h3>
+        <p>$\text{final} = \text{rel} + w_f \cdot f(t) + w_p \cdot g(p)$</p>
+        <p class="dim">Functions add to the base relevance score. Simple and predictable. Use when business signals should nudge rankings, not override them.</p>
+      </div>
+      <div class="card card-green">
+        <h3 style="color:var(--accent2)">Multiplicative</h3>
+        <p>$\text{final} = \text{rel} \times (1 + w_f \cdot f(t)) \times (1 + w_p \cdot g(p))$</p>
+        <p class="dim">Business signals amplify relevance. A highly relevant but unpopular doc still scores well. A relevant + popular doc scores much higher.</p>
+      </div>
+    </div>
+
+    <div class="pro-tip">
+      <div class="tip-header">Elasticsearch function_score</div>
+      <p>In Elasticsearch, use <code>function_score</code> query with <code>score_mode: "sum"</code> for additive or <code>score_mode: "multiply"</code> for multiplicative. Set <code>boost_mode: "multiply"</code> to apply the function result to the query score.</p>
+    </div>
+
+    <div class="playground">
+      <h4>Function Scoring Playground</h4>
+
+      <div class="slider-group" style="grid-template-columns:1fr 1fr 1fr">
+        <div class="slider-item">
+          <label><span>Relevance Weight</span><span id="fs-rel-val">0.50</span></label>
+          <input type="range" id="fs-rel" min="0" max="1" step="0.05" value="0.50">
+        </div>
+        <div class="slider-item">
+          <label><span>Recency Weight</span><span id="fs-rec-val">0.30</span></label>
+          <input type="range" id="fs-rec" min="0" max="1" step="0.05" value="0.30">
+        </div>
+        <div class="slider-item">
+          <label><span>Popularity Weight</span><span id="fs-pop-val">0.20</span></label>
+          <input type="range" id="fs-pop" min="0" max="1" step="0.05" value="0.20">
+        </div>
+      </div>
+
+      <div id="fs-results"></div>
+
+      <div class="chart-wrap" style="margin-top:16px">
+        <canvas id="fs-chart"></canvas>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== SECTION 4: RECENCY DECAY PLAYGROUND ===== -->
+  <section id="s4">
+    <h2><span class="num">04</span> Recency Decay</h2>
+    <p class="lead">Newer content should rank higher — but how fast should old content decay? Choose from linear, exponential, or Gaussian decay functions.</p>
+
+    <div class="grid-3" style="margin-bottom:24px">
+      <div class="formula-box compact">
+        <p>$$\text{linear}(t) = \max\left(0,\; 1 - \frac{t}{T}\right)$$</p>
+        <div class="label">Score drops to 0 at time T</div>
+      </div>
+      <div class="formula-box compact">
+        <p>$$\text{exp}(t) = e^{-\lambda t}$$</p>
+        <div class="label">Fast initial drop, long tail</div>
+      </div>
+      <div class="formula-box compact">
+        <p>$$\text{gauss}(t) = e^{-\frac{t^2}{2\sigma^2}}$$</p>
+        <div class="label">Slow start, sharp drop at σ</div>
+      </div>
+    </div>
+
+    <h3>Choosing a Decay Function</h3>
+    <table class="comparison">
+      <thead>
+        <tr>
+          <th>Function</th>
+          <th>Behavior</th>
+          <th>Best For</th>
+          <th>Example</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Linear</strong></td>
+          <td>Constant decay rate, reaches 0</td>
+          <td>Job listings, event schedules</td>
+          <td>Score = 0 after 30 days</td>
+        </tr>
+        <tr>
+          <td><strong>Exponential</strong></td>
+          <td>Fast initial drop, never reaches 0</td>
+          <td>News articles, social media</td>
+          <td>50% value after 3 days</td>
+        </tr>
+        <tr>
+          <td><strong>Gaussian</strong></td>
+          <td>Gentle start, accelerating drop</td>
+          <td>Blog posts, documentation</td>
+          <td>Still 90% at 7 days, 30% at 30 days</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="playground">
+      <h4>Recency Decay Playground</h4>
+
+      <div class="decay-select" id="decay-type">
+        <button class="decay-option active" data-type="linear">Linear</button>
+        <button class="decay-option" data-type="exponential">Exponential</button>
+        <button class="decay-option" data-type="gaussian">Gaussian</button>
+      </div>
+
+      <div class="slider-group" style="grid-template-columns:1fr 1fr">
+        <div class="slider-item">
+          <label><span>Time Range (days)</span><span id="decay-range-val">90</span></label>
+          <input type="range" id="decay-range" min="7" max="365" step="1" value="90">
+        </div>
+        <div class="slider-item">
+          <label><span>Decay Rate</span><span id="decay-rate-val">0.50</span></label>
+          <input type="range" id="decay-rate" min="0.05" max="2" step="0.05" value="0.50">
+        </div>
+      </div>
+
+      <div class="chart-wrap">
+        <canvas id="decay-chart"></canvas>
+      </div>
+
+      <div class="result-box">
+        <div class="result-label">Score at key time points</div>
+        <div id="decay-points" style="font-family:'JetBrains Mono',monospace;font-size:0.85rem;color:var(--text-dim);margin-top:6px">—</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== SECTION 5 ===== -->
+  <section id="s5">
+    <h2><span class="num">05</span> Query-Time Boosting</h2>
+    <p class="lead">Apply ad-hoc boosts for specific business rules without modifying the index or base ranking.</p>
+
+    <h3>Common Use Cases</h3>
+    <div class="grid-2">
+      <div class="card card-accent">
+        <h3 style="color:var(--accent)">Promotional Boost</h3>
+        <p>Boost products that are on sale or part of a campaign:</p>
+        <pre><code><span class="kw">if</span> doc.on_sale:
+    score *= <span class="num">1.5</span>  <span class="cm"># 50% boost</span></code></pre>
+      </div>
+      <div class="card card-green">
+        <h3 style="color:var(--accent2)">Category Pinning</h3>
+        <p>When query matches a known category, boost that category:</p>
+        <pre><code><span class="kw">if</span> query_category == doc.category:
+    score *= <span class="num">2.0</span>  <span class="cm"># double the score</span></code></pre>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <div class="card card-yellow">
+        <h3 style="color:var(--accent4)">Geo Boost</h3>
+        <p>Boost results that are geographically close to the user:</p>
+        <pre><code>distance = haversine(user, doc)
+geo_boost = <span class="num">1.0</span> / (<span class="num">1</span> + distance / <span class="num">50</span>)</code></pre>
+      </div>
+      <div class="card card-red">
+        <h3 style="color:var(--accent3)">Penalty (Negative Boost)</h3>
+        <p>Demote low-quality or out-of-stock items:</p>
+        <pre><code><span class="kw">if</span> doc.out_of_stock:
+    score *= <span class="num">0.1</span>  <span class="cm"># push to bottom</span></code></pre>
+      </div>
+    </div>
+
+    <div class="pro-tip">
+      <div class="tip-header">Keep It Auditable</div>
+      <p>Every query-time boost should be logged. When rankings look wrong, you need to trace which boosts fired and why. Build a "score explanation" endpoint that shows the breakdown for any result.</p>
+    </div>
+  </section>
+
+  <!-- ===== SECTION 6 ===== -->
+  <section id="s6">
+    <h2><span class="num">06</span> A/B Testing Search Quality</h2>
+    <p class="lead">Tuning is meaningless without measurement. A/B testing tells you whether your changes actually improved the user experience.</p>
+
+    <h3>Key Metrics</h3>
+    <div class="grid-3" style="margin-bottom:24px">
+      <div class="ab-metric">
+        <div class="ab-label">Click-Through Rate</div>
+        <div class="ab-value" style="color:var(--accent)">CTR</div>
+        <div class="ab-delta" style="color:var(--text-dim)">% of results clicked</div>
+      </div>
+      <div class="ab-metric">
+        <div class="ab-label">Mean Reciprocal Rank</div>
+        <div class="ab-value" style="color:var(--accent2)">MRR</div>
+        <div class="ab-delta" style="color:var(--text-dim)">Avg rank of first click</div>
+      </div>
+      <div class="ab-metric">
+        <div class="ab-label">Zero-Result Rate</div>
+        <div class="ab-value" style="color:var(--accent3)">ZRR</div>
+        <div class="ab-delta" style="color:var(--text-dim)">% queries with 0 results</div>
+      </div>
+    </div>
+
+    <h3>A/B Test Design</h3>
+    <div class="arch-diagram">
+      <div class="arch-label-row">Traffic Split</div>
+      <div class="arch-row">
+        <div class="arch-box neutral">Incoming Query</div>
+        <div class="arch-arrow">→</div>
+        <div class="arch-box accent">Control (50%)<div class="arch-label">Current ranking</div></div>
+        <div class="arch-box green">Treatment (50%)<div class="arch-label">New tuning</div></div>
+      </div>
+      <div class="arch-arrow down">↓</div>
+      <div class="arch-row">
+        <div class="arch-box yellow">Compare Metrics<div class="arch-label">Statistical significance</div></div>
+      </div>
+    </div>
+
+    <div class="insight">
+      <div class="insight-title">Statistical Significance</div>
+      <p>Don't ship a tuning change based on 100 queries. You need statistical significance — typically p &lt; 0.05 with at least 1,000–10,000 queries per variant. Use a two-proportion z-test for CTR or a paired t-test for NDCG.</p>
+    </div>
+
+    <h3>Common Pitfalls</h3>
+    <div class="grid-2">
+      <div class="card card-red">
+        <h3 style="color:var(--accent3)">Position Bias</h3>
+        <p>Users click the first result regardless of relevance. Use interleaving (mix control + treatment results in one list) to eliminate position bias.</p>
+      </div>
+      <div class="card card-yellow">
+        <h3 style="color:var(--accent4)">Novelty Effect</h3>
+        <p>New rankings might get more clicks simply because they look different. Run the test for at least 2 weeks to let the novelty wear off.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== SECTION 7 ===== -->
+  <section id="s7">
+    <h2><span class="num">07</span> Tuning Workflow</h2>
+    <p class="lead">A step-by-step process for systematically improving search relevance.</p>
+
+    <div class="workflow-step">
+      <div class="workflow-num">1</div>
+      <div class="workflow-content">
+        <h4>Establish a Baseline</h4>
+        <p>Measure current NDCG@10, MRR, and CTR on a representative query set. This is your control.</p>
+      </div>
+    </div>
+
+    <div class="workflow-step">
+      <div class="workflow-num">2</div>
+      <div class="workflow-content">
+        <h4>Build a Judgment Set</h4>
+        <p>Create 100–500 query-document pairs rated by humans (0 = irrelevant, 1 = partial, 2 = relevant, 3 = perfect). Use these for offline evaluation.</p>
+      </div>
+    </div>
+
+    <div class="workflow-step">
+      <div class="workflow-num">3</div>
+      <div class="workflow-content">
+        <h4>Tune One Variable at a Time</h4>
+        <p>Start with field boosts, then function scores, then query-time boosts. Measure each change independently against the baseline.</p>
+      </div>
+    </div>
+
+    <div class="workflow-step">
+      <div class="workflow-num">4</div>
+      <div class="workflow-content">
+        <h4>Offline Evaluation</h4>
+        <p>Run your judgment set through the new config. Compare NDCG@10 with the baseline. If it improves by &gt;2%, proceed to A/B test.</p>
+      </div>
+    </div>
+
+    <div class="workflow-step">
+      <div class="workflow-num">5</div>
+      <div class="workflow-content">
+        <h4>A/B Test in Production</h4>
+        <p>Split traffic 50/50. Run for 2+ weeks. Ship only if the treatment shows statistically significant improvement.</p>
+      </div>
+    </div>
+
+    <div class="workflow-step">
+      <div class="workflow-num">6</div>
+      <div class="workflow-content">
+        <h4>Monitor &amp; Iterate</h4>
+        <p>Search quality degrades over time as content changes. Re-evaluate monthly and retune quarterly.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== SECTION 8 ===== -->
+  <section id="s8">
+    <h2><span class="num">08</span> Key Takeaway</h2>
+
+    <div class="insight">
+      <div class="insight-title">The Bottom Line</div>
+      <p>Relevance tuning is not a one-time task — it's a continuous feedback loop. Start with <strong>field boosting</strong> (title > tags > description), add <strong>function scoring</strong> for business signals (recency, popularity), and validate every change with <strong>A/B tests</strong>. The goal is not perfect ranking — it's measurably better ranking than what you had yesterday.</p>
+    </div>
+
+    <div class="grid-2">
+      <div class="card card-green">
+        <h3 style="color:var(--accent2)">Quick Wins</h3>
+        <ul>
+          <li>Boost title matches 3–5× over description</li>
+          <li>Add recency decay for time-sensitive content</li>
+          <li>Demote out-of-stock or deprecated items</li>
+        </ul>
+      </div>
+      <div class="card card-accent">
+        <h3 style="color:var(--accent)">Advanced</h3>
+        <ul>
+          <li>Train LTR models on click data</li>
+          <li>Interleaved A/B testing for unbiased evaluation</li>
+          <li>Per-category tuning profiles</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<footer>Relevance Tuning — Interactive Playground &copy; Rahul Mrinal</footer>
+
+<script>
+(function() {
+  // ==========================================
+  // DATA: 6 products for Field Boosting & Function Scoring
+  // ==========================================
+  const PRODUCTS = [
+    {
+      title: 'Sony WH-1000XM5 Wireless Headphones',
+      description: 'Industry-leading noise cancelling with Auto NC Optimizer. Crystal-clear hands-free calling with 4 beamforming microphones.',
+      tags: ['wireless', 'headphones', 'noise-cancelling', 'bluetooth', 'sony'],
+      recency_days: 12, popularity_clicks: 4200, review_score: 4.7
+    },
+    {
+      title: 'USB-C Charging Cable 6ft',
+      description: 'Compatible with wireless headphones, phones, and tablets. Fast charging support up to 100W.',
+      tags: ['cable', 'usb-c', 'charging', 'accessories'],
+      recency_days: 45, popularity_clicks: 8900, review_score: 4.2
+    },
+    {
+      title: 'Bose QuietComfort Ultra Earbuds',
+      description: 'Wireless noise cancelling earbuds with spatial audio. CustomTune sound calibration for personalized listening.',
+      tags: ['wireless', 'earbuds', 'noise-cancelling', 'bose'],
+      recency_days: 30, popularity_clicks: 3100, review_score: 4.5
+    },
+    {
+      title: 'Laptop Stand with Headphone Holder',
+      description: 'Ergonomic aluminum stand. Features a built-in hook for wireless or wired headphones. Supports up to 17 inch laptops.',
+      tags: ['stand', 'laptop', 'ergonomic', 'desk'],
+      recency_days: 90, popularity_clicks: 1500, review_score: 4.0
+    },
+    {
+      title: 'AirPods Max - Space Gray',
+      description: 'Over-ear wireless headphones with active noise cancellation, transparency mode, and spatial audio with dynamic head tracking.',
+      tags: ['wireless', 'headphones', 'apple', 'noise-cancelling'],
+      recency_days: 60, popularity_clicks: 5600, review_score: 4.3
+    },
+    {
+      title: 'Beats Studio Pro Headphones',
+      description: 'Premium wireless Bluetooth noise cancelling headphones with personalized spatial audio and USB-C connectivity.',
+      tags: ['wireless', 'headphones', 'beats', 'bluetooth', 'noise-cancelling'],
+      recency_days: 25, popularity_clicks: 2800, review_score: 4.1
+    }
+  ];
+
+  function tokenize(str) {
+    return str.toLowerCase().replace(/[^a-z0-9\s-]/g, '').split(/\s+/).filter(Boolean);
+  }
+
+  function termMatch(text, queryTerms) {
+    const textTokens = tokenize(text);
+    let hits = 0;
+    queryTerms.forEach(qt => {
+      textTokens.forEach(tt => { if (tt.includes(qt) || qt.includes(tt)) hits++; });
+    });
+    return hits;
+  }
+
+  // ==========================================
+  // SECTION 2: FIELD BOOSTING
+  // ==========================================
+  const fbTitle = document.getElementById('fb-title');
+  const fbDesc = document.getElementById('fb-desc');
+  const fbTags = document.getElementById('fb-tags');
+  const fbTitleVal = document.getElementById('fb-title-val');
+  const fbDescVal = document.getElementById('fb-desc-val');
+  const fbTagsVal = document.getElementById('fb-tags-val');
+  const fbQuery = document.getElementById('fb-query');
+
+  function renderFieldBoosting() {
+    const tBoost = parseFloat(fbTitle.value);
+    const dBoost = parseFloat(fbDesc.value);
+    const gBoost = parseFloat(fbTags.value);
+    fbTitleVal.textContent = tBoost.toFixed(1);
+    fbDescVal.textContent = dBoost.toFixed(1);
+    fbTagsVal.textContent = gBoost.toFixed(1);
+
+    const queryTerms = tokenize(fbQuery.value);
+    if (queryTerms.length === 0) { document.getElementById('fb-results').innerHTML = '<p class="dim">Enter a query above</p>'; return; }
+
+    const scored = PRODUCTS.map((p, i) => {
+      const titleHits = termMatch(p.title, queryTerms);
+      const descHits = termMatch(p.description, queryTerms);
+      const tagHits = termMatch(p.tags.join(' '), queryTerms);
+      const tScore = titleHits * tBoost;
+      const dScore = descHits * dBoost;
+      const gScore = tagHits * gBoost;
+      const total = tScore + dScore + gScore;
+      return { ...p, idx: i, titleHits, descHits, tagHits, tScore, dScore, gScore, total };
+    }).sort((a, b) => b.total - a.total);
+
+    document.getElementById('fb-results').innerHTML = scored.map((p, rank) => `
+      <div class="product-card" style="${rank === 0 ? 'border-color:var(--accent2);background:rgba(0,201,167,0.04)' : ''}">
+        <div class="p-rank" style="${rank === 0 ? 'background:var(--accent2)' : ''}">#${rank + 1}</div>
+        <div class="p-score">${p.total.toFixed(1)}</div>
+        <div class="p-title">${highlightTerms(p.title, queryTerms)}</div>
+        <div class="p-desc">${highlightTerms(p.description, queryTerms)}</div>
+        <div class="p-tags">${p.tags.map(t => `<span class="p-tag">${highlightTerms(t, queryTerms)}</span>`).join('')}</div>
+        <div class="p-breakdown">title: ${p.tScore.toFixed(1)} (${p.titleHits} hits × ${parseFloat(fbTitle.value).toFixed(1)}) · desc: ${p.dScore.toFixed(1)} (${p.descHits} × ${parseFloat(fbDesc.value).toFixed(1)}) · tags: ${p.gScore.toFixed(1)} (${p.tagHits} × ${parseFloat(fbTags.value).toFixed(1)})</div>
+      </div>
+    `).join('');
+  }
+
+  function highlightTerms(text, terms) {
+    let result = text;
+    terms.forEach(t => {
+      const regex = new RegExp(`(${t})`, 'gi');
+      result = result.replace(regex, '<mark>$1</mark>');
+    });
+    return result;
+  }
+
+  [fbTitle, fbDesc, fbTags].forEach(el => el.addEventListener('input', renderFieldBoosting));
+  fbQuery.addEventListener('input', renderFieldBoosting);
+  renderFieldBoosting();
+
+  // ==========================================
+  // SECTION 3: FUNCTION SCORING
+  // ==========================================
+  const fsRel = document.getElementById('fs-rel');
+  const fsRec = document.getElementById('fs-rec');
+  const fsPop = document.getElementById('fs-pop');
+  const fsRelVal = document.getElementById('fs-rel-val');
+  const fsRecVal = document.getElementById('fs-rec-val');
+  const fsPopVal = document.getElementById('fs-pop-val');
+  let fsChart = null;
+
+  function renderFunctionScoring() {
+    const wRel = parseFloat(fsRel.value);
+    const wRec = parseFloat(fsRec.value);
+    const wPop = parseFloat(fsPop.value);
+    fsRelVal.textContent = wRel.toFixed(2);
+    fsRecVal.textContent = wRec.toFixed(2);
+    fsPopVal.textContent = wPop.toFixed(2);
+
+    const maxClicks = Math.max(...PRODUCTS.map(p => p.popularity_clicks));
+    const maxDays = Math.max(...PRODUCTS.map(p => p.recency_days));
+
+    const scored = PRODUCTS.map((p, i) => {
+      const relevance = (5 - p.review_score + 1) / 5;
+      const freshness = 1 - (p.recency_days / (maxDays + 1));
+      const popularity = p.popularity_clicks / maxClicks;
+      const relComponent = wRel * relevance;
+      const recComponent = wRec * freshness;
+      const popComponent = wPop * popularity;
+      const total = relComponent + recComponent + popComponent;
+      return { ...p, idx: i, relevance, freshness, popularity, relComponent, recComponent, popComponent, total };
+    }).sort((a, b) => b.total - a.total);
+
+    document.getElementById('fs-results').innerHTML = scored.map((p, rank) => `
+      <div class="product-card" style="${rank === 0 ? 'border-color:var(--accent2);background:rgba(0,201,167,0.04)' : ''}">
+        <div class="p-rank" style="${rank === 0 ? 'background:var(--accent2)' : ''}">#${rank + 1}</div>
+        <div class="p-score">${p.total.toFixed(3)}</div>
+        <div class="p-title">${p.title}</div>
+        <div class="p-meta">
+          <span>age: ${p.recency_days}d</span>
+          <span>clicks: ${p.popularity_clicks.toLocaleString()}</span>
+          <span>rating: ${p.review_score}</span>
+        </div>
+        <div class="p-breakdown">rel: ${p.relComponent.toFixed(3)} · rec: ${p.recComponent.toFixed(3)} · pop: ${p.popComponent.toFixed(3)}</div>
+      </div>
+    `).join('');
+
+    if (fsChart) fsChart.destroy();
+    const ctx = document.getElementById('fs-chart').getContext('2d');
+    const labels = scored.map(p => p.title.length > 20 ? p.title.substring(0, 18) + '…' : p.title);
+    fsChart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [
+          { label: 'Relevance', data: scored.map(p => p.relComponent), backgroundColor: 'rgba(108,99,255,0.7)', borderRadius: 3 },
+          { label: 'Recency', data: scored.map(p => p.recComponent), backgroundColor: 'rgba(0,201,167,0.7)', borderRadius: 3 },
+          { label: 'Popularity', data: scored.map(p => p.popComponent), backgroundColor: 'rgba(255,217,61,0.7)', borderRadius: 3 }
+        ]
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { labels: { color: '#9398ab', font: { family: 'Inter' } } } },
+        scales: {
+          x: { stacked: true, ticks: { color: '#9398ab', font: { size: 10 } }, grid: { color: 'rgba(42,45,58,0.5)' } },
+          y: { stacked: true, ticks: { color: '#9398ab' }, grid: { color: 'rgba(42,45,58,0.5)' } }
+        }
+      }
+    });
+  }
+
+  [fsRel, fsRec, fsPop].forEach(el => el.addEventListener('input', renderFunctionScoring));
+  renderFunctionScoring();
+
+  // ==========================================
+  // SECTION 4: RECENCY DECAY
+  // ==========================================
+  const decayRange = document.getElementById('decay-range');
+  const decayRate = document.getElementById('decay-rate');
+  const decayRangeVal = document.getElementById('decay-range-val');
+  const decayRateVal = document.getElementById('decay-rate-val');
+  let decayChart = null;
+  let decayType = 'linear';
+
+  document.getElementById('decay-type').addEventListener('click', (e) => {
+    const btn = e.target.closest('.decay-option');
+    if (!btn) return;
+    document.querySelectorAll('.decay-option').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    decayType = btn.dataset.type;
+    renderDecay();
+  });
+
+  decayRange.addEventListener('input', () => { decayRangeVal.textContent = decayRange.value; renderDecay(); });
+  decayRate.addEventListener('input', () => { decayRateVal.textContent = parseFloat(decayRate.value).toFixed(2); renderDecay(); });
+
+  function decayFn(t, T, rate, type) {
+    if (type === 'linear') return Math.max(0, 1 - t / T);
+    if (type === 'exponential') return Math.exp(-rate * t / (T * 0.3));
+    if (type === 'gaussian') return Math.exp(-0.5 * Math.pow(t * rate / (T * 0.3), 2));
+    return 0;
+  }
+
+  function renderDecay() {
+    const T = parseInt(decayRange.value);
+    const rate = parseFloat(decayRate.value);
+    const steps = 100;
+    const labels = [];
+    const data = [];
+    for (let i = 0; i <= steps; i++) {
+      const t = (i / steps) * T;
+      labels.push(Math.round(t));
+      data.push(decayFn(t, T, rate, decayType));
+    }
+
+    const keyPoints = [0, 7, 30, 60, 90, 180, 365].filter(d => d <= T);
+    document.getElementById('decay-points').innerHTML = keyPoints.map(d =>
+      `<span style="margin-right:16px"><span style="color:var(--text)">${d}d</span> → <span style="color:var(--accent2)">${decayFn(d, T, rate, decayType).toFixed(3)}</span></span>`
+    ).join('');
+
+    if (decayChart) decayChart.destroy();
+    const ctx = document.getElementById('decay-chart').getContext('2d');
+    const color = decayType === 'linear' ? '#6c63ff' : decayType === 'exponential' ? '#00c9a7' : '#ffd93d';
+    decayChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [{
+          label: decayType.charAt(0).toUpperCase() + decayType.slice(1) + ' Decay',
+          data,
+          borderColor: color,
+          backgroundColor: color + '20',
+          fill: true,
+          tension: 0.3,
+          pointRadius: 0,
+          borderWidth: 2
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { labels: { color: '#9398ab', font: { family: 'Inter' } } } },
+        scales: {
+          x: {
+            title: { display: true, text: 'Days Ago', color: '#9398ab' },
+            ticks: { color: '#9398ab', maxTicksLimit: 10 },
+            grid: { color: 'rgba(42,45,58,0.5)' }
+          },
+          y: {
+            min: 0, max: 1,
+            title: { display: true, text: 'Decay Score', color: '#9398ab' },
+            ticks: { color: '#9398ab' },
+            grid: { color: 'rgba(42,45,58,0.5)' }
+          }
+        }
+      }
+    });
+  }
+
+  renderDecay();
+
+  // ==========================================
+  // TOC SCROLL HIGHLIGHTING
+  // ==========================================
+  const sections = document.querySelectorAll('section[id]');
+  const navLinks = document.querySelectorAll('.toc a');
+  window.addEventListener('scroll', () => {
+    let current = '';
+    sections.forEach(s => {
+      if (window.scrollY >= s.offsetTop - 140) current = s.id;
+    });
+    navLinks.forEach(a => {
+      a.classList.toggle('active', a.getAttribute('href') === '#' + current);
+    });
+  }, { passive: true });
+})();
+</script>
+</body>
+</html>

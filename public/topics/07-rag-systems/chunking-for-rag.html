@@ -1,0 +1,885 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Chunking for RAG</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js" onload="renderMathInElement(document.body, {
+    delimiters: [
+      {left: '$$', right: '$$', display: true},
+      {left: '\\[', right: '\\]', display: true},
+      {left: '$', right: '$', display: false},
+      {left: '\\(', right: '\\)', display: false}
+    ],
+    throwOnError: false
+  });"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../playground.css" />
+</head>
+
+<body>
+<div class="topbar">
+  <a href="/" class="topbar-brand">
+    <div class="topbar-logo">RM</div>
+    <span class="topbar-label">Rahul Mrinal</span>
+  </a>
+  <a href="/blog" class="topbar-back">← Back to Blog</a>
+</div>
+
+<div class="hero">
+  <div class="container">
+    <h1>Chunking for RAG</h1>
+    <p class="subtitle">Why chunk size and overlap matter enormously for retrieval quality</p>
+    <div class="badges">
+      <span class="badge badge-hnsw">Chunking</span>
+      <span class="badge badge-ivf">Retrieval</span>
+      <span class="badge badge-pq">RAG Pipeline</span>
+    </div>
+  </div>
+</div>
+
+<nav class="toc">
+  <div class="toc-inner">
+    <a href="#s1">Index Card Analogy</a>
+    <a href="#s2">Chunk Size</a>
+    <a href="#s3">Five Strategies</a>
+    <a href="#s4">Strategy Compare</a>
+    <a href="#s5">Overlap</a>
+    <a href="#s6">Token Counting</a>
+    <a href="#s7">Testing Chunks</a>
+    <a href="#s8">Takeaway</a>
+  </div>
+</nav>
+
+<div class="container">
+
+  <!-- ===== SECTION 1: INDEX CARD ANALOGY ===== -->
+  <section id="s1">
+    <h2><span class="num">01</span> The Index Card Analogy</h2>
+    <p>Imagine you need to study for an exam. You have a 500-page textbook. You could write everything onto index cards &mdash; but <strong>how much goes on each card?</strong></p>
+
+    <div class="analogy">
+      <div class="icon">🃏</div>
+      <p><strong>Too small (one sentence per card):</strong> Each card is precise but has no context. When you pull a card, you can't tell what topic it belongs to. "The mitochondria is the powerhouse of the cell" &mdash; great, but is this about biology, energy, or cell structure?</p>
+    </div>
+
+    <div class="analogy">
+      <div class="icon">📦</div>
+      <p><strong>Too large (entire chapters per card):</strong> Each card has everything, but you can never find the specific fact you need. When someone asks "What does the mitochondria do?", you hand them 40 pages and say "it's in there somewhere."</p>
+    </div>
+
+    <div class="grid-2">
+      <div class="card card-red">
+        <h3>Too Small</h3>
+        <ul>
+          <li>Lost context around statements</li>
+          <li>Fragments of sentences</li>
+          <li>Too many chunks to search</li>
+          <li>Embedding quality degrades</li>
+        </ul>
+      </div>
+      <div class="card card-red">
+        <h3>Too Large</h3>
+        <ul>
+          <li>Diluted relevance signal</li>
+          <li>Harder to match queries precisely</li>
+          <li>Wastes context window budget</li>
+          <li>Forces LLM to find needle in haystack</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="insight">
+      <div class="insight-title">Key Insight</div>
+      <p>The right chunk size balances <strong>precision</strong> (finding exactly what's relevant) with <strong>context</strong> (having enough surrounding information to be useful). This balance depends on your data, your queries, and your embedding model.</p>
+    </div>
+  </section>
+
+  <!-- ===== SECTION 2: CHUNK SIZE SWEET SPOT ===== -->
+  <section id="s2">
+    <h2><span class="num">02</span> Chunk Size Sweet Spot</h2>
+    <p>Different chunk sizes produce dramatically different retrieval results. Use the playground below to see how chunk size and overlap affect a real document.</p>
+
+    <div class="playground">
+      <h4>Interactive Chunker</h4>
+
+      <label for="sampleTextArea" style="font-size:0.88rem;font-weight:500;margin-bottom:6px;display:block;">Sample Text</label>
+      <textarea id="sampleTextArea" class="demo-input" rows="6" style="margin-bottom:16px;">Machine learning is a subset of artificial intelligence that focuses on building systems that learn from data. Instead of being explicitly programmed, these systems improve their performance through experience. Supervised learning uses labeled examples to train models, while unsupervised learning finds hidden patterns in unlabeled data. Reinforcement learning trains agents by rewarding desired behaviors. Deep learning, a subset of machine learning, uses neural networks with many layers. Convolutional neural networks (CNNs) excel at image recognition tasks. Recurrent neural networks (RNNs) process sequential data like text and time series. Transformers have revolutionized natural language processing with their attention mechanism. Transfer learning allows models trained on one task to be fine-tuned for another. This dramatically reduces the data and compute needed for new tasks. Popular frameworks include TensorFlow, PyTorch, and scikit-learn. Model evaluation involves metrics like accuracy, precision, recall, and F1 score. Cross-validation helps assess how well a model generalizes to unseen data. Overfitting occurs when a model memorizes training data but fails on new examples. Regularization techniques like dropout and L2 penalty help prevent overfitting. Feature engineering transforms raw data into inputs that better represent the underlying problem. Hyperparameter tuning optimizes model configuration for best performance.</textarea>
+
+      <div class="slider-group">
+        <div class="slider-item">
+          <label>Chunk Size (chars) <span id="chunkSizeVal">200</span></label>
+          <input type="range" id="chunkSizeSlider" min="50" max="800" value="200" step="10" />
+        </div>
+        <div class="slider-item">
+          <label>Overlap (chars) <span id="overlapVal">30</span></label>
+          <input type="range" id="overlapSlider" min="0" max="200" value="30" step="5" />
+        </div>
+      </div>
+
+      <button class="demo-btn" id="chunkBtn">Chunk Text</button>
+
+      <div class="metrics-grid" id="chunkMetrics" style="margin-top:16px;">
+        <div class="metric-card"><div class="metric-label">Chunks</div><div class="metric-value" id="metricCount">—</div></div>
+        <div class="metric-card"><div class="metric-label">Avg Size</div><div class="metric-value" id="metricAvg">—</div></div>
+        <div class="metric-card"><div class="metric-label">Overlap %</div><div class="metric-value" id="metricOverlap">—</div></div>
+      </div>
+
+      <div id="chunkDisplay" class="chunk-display" style="margin-top:16px;"></div>
+    </div>
+
+    <div class="chart-wrap" style="margin-top:24px;">
+      <canvas id="tradeoffChart"></canvas>
+    </div>
+
+    <div class="insight">
+      <div class="insight-title">Rule of Thumb</div>
+      <p>For most RAG systems, <strong>200-500 tokens</strong> (roughly 800-2000 characters) is the sweet spot. Smaller chunks improve retrieval precision; larger chunks preserve more context for the LLM. Start at ~300 tokens and adjust based on evaluation.</p>
+    </div>
+
+    <h3>Chunk Size by Use Case</h3>
+    <table class="comparison">
+      <thead><tr><th>Use Case</th><th>Recommended Size</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr><td>FAQ / Q&A</td><td>100-200 tokens</td><td>Short, precise answers need tight chunks</td></tr>
+        <tr><td>Documentation</td><td>300-500 tokens</td><td>Balance between precision and context</td></tr>
+        <tr><td>Legal / Regulatory</td><td>500-1000 tokens</td><td>Full clause/section context needed</td></tr>
+        <tr><td>Code search</td><td>100-300 tokens</td><td>Function-level chunks, syntax-aware</td></tr>
+        <tr><td>Research papers</td><td>300-600 tokens</td><td>Paragraph-level for dense technical content</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ===== SECTION 3: FIVE CHUNKING STRATEGIES ===== -->
+  <section id="s3">
+    <h2><span class="num">03</span> Five Chunking Strategies</h2>
+    <p>Not all chunking is created equal. Each strategy makes different trade-offs between simplicity, semantic coherence, and implementation cost.</p>
+
+    <div class="card card-accent">
+      <h3>1. Fixed-Size Chunking</h3>
+      <p>Split text every N characters or tokens, regardless of content boundaries.</p>
+      <ul>
+        <li>Simplest to implement</li>
+        <li>Breaks mid-sentence, mid-word</li>
+        <li>Use when: prototyping, uniform document types</li>
+      </ul>
+    </div>
+
+    <div class="card card-green">
+      <h3>2. Sentence-Based Chunking</h3>
+      <p>Split on sentence boundaries, grouping sentences until chunk size is reached.</p>
+      <ul>
+        <li>Preserves complete thoughts</li>
+        <li>Depends on sentence detection quality</li>
+        <li>Use when: clean prose, Q&amp;A content</li>
+      </ul>
+    </div>
+
+    <div class="card card-yellow">
+      <h3>3. Paragraph-Based Chunking</h3>
+      <p>Split on paragraph breaks (double newlines), treating each paragraph as a unit.</p>
+      <ul>
+        <li>Natural topic boundaries</li>
+        <li>Chunk sizes vary widely</li>
+        <li>Use when: well-structured documents, articles</li>
+      </ul>
+    </div>
+
+    <div class="card card-red">
+      <h3>4. Semantic Chunking</h3>
+      <p>Use embeddings to detect topic shifts, splitting when similarity between consecutive sentences drops below a threshold.</p>
+      <ul>
+        <li>Best semantic coherence</li>
+        <li>Computationally expensive (needs embedding calls)</li>
+        <li>Use when: high quality matters, budget allows</li>
+      </ul>
+    </div>
+
+    <div class="card" style="border-left:3px solid var(--blue);">
+      <h3 style="color:var(--blue);">5. Recursive Chunking</h3>
+      <p>Try splitting by paragraphs first; if chunks are too large, split by sentences; if still too large, split by characters. Used by LangChain's <code>RecursiveCharacterTextSplitter</code>.</p>
+      <ul>
+        <li>Adaptive to document structure</li>
+        <li>Balances coherence and size</li>
+        <li>Use when: mixed document formats, production systems</li>
+      </ul>
+    </div>
+
+    <table class="comparison">
+      <thead>
+        <tr><th>Strategy</th><th>Coherence</th><th>Size Control</th><th>Complexity</th><th>Best For</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Fixed-Size</td><td>Low</td><td>Exact</td><td>Trivial</td><td>Prototyping</td></tr>
+        <tr><td>Sentence</td><td>Medium</td><td>Approximate</td><td>Low</td><td>Q&amp;A, prose</td></tr>
+        <tr><td>Paragraph</td><td>High</td><td>Variable</td><td>Low</td><td>Articles, docs</td></tr>
+        <tr><td>Semantic</td><td>Highest</td><td>Variable</td><td>High</td><td>Critical apps</td></tr>
+        <tr><td>Recursive</td><td>High</td><td>Good</td><td>Medium</td><td>Production</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Choosing a Strategy for Your Document Type</h3>
+    <div class="grid-2">
+      <div class="card">
+        <h3 style="color:var(--accent);">Structured Documents</h3>
+        <p>API docs, wikis, knowledge bases with clear headings and sections. Use <strong>heading-aware chunking</strong>: split on section boundaries, then apply recursive within each section. Preserve heading hierarchy as metadata.</p>
+      </div>
+      <div class="card">
+        <h3 style="color:var(--accent2);">Unstructured Text</h3>
+        <p>Emails, chat logs, transcripts without clear formatting. Use <strong>sentence-based chunking</strong> with overlap, or semantic chunking if quality justifies the embedding cost. Clean the text first (remove boilerplate, signatures).</p>
+      </div>
+      <div class="card">
+        <h3 style="color:var(--accent4);">Code and Technical Docs</h3>
+        <p>Source code, config files, technical specifications. Use <strong>syntax-aware chunking</strong>: split on function/class boundaries for code, on section headers for specs. Include the function signature or header in each chunk.</p>
+      </div>
+      <div class="card">
+        <h3 style="color:var(--accent3);">Tables and Structured Data</h3>
+        <p>CSVs, database schemas, spreadsheets. Convert rows or small row groups into natural language descriptions. Each chunk should be a self-contained data point with column headers included.</p>
+      </div>
+    </div>
+
+    <div class="pro-tip">
+      <div class="tip-header">Multi-Format Corpora</div>
+      <p>Real knowledge bases contain mixed document types. The best approach is a <strong>document-type dispatcher</strong> that detects the format (PDF, HTML, Markdown, code) and applies the appropriate chunking strategy for each. Don't use one strategy for everything.</p>
+    </div>
+  </section>
+
+  <!-- ===== SECTION 4: STRATEGY COMPARISON ===== -->
+  <section id="s4">
+    <h2><span class="num">04</span> Strategy Comparison</h2>
+    <p>See how the same text gets split differently by each strategy. Toggle between them to compare chunk boundaries and quality.</p>
+
+    <div class="playground">
+      <h4>Compare Chunking Strategies</h4>
+
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
+        <button class="btn strategy-btn active" data-strategy="fixed" style="border-color:var(--accent);color:var(--accent);background:rgba(108,99,255,0.1);">Fixed</button>
+        <button class="btn strategy-btn" data-strategy="sentence">Sentence</button>
+        <button class="btn strategy-btn" data-strategy="paragraph">Paragraph</button>
+        <button class="btn strategy-btn" data-strategy="semantic">Semantic</button>
+        <button class="btn strategy-btn" data-strategy="recursive">Recursive</button>
+      </div>
+
+      <textarea id="strategyText" class="demo-input" rows="5" style="margin-bottom:16px;">Machine learning is transforming industries worldwide. Companies use it for recommendation engines, fraud detection, and natural language processing.
+
+Deep learning has achieved remarkable results in computer vision. Convolutional neural networks can identify objects in images with superhuman accuracy. These networks learn hierarchical features from raw pixel data.
+
+Transfer learning enables practitioners to leverage pre-trained models. Instead of training from scratch, you fine-tune an existing model on your specific dataset. This approach saves enormous amounts of compute and data.
+
+Transformers have become the dominant architecture for NLP tasks. The attention mechanism allows models to weigh the importance of different parts of the input. BERT, GPT, and T5 are all transformer-based models that have set new benchmarks.</textarea>
+
+      <div class="metrics-grid" id="stratMetrics">
+        <div class="metric-card"><div class="metric-label">Chunks</div><div class="metric-value" id="stratCount">—</div></div>
+        <div class="metric-card"><div class="metric-label">Avg Size</div><div class="metric-value" id="stratAvg">—</div></div>
+        <div class="metric-card"><div class="metric-label">Coherence</div><div class="metric-value" id="stratCoherence">—</div></div>
+      </div>
+
+      <div id="strategyDisplay" class="chunk-display" style="margin-top:16px;"></div>
+    </div>
+  </section>
+
+  <!-- ===== SECTION 5: OVERLAP IMPORTANCE ===== -->
+  <section id="s5">
+    <h2><span class="num">05</span> Overlap Importance</h2>
+    <p>When you split text into chunks without overlap, critical information that spans a chunk boundary gets <strong>torn apart</strong>. Overlap ensures that boundary content appears in at least two chunks.</p>
+
+    <div class="playground">
+      <h4>Boundary Loss Visualizer</h4>
+      <p class="dim" style="font-size:0.88rem;margin-bottom:16px;">The highlighted text sits at a chunk boundary. Without overlap, a query about this information might miss it entirely.</p>
+
+      <div style="display:flex;gap:8px;margin-bottom:16px;">
+        <button class="btn btn-accent" id="overlapOff">No Overlap</button>
+        <button class="btn" id="overlapOn">With Overlap (50 chars)</button>
+      </div>
+
+      <div id="overlapViz" style="display:flex;flex-direction:column;gap:8px;"></div>
+
+      <div class="result-box" id="overlapExplanation" style="margin-top:16px;">
+        <div class="result-label">What happens</div>
+        <div id="overlapResult" style="color:var(--text-dim);font-size:0.9rem;">Click a button above to see the effect.</div>
+      </div>
+    </div>
+
+    <div class="grid-2" style="margin-top:24px;">
+      <div class="card card-red">
+        <h3>No Overlap Risks</h3>
+        <ul>
+          <li>Key facts split across chunk boundary</li>
+          <li>Sentences cut in half</li>
+          <li>Entity references separated from context</li>
+          <li>Retrieval misses boundary content</li>
+        </ul>
+      </div>
+      <div class="card card-green">
+        <h3>With Overlap Benefits</h3>
+        <ul>
+          <li>Boundary info appears in two chunks</li>
+          <li>Complete sentences preserved</li>
+          <li>Better retrieval recall</li>
+          <li>Small cost: slightly more chunks &amp; storage</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="pro-tip">
+      <div class="tip-header">Overlap Rule of Thumb</div>
+      <p>Use <strong>10-20% overlap</strong> relative to chunk size. For 500-character chunks, use 50-100 characters of overlap. Too much overlap creates redundant chunks; too little defeats the purpose.</p>
+    </div>
+
+    <div class="playground" style="margin-top:24px;">
+      <h4>Overlap Ratio Explorer</h4>
+      <p class="dim" style="font-size:0.88rem;margin-bottom:16px;">Adjust the overlap ratio and see how it affects total chunk count and redundancy for a fixed document size.</p>
+      <div class="slider-group" style="grid-template-columns:1fr;">
+        <div class="slider-item">
+          <label>Overlap Ratio <span id="overlapRatioVal">15%</span></label>
+          <input type="range" id="overlapRatioSlider" min="0" max="50" value="15" step="1" />
+        </div>
+      </div>
+      <div class="metrics-grid" style="margin-top:12px;">
+        <div class="metric-card"><div class="metric-label">Total Chunks</div><div class="metric-value" id="orChunks">—</div></div>
+        <div class="metric-card"><div class="metric-label">Redundant Chars</div><div class="metric-value" id="orRedundant">—</div></div>
+        <div class="metric-card"><div class="metric-label">Storage Overhead</div><div class="metric-value" id="orOverhead">—</div></div>
+      </div>
+      <div class="chart-wrap" style="margin-top:16px;">
+        <canvas id="overlapRatioChart"></canvas>
+      </div>
+    </div>
+
+    <table class="comparison" style="margin-top:24px;">
+      <thead><tr><th>Overlap %</th><th>Chunks (500ch doc, 100ch size)</th><th>Redundancy</th><th>Boundary Coverage</th></tr></thead>
+      <tbody>
+        <tr><td>0%</td><td>5</td><td>None</td><td>Poor — information at boundaries lost</td></tr>
+        <tr><td>10%</td><td>6</td><td>~10%</td><td>Moderate — most boundaries covered</td></tr>
+        <tr><td>20%</td><td>7</td><td>~20%</td><td>Good — solid boundary coverage</td></tr>
+        <tr><td>50%</td><td>10</td><td>~50%</td><td>Excessive — too much redundancy</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ===== SECTION 6: TOKEN COUNTING ===== -->
+  <section id="s6">
+    <h2><span class="num">06</span> Token Counting</h2>
+    <p>When we say "chunk size," do we mean characters, words, or tokens? These are very different measures, and confusing them is a common source of bugs.</p>
+
+    <div class="grid-3" style="margin-bottom:24px;">
+      <div class="card">
+        <h3 style="color:var(--accent);">Characters</h3>
+        <p>Individual letters, spaces, punctuation. "Hello world" = 11 characters. Simplest to count but least meaningful &mdash; different languages pack different information per character.</p>
+      </div>
+      <div class="card">
+        <h3 style="color:var(--accent2);">Words</h3>
+        <p>Space-separated tokens. "Hello world" = 2 words. Intuitive for humans but misleading for models &mdash; "antidisestablishmentarianism" is 1 word but many tokens.</p>
+      </div>
+      <div class="card">
+        <h3 style="color:var(--accent4);">Tokens</h3>
+        <p>Subword units used by the model's tokenizer. "Hello world" ≈ 2 tokens. "Unbelievably" ≈ 3 tokens. This is what actually matters for context windows.</p>
+      </div>
+    </div>
+
+    <div class="playground">
+      <h4>Character / Word / Token Estimator</h4>
+      <textarea id="tokenInput" class="demo-input" rows="3" style="margin-bottom:12px;" placeholder="Type or paste text here...">Retrieval-augmented generation combines the power of large language models with external knowledge retrieval.</textarea>
+      <button class="demo-btn" id="tokenBtn">Count</button>
+      <div class="metrics-grid" style="margin-top:16px;">
+        <div class="metric-card"><div class="metric-label">Characters</div><div class="metric-value" id="charCount">—</div></div>
+        <div class="metric-card"><div class="metric-label">Words</div><div class="metric-value" id="wordCount">—</div></div>
+        <div class="metric-card"><div class="metric-label">Est. Tokens</div><div class="metric-value" id="tokCount">—</div></div>
+      </div>
+    </div>
+
+    <div class="insight">
+      <div class="insight-title">Conversion Heuristic</div>
+      <p>For English text: <strong>1 token ≈ 4 characters ≈ 0.75 words</strong>. So 500 tokens ≈ 2000 characters ≈ 375 words. Always verify with your model's actual tokenizer for production use.</p>
+    </div>
+
+    <table class="comparison" style="margin-top:24px;">
+      <thead><tr><th>Example Text</th><th>Characters</th><th>Words</th><th>~Tokens</th></tr></thead>
+      <tbody>
+        <tr><td>"Hello"</td><td>5</td><td>1</td><td>1</td></tr>
+        <tr><td>"Machine learning"</td><td>16</td><td>2</td><td>2</td></tr>
+        <tr><td>"Retrieval-augmented generation"</td><td>31</td><td>2</td><td>~5</td></tr>
+        <tr><td>"The quick brown fox jumps over the lazy dog"</td><td>43</td><td>9</td><td>~9</td></tr>
+        <tr><td>A typical paragraph (200 words)</td><td>~1200</td><td>200</td><td>~270</td></tr>
+        <tr><td>A full page (~500 words)</td><td>~3000</td><td>500</td><td>~670</td></tr>
+      </tbody>
+    </table>
+
+    <div class="pro-tip">
+      <div class="tip-header">Tokenizer Differences</div>
+      <p>Different models use different tokenizers. GPT-4 (cl100k_base) and Claude (custom BPE) may tokenize the same text differently. A chunk that fits in one model's context window may overflow another's. Always test with your target model's tokenizer.</p>
+    </div>
+
+    <h3>Why Tokens Matter for RAG</h3>
+    <p>Tokens are the fundamental unit of consumption in LLM systems. They affect three critical dimensions:</p>
+
+    <div class="grid-3">
+      <div class="card card-accent">
+        <h3>Context Window</h3>
+        <p>The maximum tokens the LLM can process at once. Your system prompt + retrieved chunks + response must all fit. Chunk sizes in tokens directly determines how many chunks you can include.</p>
+      </div>
+      <div class="card card-green">
+        <h3>Cost</h3>
+        <p>LLM APIs charge per token. More chunks = more input tokens = higher cost per query. Efficient chunking directly reduces your API bill.</p>
+      </div>
+      <div class="card card-yellow">
+        <h3>Embedding Quality</h3>
+        <p>Embedding models have max input lengths (typically 512-8192 tokens). Chunks exceeding this limit get truncated silently, losing information from the end of the chunk.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== SECTION 7: TESTING YOUR CHUNKS ===== -->
+  <section id="s7">
+    <h2><span class="num">07</span> Testing Your Chunks</h2>
+    <p>Chunk quality isn't something you can eyeball &mdash; you need a systematic evaluation approach. Here's a framework for testing your chunking strategy.</p>
+
+    <div class="card card-accent">
+      <h3>Step 1: Create Test Queries</h3>
+      <p>Write 20-50 questions that your users would actually ask. Include factual lookups, conceptual questions, and multi-hop reasoning queries.</p>
+    </div>
+
+    <div class="card card-green">
+      <h3>Step 2: Annotate Ground Truth</h3>
+      <p>For each question, identify which passage(s) in your source documents contain the answer. These become your "golden chunks."</p>
+    </div>
+
+    <div class="card card-yellow">
+      <h3>Step 3: Measure Retrieval Quality</h3>
+      <p>Run each query through your retrieval pipeline. Check if the golden chunks appear in the top-K results. Compute Recall@K and Mean Reciprocal Rank (MRR).</p>
+    </div>
+
+    <div class="card card-red">
+      <h3>Step 4: Iterate on Strategy</h3>
+      <p>If recall is low, try smaller chunks. If the LLM struggles with context, try larger chunks. Test 3-5 chunk sizes systematically and pick the best performer.</p>
+    </div>
+
+    <h3>Evaluation Metrics for Chunk Quality</h3>
+    <table class="comparison">
+      <thead><tr><th>Metric</th><th>What It Measures</th><th>Good Value</th></tr></thead>
+      <tbody>
+        <tr><td>Recall@K</td><td>Does the golden chunk appear in top-K results?</td><td>> 0.8</td></tr>
+        <tr><td>MRR (Mean Reciprocal Rank)</td><td>How high does the golden chunk rank?</td><td>> 0.6</td></tr>
+        <tr><td>Chunk Coherence</td><td>Is each chunk about a single topic?</td><td>Qualitative check</td></tr>
+        <tr><td>Boundary Quality</td><td>Do chunks break at natural boundaries?</td><td>Qualitative check</td></tr>
+      </tbody>
+    </table>
+
+    <div class="insight">
+      <div class="insight-title">The 20-Query Test</div>
+      <p>Write 20 questions you'd expect users to ask. For each, identify which passage in your source contains the answer. Chunk your documents, run retrieval, and check if the golden passage appears in the top 5 results. If Recall@5 is below 0.7, your chunking strategy needs work.</p>
+    </div>
+
+    <div class="playground">
+      <h4>Chunk Quality Checklist</h4>
+      <div id="checklist" style="display:flex;flex-direction:column;gap:10px;"></div>
+      <div class="result-box" style="margin-top:16px;">
+        <div class="result-label">Score</div>
+        <div class="result-value" id="checkScore">0 / 6</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== SECTION 8: KEY TAKEAWAY ===== -->
+  <section id="s8">
+    <h2><span class="num">08</span> Key Takeaway</h2>
+
+    <div class="analogy">
+      <div class="icon">🎯</div>
+      <p><strong>Chunking is the foundation of RAG quality.</strong> No amount of sophisticated retrieval or prompt engineering can compensate for poorly chunked documents. Invest time in getting your chunking strategy right &mdash; it has the highest ROI of any RAG optimization.</p>
+    </div>
+
+    <div class="grid-2">
+      <div class="card card-green">
+        <h3>Do</h3>
+        <ul>
+          <li>Start with recursive chunking (300-500 tokens)</li>
+          <li>Use 10-20% overlap</li>
+          <li>Evaluate with real user queries</li>
+          <li>Test multiple strategies empirically</li>
+          <li>Consider document structure in your strategy</li>
+        </ul>
+      </div>
+      <div class="card card-red">
+        <h3>Don't</h3>
+        <ul>
+          <li>Use fixed-size chunking in production blindly</li>
+          <li>Skip overlap entirely</li>
+          <li>Assume one chunk size fits all document types</li>
+          <li>Confuse characters with tokens</li>
+          <li>Skip retrieval evaluation</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<footer>
+  <p>Chunking for RAG &mdash; Interactive Playground &mdash; Rahul Mrinal</p>
+</footer>
+
+<script>
+// ===== TOC SCROLL HIGHLIGHTING =====
+(function() {
+  const tocLinks = document.querySelectorAll('.toc a');
+  const sections = [];
+  tocLinks.forEach(link => {
+    const id = link.getAttribute('href').slice(1);
+    const el = document.getElementById(id);
+    if (el) sections.push({ id, el, link });
+  });
+
+  function updateTOC() {
+    let current = sections[0];
+    const offset = 140;
+    for (const s of sections) {
+      if (s.el.getBoundingClientRect().top <= offset) current = s;
+    }
+    tocLinks.forEach(l => l.classList.remove('active'));
+    if (current) current.link.classList.add('active');
+  }
+  window.addEventListener('scroll', updateTOC, { passive: true });
+  updateTOC();
+})();
+
+// ===== SECTION 2: CHUNK SIZE PLAYGROUND =====
+(function() {
+  const colors = [
+    'rgba(108,99,255,0.15)', 'rgba(0,201,167,0.12)',
+    'rgba(255,107,107,0.12)', 'rgba(255,217,61,0.12)',
+    'rgba(84,160,255,0.12)', 'rgba(243,104,224,0.12)'
+  ];
+  const borderColors = [
+    'var(--accent)', 'var(--accent2)', 'var(--accent3)',
+    'var(--accent4)', 'var(--blue)', 'var(--pink)'
+  ];
+
+  const sizeSlider = document.getElementById('chunkSizeSlider');
+  const overlapSlider = document.getElementById('overlapSlider');
+  const sizeVal = document.getElementById('chunkSizeVal');
+  const overlapVal = document.getElementById('overlapVal');
+
+  sizeSlider.addEventListener('input', () => { sizeVal.textContent = sizeSlider.value; });
+  overlapSlider.addEventListener('input', () => { overlapVal.textContent = overlapSlider.value; });
+
+  document.getElementById('chunkBtn').addEventListener('click', () => {
+    const text = document.getElementById('sampleTextArea').value;
+    const size = parseInt(sizeSlider.value);
+    const overlap = Math.min(parseInt(overlapSlider.value), size - 10);
+    const step = size - overlap;
+    const chunks = [];
+    for (let i = 0; i < text.length; i += step) {
+      chunks.push(text.slice(i, i + size));
+      if (i + size >= text.length) break;
+    }
+
+    document.getElementById('metricCount').textContent = chunks.length;
+    const avgLen = Math.round(chunks.reduce((s, c) => s + c.length, 0) / chunks.length);
+    document.getElementById('metricAvg').textContent = avgLen + ' ch';
+    const overlapPct = size > 0 ? Math.round((overlap / size) * 100) : 0;
+    document.getElementById('metricOverlap').textContent = overlapPct + '%';
+
+    const display = document.getElementById('chunkDisplay');
+    display.innerHTML = '';
+    chunks.forEach((chunk, i) => {
+      const div = document.createElement('div');
+      div.className = 'chunk-item';
+      div.style.borderLeftColor = borderColors[i % borderColors.length];
+      div.style.background = colors[i % colors.length];
+      const overlapStart = (i > 0 && overlap > 0) ? overlap : 0;
+      let html = `<span class="chunk-label" style="background:${borderColors[i % borderColors.length]}">Chunk ${i + 1}</span>`;
+      if (overlapStart > 0) {
+        html += `<span class="overlap">${escHtml(chunk.slice(0, overlapStart))}</span>${escHtml(chunk.slice(overlapStart))}`;
+      } else {
+        html += escHtml(chunk);
+      }
+      html += `<div class="chunk-meta">${chunk.length} chars</div>`;
+      div.innerHTML = html;
+      display.appendChild(div);
+    });
+  });
+
+  function escHtml(t) { return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+  // Trade-off chart
+  const ctx = document.getElementById('tradeoffChart').getContext('2d');
+  const sizes = [50, 100, 200, 300, 500, 800, 1200, 2000];
+  const precision = [0.35, 0.55, 0.78, 0.88, 0.82, 0.65, 0.48, 0.30];
+  const context   = [0.15, 0.25, 0.45, 0.60, 0.78, 0.88, 0.93, 0.96];
+  new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: sizes.map(s => s + ' ch'),
+      datasets: [
+        { label: 'Retrieval Precision', data: precision, borderColor: '#6c63ff', backgroundColor: 'rgba(108,99,255,0.1)', fill: true, tension: 0.4, pointRadius: 5 },
+        { label: 'Context Preservation', data: context, borderColor: '#00c9a7', backgroundColor: 'rgba(0,201,167,0.1)', fill: true, tension: 0.4, pointRadius: 5 }
+      ]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        title: { display: true, text: 'Chunk Size vs Retrieval Precision & Context Preservation', color: '#e8eaf0', font: { size: 14, weight: 600 } },
+        legend: { labels: { color: '#9398ab' } }
+      },
+      scales: {
+        x: { title: { display: true, text: 'Chunk Size (characters)', color: '#9398ab' }, ticks: { color: '#6d7290' }, grid: { color: 'rgba(42,45,58,0.5)' } },
+        y: { title: { display: true, text: 'Score (0-1)', color: '#9398ab' }, ticks: { color: '#6d7290' }, grid: { color: 'rgba(42,45,58,0.5)' }, min: 0, max: 1 }
+      }
+    }
+  });
+})();
+
+// ===== SECTION 4: STRATEGY COMPARISON =====
+(function() {
+  const btns = document.querySelectorAll('.strategy-btn');
+  const display = document.getElementById('strategyDisplay');
+
+  function splitFixed(text, size) {
+    const chunks = [];
+    for (let i = 0; i < text.length; i += size) chunks.push(text.slice(i, i + size));
+    return chunks;
+  }
+  function splitSentence(text) {
+    return text.match(/[^.!?]+[.!?]+/g) || [text];
+  }
+  function splitParagraph(text) {
+    return text.split(/\n\s*\n/).filter(p => p.trim());
+  }
+  function splitSemantic(text) {
+    const sents = splitSentence(text);
+    const chunks = []; let current = '';
+    sents.forEach((s, i) => {
+      current += s;
+      if ((i + 1) % 2 === 0 || i === sents.length - 1) {
+        chunks.push(current.trim());
+        current = '';
+      }
+    });
+    return chunks.filter(c => c);
+  }
+  function splitRecursive(text, maxSize) {
+    maxSize = maxSize || 250;
+    const paras = text.split(/\n\s*\n/).filter(p => p.trim());
+    const chunks = [];
+    paras.forEach(p => {
+      if (p.length <= maxSize) { chunks.push(p.trim()); return; }
+      const sents = p.match(/[^.!?]+[.!?]+/g) || [p];
+      let current = '';
+      sents.forEach(s => {
+        if ((current + s).length > maxSize && current) { chunks.push(current.trim()); current = ''; }
+        current += s;
+      });
+      if (current.trim()) chunks.push(current.trim());
+    });
+    return chunks;
+  }
+
+  const coherenceScores = { fixed: 'Low', sentence: 'Medium', paragraph: 'High', semantic: 'High', recursive: 'High' };
+
+  function runStrategy(strategy) {
+    const text = document.getElementById('strategyText').value;
+    let chunks;
+    switch(strategy) {
+      case 'fixed': chunks = splitFixed(text, 150); break;
+      case 'sentence': chunks = splitSentence(text); break;
+      case 'paragraph': chunks = splitParagraph(text); break;
+      case 'semantic': chunks = splitSemantic(text); break;
+      case 'recursive': chunks = splitRecursive(text, 250); break;
+      default: chunks = splitFixed(text, 150);
+    }
+
+    document.getElementById('stratCount').textContent = chunks.length;
+    const avg = chunks.length ? Math.round(chunks.reduce((s,c) => s + c.length, 0) / chunks.length) : 0;
+    document.getElementById('stratAvg').textContent = avg + ' ch';
+    document.getElementById('stratCoherence').textContent = coherenceScores[strategy] || '—';
+
+    const colors = ['rgba(108,99,255,0.12)','rgba(0,201,167,0.10)','rgba(255,107,107,0.10)','rgba(255,217,61,0.10)','rgba(84,160,255,0.10)','rgba(243,104,224,0.10)'];
+    const borders = ['var(--accent)','var(--accent2)','var(--accent3)','var(--accent4)','var(--blue)','var(--pink)'];
+
+    display.innerHTML = '';
+    chunks.forEach((chunk, i) => {
+      const div = document.createElement('div');
+      div.className = 'chunk-item';
+      div.style.borderLeftColor = borders[i % borders.length];
+      div.style.background = colors[i % colors.length];
+      div.innerHTML = `<span class="chunk-label" style="background:${borders[i % borders.length]}">Chunk ${i+1}</span>${chunk.replace(/&/g,'&amp;').replace(/</g,'&lt;')}<div class="chunk-meta">${chunk.length} chars</div>`;
+      display.appendChild(div);
+    });
+  }
+
+  btns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      btns.forEach(b => { b.classList.remove('active'); b.style.borderColor = ''; b.style.color = ''; b.style.background = ''; });
+      btn.classList.add('active');
+      btn.style.borderColor = 'var(--accent)';
+      btn.style.color = 'var(--accent)';
+      btn.style.background = 'rgba(108,99,255,0.1)';
+      runStrategy(btn.dataset.strategy);
+    });
+  });
+  runStrategy('fixed');
+})();
+
+// ===== SECTION 5: OVERLAP VISUALIZER =====
+(function() {
+  const textA = "Transfer learning enables practitioners to leverage pre-trained models. Instead of training from";
+  const textB = " scratch, you fine-tune an existing model on your specific dataset. This approach saves compute.";
+  const overlapText = " scratch, you fine-tune an existing";
+  const viz = document.getElementById('overlapViz');
+  const result = document.getElementById('overlapResult');
+
+  function renderNoOverlap() {
+    viz.innerHTML = `
+      <div class="chunk-item" style="border-left-color:var(--accent);background:rgba(108,99,255,0.12);">
+        <span class="chunk-label" style="background:var(--accent)">Chunk 1</span>
+        ${esc(textA)}<span style="background:rgba(255,107,107,0.3);border-radius:3px;padding:0 2px;">|CUT|</span>
+        <div class="chunk-meta">Ends mid-sentence</div>
+      </div>
+      <div class="chunk-item" style="border-left-color:var(--accent2);background:rgba(0,201,167,0.10);">
+        <span class="chunk-label" style="background:var(--accent2)">Chunk 2</span>
+        <span style="background:rgba(255,107,107,0.3);border-radius:3px;padding:0 2px;">|CUT|</span>${esc(textB)}
+        <div class="chunk-meta">Starts mid-sentence</div>
+      </div>`;
+    result.innerHTML = '<span style="color:var(--accent3);font-weight:600;">Problem:</span> The sentence about fine-tuning is split across two chunks. A query about "fine-tuning pre-trained models" may match neither chunk well enough to be retrieved.';
+    document.getElementById('overlapOff').className = 'btn btn-accent';
+    document.getElementById('overlapOn').className = 'btn';
+  }
+
+  function renderWithOverlap() {
+    viz.innerHTML = `
+      <div class="chunk-item" style="border-left-color:var(--accent);background:rgba(108,99,255,0.12);">
+        <span class="chunk-label" style="background:var(--accent)">Chunk 1</span>
+        ${esc(textA)}<span class="overlap">${esc(overlapText)}</span>
+        <div class="chunk-meta">Includes overlap region</div>
+      </div>
+      <div class="chunk-item" style="border-left-color:var(--accent2);background:rgba(0,201,167,0.10);">
+        <span class="chunk-label" style="background:var(--accent2)">Chunk 2</span>
+        <span class="overlap">${esc(overlapText)}</span>${esc(textB)}
+        <div class="chunk-meta">Overlap region repeated</div>
+      </div>`;
+    result.innerHTML = '<span style="color:var(--accent2);font-weight:600;">Fixed:</span> The overlap region (highlighted in yellow) appears in both chunks. A query about "fine-tuning" now matches Chunk 1 where the full context is preserved.';
+    document.getElementById('overlapOn').className = 'btn btn-accent';
+    document.getElementById('overlapOff').className = 'btn';
+  }
+
+  function esc(t) { return t.replace(/&/g,'&amp;').replace(/</g,'&lt;'); }
+
+  document.getElementById('overlapOff').addEventListener('click', renderNoOverlap);
+  document.getElementById('overlapOn').addEventListener('click', renderWithOverlap);
+  renderNoOverlap();
+})();
+
+// ===== SECTION 5b: OVERLAP RATIO EXPLORER =====
+(function() {
+  const slider = document.getElementById('overlapRatioSlider');
+  const valEl = document.getElementById('overlapRatioVal');
+  const docSize = 5000;
+  const chunkSize = 400;
+
+  let overlapChart;
+  const ctx = document.getElementById('overlapRatioChart').getContext('2d');
+
+  function updateOverlapExplorer() {
+    const ratio = parseInt(slider.value);
+    valEl.textContent = ratio + '%';
+    const overlap = Math.round(chunkSize * ratio / 100);
+    const step = Math.max(chunkSize - overlap, 1);
+    const numChunks = Math.ceil(docSize / step);
+    const redundant = numChunks > 1 ? (numChunks - 1) * overlap : 0;
+    const overhead = Math.round((redundant / docSize) * 100);
+
+    document.getElementById('orChunks').textContent = numChunks;
+    document.getElementById('orRedundant').textContent = redundant + ' ch';
+    document.getElementById('orOverhead').textContent = overhead + '%';
+
+    const ratios = [];
+    const chunkCounts = [];
+    const overheads = [];
+    for (let r = 0; r <= 50; r += 5) {
+      ratios.push(r + '%');
+      const ov = Math.round(chunkSize * r / 100);
+      const st = Math.max(chunkSize - ov, 1);
+      chunkCounts.push(Math.ceil(docSize / st));
+      const red = (Math.ceil(docSize / st) - 1) * ov;
+      overheads.push(Math.round((red / docSize) * 100));
+    }
+
+    if (overlapChart) overlapChart.destroy();
+    overlapChart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: ratios,
+        datasets: [
+          { label: 'Chunks', data: chunkCounts, backgroundColor: 'rgba(108,99,255,0.6)', yAxisID: 'y' },
+          { label: 'Storage Overhead %', data: overheads, type: 'line', borderColor: '#ff6b6b', backgroundColor: 'rgba(255,107,107,0.1)', yAxisID: 'y1', tension: 0.3, pointRadius: 4 }
+        ]
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          title: { display: true, text: 'Overlap Ratio vs Chunk Count & Storage Overhead', color: '#e8eaf0', font: { size: 13, weight: 600 } },
+          legend: { labels: { color: '#9398ab' } }
+        },
+        scales: {
+          x: { ticks: { color: '#6d7290' }, grid: { color: 'rgba(42,45,58,0.5)' } },
+          y: { position: 'left', title: { display: true, text: 'Chunk Count', color: '#9398ab' }, ticks: { color: '#6d7290' }, grid: { color: 'rgba(42,45,58,0.5)' } },
+          y1: { position: 'right', title: { display: true, text: 'Overhead %', color: '#9398ab' }, ticks: { color: '#6d7290' }, grid: { drawOnChartArea: false } }
+        }
+      }
+    });
+  }
+
+  slider.addEventListener('input', updateOverlapExplorer);
+  updateOverlapExplorer();
+})();
+
+// ===== SECTION 6: TOKEN COUNTER =====
+(function() {
+  document.getElementById('tokenBtn').addEventListener('click', () => {
+    const text = document.getElementById('tokenInput').value;
+    document.getElementById('charCount').textContent = text.length;
+    document.getElementById('wordCount').textContent = text.trim().split(/\s+/).filter(w => w).length;
+    document.getElementById('tokCount').textContent = '~' + Math.round(text.length / 4);
+  });
+})();
+
+// ===== SECTION 7: CHECKLIST =====
+(function() {
+  const items = [
+    'Each chunk is semantically coherent (single topic)',
+    'Chunk boundaries don\'t split critical information',
+    'Overlap is configured (10-20% of chunk size)',
+    'Chunk sizes are appropriate for your embedding model',
+    'Retrieval recall tested with real user queries',
+    'Multiple chunking strategies compared empirically'
+  ];
+  const checklist = document.getElementById('checklist');
+  const scoreEl = document.getElementById('checkScore');
+  let checked = new Set();
+
+  items.forEach((item, i) => {
+    const label = document.createElement('label');
+    label.style.cssText = 'display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px 14px;background:var(--code-bg);border:1px solid var(--border);border-radius:8px;font-size:0.9rem;transition:border-color 0.2s;';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.style.accentColor = 'var(--accent)';
+    cb.addEventListener('change', () => {
+      if (cb.checked) checked.add(i); else checked.delete(i);
+      scoreEl.textContent = checked.size + ' / ' + items.length;
+      scoreEl.style.color = checked.size === items.length ? 'var(--accent2)' : 'var(--accent)';
+      label.style.borderColor = cb.checked ? 'var(--accent2)' : 'var(--border)';
+    });
+    label.appendChild(cb);
+    label.appendChild(document.createTextNode(item));
+    checklist.appendChild(label);
+  });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,800 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TF-IDF vs BM25: Head to Head</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js" onload="renderMathInElement(document.body, {
+    delimiters: [
+      {left: '$$', right: '$$', display: true},
+      {left: '\\[', right: '\\]', display: true},
+      {left: '$', right: '$', display: false},
+      {left: '\\(', right: '\\)', display: false}
+    ],
+    throwOnError: false
+  });"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../playground.css" />
+</head>
+
+<body>
+<div class="topbar">
+  <a href="/" class="topbar-brand">
+    <div class="topbar-logo">RM</div>
+    <span class="topbar-label">Rahul Mrinal</span>
+  </a>
+  <a href="/blog" class="topbar-back">← Back to Blog</a>
+</div>
+
+  <div class="hero">
+    <div class="container">
+      <h1>TF-IDF vs BM25: Head to Head</h1>
+      <p>See exactly where and why BM25 beats TF-IDF with interactive comparisons</p>
+    </div>
+  </div>
+
+  <nav class="toc">
+    <div class="toc-inner">
+      <a href="#s1">Contenders</a>
+      <a href="#s2">TF-IDF</a>
+      <a href="#s3">BM25</a>
+      <a href="#s4">Keyword Stuffing</a>
+      <a href="#s5">Doc Length</a>
+      <a href="#s6">Parameters</a>
+      <a href="#s7">Side-by-Side</a>
+      <a href="#s8">Trade-offs</a>
+      <a href="#s9">Takeaway</a>
+    </div>
+  </nav>
+
+  <div class="container">
+
+    <!-- ===== SECTION 1: THE CONTENDERS ===== -->
+    <section id="s1">
+      <h2><span class="num">01</span> The Contenders</h2>
+      <p>Two algorithms dominate keyword-based search. One came first and built the foundation. The other refined it into the most widely deployed ranking function on earth.</p>
+
+      <div class="grid-2">
+        <div class="card card-accent">
+          <h3 style="margin-top:0; color:var(--accent);">TF-IDF</h3>
+          <p class="dim">Born in the 1970s. Simple, elegant multiplication: how often a term appears in a doc times how rare it is across all docs. The foundation of information retrieval.</p>
+          <ul>
+            <li>Linear term frequency</li>
+            <li>No length normalization</li>
+            <li>No saturation curve</li>
+          </ul>
+        </div>
+        <div class="card card-green">
+          <h3 style="margin-top:0; color:var(--accent2);">BM25</h3>
+          <p class="dim">Developed in the 1990s by Robertson & Sparck Jones. Probabilistically motivated upgrade that fixes TF-IDF's biggest weaknesses. Powers Elasticsearch, Lucene, Solr.</p>
+          <ul>
+            <li>Saturating term frequency</li>
+            <li>Built-in length normalization</li>
+            <li>Tunable parameters \(k_1\) and \(b\)</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="analogy">
+        <div class="icon">🥊</div>
+        <p><strong>Analogy:</strong> TF-IDF is like counting how many times a student mentions a topic in their essay. BM25 is like a smarter grader who knows that mentioning "machine learning" 50 times doesn't make an essay twice as good as one that mentions it 25 times — and who also adjusts for essay length.</p>
+      </div>
+    </section>
+
+    <!-- ===== SECTION 2: TF-IDF FORMULA ===== -->
+    <section id="s2">
+      <h2><span class="num">02</span> TF-IDF Formula</h2>
+      <p>TF-IDF multiplies two components: how frequent a term is locally, and how rare it is globally.</p>
+
+      <div class="formula-box">
+        $$\color{#6c63ff}{\text{TF-IDF}(t,\, d)} \;=\; \underbrace{\color{#6c63ff}{f(t,d)}}_{\text{term frequency}} \;\times\; \underbrace{\color{#00c9a7}{\ln\!\left(\frac{N}{\text{df}(t)}\right)}}_{\text{inverse doc frequency}}$$
+        <div class="label">
+          \(f(t,d)\) = count of term \(t\) in doc \(d\) &nbsp;&bull;&nbsp;
+          \(N\) = total documents &nbsp;&bull;&nbsp;
+          \(\text{df}(t)\) = documents containing \(t\)
+        </div>
+      </div>
+
+      <h3>Components</h3>
+      <div class="grid-2">
+        <div class="card card-accent">
+          <strong>Term Frequency (TF)</strong>
+          <p class="dim">Raw count of how many times the query term appears in the document. More mentions = higher score. Grows <strong>linearly</strong> — this is the weakness BM25 fixes.</p>
+        </div>
+        <div class="card card-green">
+          <strong>Inverse Document Frequency (IDF)</strong>
+          <p class="dim">Measures how rare a term is. "the" appears everywhere (low IDF). "eigenvalue" appears rarely (high IDF). Rare terms are more discriminative.</p>
+        </div>
+      </div>
+
+      <div class="card card-yellow">
+        <strong>The log-TF variant</strong>
+        <p class="dim">Some implementations use \(1 + \ln(f(t,d))\) instead of raw \(f(t,d)\) to slightly dampen TF growth, but it still doesn't saturate like BM25.</p>
+      </div>
+    </section>
+
+    <!-- ===== SECTION 3: BM25 FORMULA ===== -->
+    <section id="s3">
+      <h2><span class="num">03</span> BM25 Formula</h2>
+      <p>BM25 adds two critical improvements: <strong>TF saturation</strong> and <strong>length normalization</strong>.</p>
+
+      <div class="formula-box" style="padding: 40px 24px 28px;">
+        $$\color{#6c63ff}{\text{BM25}(q,\, d)} \;=\; \sum_{t \,\in\, q} \;\color{#00c9a7}{\text{IDF}(t)} \;\cdot\; \frac{\color{#6c63ff}{f(t,d)} \;\cdot\; (\color{#ffd93d}{k_1} + 1)}{\color{#6c63ff}{f(t,d)} \;+\; \color{#ffd93d}{k_1} \;\cdot\; \left(1 - \color{#ff6b6b}{b} + \color{#ff6b6b}{b} \;\cdot\; \dfrac{|d|}{\text{avgdl}}\right)}$$
+        <div class="label" style="font-size:0.85rem;">
+          \(\color{#ffd93d}{k_1}\) controls saturation speed &nbsp;&bull;&nbsp;
+          \(\color{#ff6b6b}{b}\) controls length normalization strength
+        </div>
+      </div>
+
+      <h3>What makes BM25 better?</h3>
+      <div class="grid-2">
+        <div class="card card-accent">
+          <strong>Saturation</strong>
+          <p class="dim">The TF component \(\frac{f \cdot (k_1+1)}{f + k_1}\) approaches a maximum as frequency increases. The 10th mention of "python" adds far less than the 1st. This prevents keyword stuffing from gaming rankings.</p>
+        </div>
+        <div class="card card-green">
+          <strong>Length Normalization</strong>
+          <p class="dim">The denominator includes \(\frac{|d|}{\text{avgdl}}\), which penalizes documents longer than average. A 10,000-word doc mentioning "python" 50 times gets a lower score than a 200-word doc mentioning it 10 times.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== SECTION 4: KEYWORD STUFFING TEST ===== -->
+    <section id="s4">
+      <h2><span class="num">04</span> Keyword Stuffing Test</h2>
+      <p>What happens when a term is repeated more and more? TF-IDF grows linearly forever. BM25 saturates.</p>
+
+      <div class="playground">
+        <h4>Keyword Stuffing: TF-IDF vs BM25</h4>
+
+        <div style="margin-bottom:16px;">
+          <label style="font-size:0.85rem; font-weight:600; display:block; margin-bottom:6px;">Term to repeat</label>
+          <input type="text" id="stuff-term" class="demo-input" value="python" style="min-height:auto; max-width:300px;" />
+        </div>
+
+        <div class="slider-group">
+          <div class="slider-item">
+            <label><span>Repeat count</span><span id="stuff-count-val">10</span></label>
+            <input type="range" id="stuff-count" min="1" max="50" step="1" value="10" />
+          </div>
+          <div class="slider-item">
+            <label><span>k₁</span><span id="stuff-k1-val">1.2</span></label>
+            <input type="range" id="stuff-k1" min="0.5" max="3.0" step="0.1" value="1.2" />
+          </div>
+        </div>
+
+        <div class="chart-wrap">
+          <canvas id="stuffChart"></canvas>
+        </div>
+
+        <div class="grid-2" style="margin-top:16px;">
+          <div class="result-box">
+            <div class="result-label">TF-IDF Score at current count</div>
+            <div class="result-value" id="stuff-tfidf-score">—</div>
+          </div>
+          <div class="result-box">
+            <div class="result-label">BM25 Score at current count</div>
+            <div class="result-value" id="stuff-bm25-score">—</div>
+          </div>
+        </div>
+
+        <p class="dim" style="font-size:0.85rem; margin-top:12px;">
+          Notice how the TF-IDF line keeps climbing while BM25 flattens out. This is why BM25 is resistant to keyword stuffing — repeating a term beyond a certain point yields minimal score gains.
+        </p>
+      </div>
+    </section>
+
+    <!-- ===== SECTION 5: LONG DOCUMENT BIAS ===== -->
+    <section id="s5">
+      <h2><span class="num">05</span> Long Document Bias</h2>
+      <p>Longer documents naturally contain more term occurrences. TF-IDF rewards them unfairly. BM25 normalizes for length.</p>
+
+      <div class="playground">
+        <h4>Document Length Bias Comparison</h4>
+
+        <div style="margin-bottom:16px;">
+          <label style="font-size:0.85rem; font-weight:600; display:block; margin-bottom:6px;">Search Query</label>
+          <input type="text" id="len-query" class="demo-input" value="machine learning" style="min-height:auto;" />
+        </div>
+
+        <div class="grid-2" style="margin-bottom:16px;">
+          <div>
+            <label style="font-size:0.85rem; font-weight:600; display:block; margin-bottom:6px;">Short Document (~30 words)</label>
+            <textarea id="len-short" class="demo-input" rows="4">Machine learning is a powerful approach to artificial intelligence. It enables systems to learn from data and improve predictions through experience.</textarea>
+          </div>
+          <div>
+            <label style="font-size:0.85rem; font-weight:600; display:block; margin-bottom:6px;">Long Document (~100 words)</label>
+            <textarea id="len-long" class="demo-input" rows="4">This comprehensive guide covers many topics in computer science including databases, networking, operating systems, and software engineering. Machine learning is briefly mentioned as one of many approaches to data analysis. The document also discusses web development, cloud computing, DevOps practices, mobile development, security best practices, API design, testing methodologies, performance optimization, and system administration. Machine learning algorithms are used in some of these areas for automation and prediction tasks.</textarea>
+          </div>
+        </div>
+
+        <div class="slider-group">
+          <div class="slider-item">
+            <label><span>k₁</span><span id="len-k1-val">1.2</span></label>
+            <input type="range" id="len-k1" min="0.5" max="3.0" step="0.1" value="1.2" />
+          </div>
+          <div class="slider-item">
+            <label><span>b (length norm)</span><span id="len-b-val">0.75</span></label>
+            <input type="range" id="len-b" min="0" max="1" step="0.05" value="0.75" />
+          </div>
+        </div>
+
+        <button class="demo-btn" onclick="runLengthBias()">Compare Scores</button>
+
+        <div id="len-results" style="margin-top:16px;"></div>
+
+        <div class="insight" style="margin-top:16px;">
+          <div class="insight-title">Key Insight</div>
+          <p>Try setting <strong>b = 0</strong> (no length normalization) — BM25 starts behaving more like TF-IDF, favoring the longer document. Set <strong>b = 1</strong> for maximum length penalty.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== SECTION 6: PARAMETER SENSITIVITY ===== -->
+    <section id="s6">
+      <h2><span class="num">06</span> Parameter Sensitivity</h2>
+      <p>BM25's two knobs — \(k_1\) and \(b\) — let you tune the ranking behavior. See how they interact.</p>
+
+      <div class="playground">
+        <h4>BM25 Parameter Explorer</h4>
+
+        <div class="slider-group">
+          <div class="slider-item">
+            <label><span>k₁ (saturation)</span><span id="param-k1-val">1.2</span></label>
+            <input type="range" id="param-k1" min="0.5" max="3.0" step="0.1" value="1.2" />
+          </div>
+          <div class="slider-item">
+            <label><span>b (length norm)</span><span id="param-b-val">0.75</span></label>
+            <input type="range" id="param-b" min="0" max="1" step="0.05" value="0.75" />
+          </div>
+        </div>
+
+        <div class="chart-wrap">
+          <canvas id="paramChart"></canvas>
+        </div>
+
+        <div class="grid-3" style="margin-top:16px;">
+          <div class="result-box" style="text-align:center;">
+            <div class="result-label">Short Doc (50 words)</div>
+            <div class="result-value" id="param-short">—</div>
+          </div>
+          <div class="result-box" style="text-align:center;">
+            <div class="result-label">Average Doc (200 words)</div>
+            <div class="result-value" id="param-avg">—</div>
+          </div>
+          <div class="result-box" style="text-align:center;">
+            <div class="result-label">Long Doc (500 words)</div>
+            <div class="result-value" id="param-long">—</div>
+          </div>
+        </div>
+
+        <p class="dim" style="font-size:0.85rem; margin-top:12px;">
+          The chart shows BM25 TF component for three document lengths (all with tf=5). Watch how increasing \(b\) spreads the curves apart — long documents get penalized more.
+        </p>
+      </div>
+    </section>
+
+    <!-- ===== SECTION 7: SIDE-BY-SIDE SEARCH ===== -->
+    <section id="s7">
+      <h2><span class="num">07</span> Side-by-Side Search</h2>
+      <p>Run both algorithms on the same query and corpus. See how rankings differ.</p>
+
+      <div class="playground">
+        <h4>TF-IDF vs BM25 Search Engine</h4>
+
+        <div style="margin-bottom:16px;">
+          <label style="font-size:0.85rem; font-weight:600; display:block; margin-bottom:6px;">Query</label>
+          <input type="text" id="vs-query" class="demo-input" value="machine learning algorithms" style="min-height:auto;" />
+        </div>
+
+        <div style="margin-bottom:16px;">
+          <label style="font-size:0.85rem; font-weight:600; display:block; margin-bottom:6px;">Documents (one per line)</label>
+          <textarea id="vs-docs" class="demo-input" rows="8">Machine learning is a subset of artificial intelligence
+Deep learning algorithms use neural networks for machine learning tasks
+A comprehensive introduction covering machine learning machine learning machine learning algorithms algorithms algorithms and more machine learning topics with extensive discussion of algorithms
+Statistical algorithms for data analysis
+Python machine learning with scikit-learn: practical algorithms for classification and regression in machine learning
+The history of artificial intelligence and expert systems</textarea>
+        </div>
+
+        <div class="slider-group">
+          <div class="slider-item">
+            <label><span>k₁</span><span id="vs-k1-val">1.2</span></label>
+            <input type="range" id="vs-k1" min="0.5" max="3.0" step="0.1" value="1.2" />
+          </div>
+          <div class="slider-item">
+            <label><span>b</span><span id="vs-b-val">0.75</span></label>
+            <input type="range" id="vs-b" min="0" max="1" step="0.05" value="0.75" />
+          </div>
+        </div>
+
+        <button class="demo-btn" onclick="runVsSearch()">Run Both</button>
+
+        <div class="grid-2" style="margin-top:20px;">
+          <div>
+            <h4 style="color:var(--accent); margin-bottom:12px;">TF-IDF Rankings</h4>
+            <div id="vs-tfidf-results"></div>
+          </div>
+          <div>
+            <h4 style="color:var(--accent2); margin-bottom:12px;">BM25 Rankings</h4>
+            <div id="vs-bm25-results"></div>
+          </div>
+        </div>
+
+        <div id="vs-diff" style="margin-top:16px;"></div>
+      </div>
+    </section>
+
+    <!-- ===== SECTION 8: WHEN TO USE WHAT ===== -->
+    <section id="s8">
+      <h2><span class="num">08</span> When to Use What</h2>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Scenario</th>
+            <th>TF-IDF</th>
+            <th>BM25</th>
+            <th>Winner</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>General web search</strong></td>
+            <td>Biased toward long pages</td>
+            <td>Normalizes for length</td>
+            <td><span class="badge badge-green">BM25</span></td>
+          </tr>
+          <tr>
+            <td><strong>Short uniform docs</strong> (tweets, titles)</td>
+            <td>Works fine</td>
+            <td>Slight advantage</td>
+            <td><span class="badge badge-green">BM25</span></td>
+          </tr>
+          <tr>
+            <td><strong>Feature extraction for ML</strong></td>
+            <td>Standard choice</td>
+            <td>Less common</td>
+            <td><span class="badge badge-accent">TF-IDF</span></td>
+          </tr>
+          <tr>
+            <td><strong>Spam / keyword stuffing</strong></td>
+            <td>Easily gamed</td>
+            <td>Saturates — resistant</td>
+            <td><span class="badge badge-green">BM25</span></td>
+          </tr>
+          <tr>
+            <td><strong>Mixed-length corpora</strong></td>
+            <td>Poor — long docs dominate</td>
+            <td>Length-normalized</td>
+            <td><span class="badge badge-green">BM25</span></td>
+          </tr>
+          <tr>
+            <td><strong>Simplicity / teaching</strong></td>
+            <td>Simpler to understand</td>
+            <td>More parameters</td>
+            <td><span class="badge badge-accent">TF-IDF</span></td>
+          </tr>
+          <tr>
+            <td><strong>Production search engines</strong></td>
+            <td>Outdated for ranking</td>
+            <td>Industry standard</td>
+            <td><span class="badge badge-green">BM25</span></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="card card-yellow">
+        <strong>Bottom line:</strong>
+        <p class="dim">Use TF-IDF for feature engineering in ML pipelines and for educational purposes. Use BM25 for any production search or ranking system. BM25 is strictly better for search — it's what Elasticsearch, Lucene, and Solr all default to.</p>
+      </div>
+    </section>
+
+    <!-- ===== SECTION 9: KEY TAKEAWAY ===== -->
+    <section id="s9">
+      <h2><span class="num">09</span> Key Takeaway</h2>
+
+      <div class="card card-green" style="border-left-width:4px;">
+        <h3 style="margin-top:0; color:var(--accent2);">BM25 = TF-IDF + Saturation + Length Normalization</h3>
+        <p class="dim" style="font-size:1rem; line-height:1.8;">
+          BM25 isn't a completely different algorithm — it's a principled <em>refinement</em> of TF-IDF. The two key improvements are:
+        </p>
+        <ol style="color:var(--text-dim); margin-top:8px;">
+          <li><strong>Term frequency saturation</strong> — Diminishing returns from repeated terms, preventing keyword stuffing</li>
+          <li><strong>Document length normalization</strong> — Fair comparison between short focused docs and long unfocused ones</li>
+        </ol>
+        <p class="dim" style="margin-top:12px;">
+          Every modern search engine uses BM25 (or a variant). Understanding the <em>why</em> behind each component makes you a better search engineer.
+        </p>
+      </div>
+
+      <div class="step-flow" style="justify-content:center; margin-top:32px;">
+        <div class="step-pill" style="border-color:var(--accent); color:var(--accent);">TF-IDF (1970s)</div>
+        <div class="step-arrow">→</div>
+        <div class="step-pill" style="border-color:var(--accent2); color:var(--accent2);">BM25 (1990s)</div>
+        <div class="step-arrow">→</div>
+        <div class="step-pill" style="border-color:var(--accent4); color:var(--accent4);">Hybrid Search (2020s)</div>
+      </div>
+    </section>
+
+  </div>
+
+  <div class="footer">
+    <p>TF-IDF: Term Frequency–Inverse Document Frequency. BM25: Best Matching 25 (Okapi BM25).</p>
+    <p style="margin-top:4px;">BM25 developed by Robertson, Walker, Jones, Hancock-Beaulieu, and Gatford at City University London.</p>
+  </div>
+
+  <script>
+    // ======== KEYWORD STUFFING CHART ========
+    const stuffCtx = document.getElementById('stuffChart').getContext('2d');
+
+    function genStuffData(maxCount, k1) {
+      const labels = [], tfidf = [], bm25 = [];
+      const idf = Math.log(10 / 3 + 1);
+      for (let tf = 0; tf <= maxCount; tf++) {
+        labels.push(tf);
+        tfidf.push(tf * idf);
+        bm25.push(idf * (tf * (k1 + 1)) / (tf + k1));
+      }
+      return { labels, tfidf, bm25 };
+    }
+
+    let sData = genStuffData(50, 1.2);
+    const stuffChart = new Chart(stuffCtx, {
+      type: 'line',
+      data: {
+        labels: sData.labels,
+        datasets: [
+          {
+            label: 'TF-IDF',
+            data: sData.tfidf,
+            borderColor: '#6c63ff',
+            backgroundColor: 'rgba(108,99,255,0.08)',
+            fill: true,
+            tension: 0.2,
+            pointRadius: 0,
+            borderWidth: 2.5,
+          },
+          {
+            label: 'BM25',
+            data: sData.bm25,
+            borderColor: '#00c9a7',
+            backgroundColor: 'rgba(0,201,167,0.08)',
+            fill: true,
+            tension: 0.3,
+            pointRadius: 0,
+            borderWidth: 2.5,
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        animation: { duration: 300 },
+        interaction: { mode: 'index', intersect: false },
+        scales: {
+          x: {
+            title: { display: true, text: 'Term Frequency (repeat count)', color: '#8b8fa7' },
+            ticks: { color: '#8b8fa7' },
+            grid: { color: 'rgba(46,51,69,0.5)' }
+          },
+          y: {
+            title: { display: true, text: 'Score', color: '#8b8fa7' },
+            ticks: { color: '#8b8fa7' },
+            grid: { color: 'rgba(46,51,69,0.5)' },
+            min: 0,
+          }
+        },
+        plugins: {
+          legend: {
+            labels: { color: '#e8eaf0', usePointStyle: true, pointStyle: 'line' }
+          }
+        }
+      }
+    });
+
+    function updateStuffChart() {
+      const maxCount = parseInt(document.getElementById('stuff-count').value);
+      const k1 = parseFloat(document.getElementById('stuff-k1').value);
+      document.getElementById('stuff-count-val').textContent = maxCount;
+      document.getElementById('stuff-k1-val').textContent = k1.toFixed(1);
+
+      const d = genStuffData(50, k1);
+      stuffChart.data.labels = d.labels;
+      stuffChart.data.datasets[0].data = d.tfidf;
+      stuffChart.data.datasets[1].data = d.bm25;
+      stuffChart.update();
+
+      const idf = Math.log(10 / 3 + 1);
+      document.getElementById('stuff-tfidf-score').textContent = (maxCount * idf).toFixed(2);
+      document.getElementById('stuff-bm25-score').textContent = (idf * (maxCount * (k1 + 1)) / (maxCount + k1)).toFixed(2);
+    }
+
+    document.getElementById('stuff-count').addEventListener('input', updateStuffChart);
+    document.getElementById('stuff-k1').addEventListener('input', updateStuffChart);
+    document.getElementById('stuff-term').addEventListener('input', updateStuffChart);
+    updateStuffChart();
+
+    // ======== LONG DOCUMENT BIAS ========
+    function computeTFIDF(query, docText, allDocs) {
+      const qTerms = query.toLowerCase().split(/\s+/).filter(Boolean);
+      const docWords = docText.toLowerCase().split(/\s+/).filter(Boolean);
+      const N = allDocs.length;
+      let score = 0;
+      for (const t of qTerms) {
+        const tf = docWords.filter(w => w === t).length;
+        const df = allDocs.filter(d => d.toLowerCase().split(/\s+/).includes(t)).length;
+        if (df === 0) continue;
+        const idf = Math.log(N / df);
+        score += tf * idf;
+      }
+      return score;
+    }
+
+    function computeBM25(query, docText, allDocs, k1, b) {
+      const qTerms = query.toLowerCase().split(/\s+/).filter(Boolean);
+      const docWords = docText.toLowerCase().split(/\s+/).filter(Boolean);
+      const N = allDocs.length;
+      const allLens = allDocs.map(d => d.toLowerCase().split(/\s+/).filter(Boolean).length);
+      const avgdl = allLens.reduce((a, c) => a + c, 0) / N;
+      let score = 0;
+      for (const t of qTerms) {
+        const tf = docWords.filter(w => w === t).length;
+        const df = allDocs.filter(d => d.toLowerCase().split(/\s+/).includes(t)).length;
+        if (df === 0) continue;
+        const idf = Math.log((N - df + 0.5) / (df + 0.5) + 1);
+        const num = tf * (k1 + 1);
+        const den = tf + k1 * (1 - b + b * docWords.length / avgdl);
+        score += idf * num / den;
+      }
+      return score;
+    }
+
+    function runLengthBias() {
+      const query = document.getElementById('len-query').value.trim();
+      const shortDoc = document.getElementById('len-short').value.trim();
+      const longDoc = document.getElementById('len-long').value.trim();
+      const k1 = parseFloat(document.getElementById('len-k1').value);
+      const b = parseFloat(document.getElementById('len-b').value);
+
+      const allDocs = [shortDoc, longDoc];
+      const shortTFIDF = computeTFIDF(query, shortDoc, allDocs);
+      const longTFIDF = computeTFIDF(query, longDoc, allDocs);
+      const shortBM25 = computeBM25(query, shortDoc, allDocs, k1, b);
+      const longBM25 = computeBM25(query, longDoc, allDocs, k1, b);
+
+      const shortLen = shortDoc.split(/\s+/).length;
+      const longLen = longDoc.split(/\s+/).length;
+
+      const tfidfWinner = shortTFIDF >= longTFIDF ? 'Short Doc' : 'Long Doc';
+      const bm25Winner = shortBM25 >= longBM25 ? 'Short Doc' : 'Long Doc';
+
+      const container = document.getElementById('len-results');
+      container.innerHTML = `
+        <div class="grid-2">
+          <div class="card card-accent">
+            <strong style="color:var(--accent);">TF-IDF Results</strong>
+            <div style="margin-top:12px;">
+              <div style="display:flex; justify-content:space-between; margin:6px 0;">
+                <span>Short Doc (${shortLen} words)</span>
+                <span style="font-family:'JetBrains Mono',monospace; color:var(--accent); font-weight:700;">${shortTFIDF.toFixed(3)}</span>
+              </div>
+              <div style="display:flex; justify-content:space-between; margin:6px 0;">
+                <span>Long Doc (${longLen} words)</span>
+                <span style="font-family:'JetBrains Mono',monospace; color:var(--accent); font-weight:700;">${longTFIDF.toFixed(3)}</span>
+              </div>
+              <div style="margin-top:8px; padding:8px 12px; background:rgba(108,99,255,0.1); border-radius:8px; font-size:0.85rem;">
+                Winner: <strong>${tfidfWinner}</strong>
+              </div>
+            </div>
+          </div>
+          <div class="card card-green">
+            <strong style="color:var(--accent2);">BM25 Results</strong>
+            <div style="margin-top:12px;">
+              <div style="display:flex; justify-content:space-between; margin:6px 0;">
+                <span>Short Doc (${shortLen} words)</span>
+                <span style="font-family:'JetBrains Mono',monospace; color:var(--accent2); font-weight:700;">${shortBM25.toFixed(3)}</span>
+              </div>
+              <div style="display:flex; justify-content:space-between; margin:6px 0;">
+                <span>Long Doc (${longLen} words)</span>
+                <span style="font-family:'JetBrains Mono',monospace; color:var(--accent2); font-weight:700;">${longBM25.toFixed(3)}</span>
+              </div>
+              <div style="margin-top:8px; padding:8px 12px; background:rgba(0,201,167,0.1); border-radius:8px; font-size:0.85rem;">
+                Winner: <strong>${bm25Winner}</strong>
+              </div>
+            </div>
+          </div>
+        </div>`;
+    }
+
+    document.getElementById('len-k1').addEventListener('input', function() {
+      document.getElementById('len-k1-val').textContent = parseFloat(this.value).toFixed(1);
+    });
+    document.getElementById('len-b').addEventListener('input', function() {
+      document.getElementById('len-b-val').textContent = parseFloat(this.value).toFixed(2);
+    });
+    runLengthBias();
+
+    // ======== PARAMETER SENSITIVITY CHART ========
+    const paramCtx = document.getElementById('paramChart').getContext('2d');
+    const avgdlParam = 200;
+
+    function genParamData(k1, b) {
+      const labels = [];
+      const shortData = [], avgData = [], longData = [];
+      for (let tf = 0; tf <= 20; tf++) {
+        labels.push(tf);
+        const shortDen = tf + k1 * (1 - b + b * 50 / avgdlParam);
+        const avgDen = tf + k1 * (1 - b + b * 200 / avgdlParam);
+        const longDen = tf + k1 * (1 - b + b * 500 / avgdlParam);
+        shortData.push(tf * (k1 + 1) / shortDen);
+        avgData.push(tf * (k1 + 1) / avgDen);
+        longData.push(tf * (k1 + 1) / longDen);
+      }
+      return { labels, shortData, avgData, longData };
+    }
+
+    let pData = genParamData(1.2, 0.75);
+    const paramChart = new Chart(paramCtx, {
+      type: 'line',
+      data: {
+        labels: pData.labels,
+        datasets: [
+          {
+            label: 'Short (50 words)',
+            data: pData.shortData,
+            borderColor: '#00c9a7',
+            tension: 0.3, pointRadius: 0, borderWidth: 2.5,
+          },
+          {
+            label: 'Average (200 words)',
+            data: pData.avgData,
+            borderColor: '#6c63ff',
+            tension: 0.3, pointRadius: 0, borderWidth: 2.5,
+          },
+          {
+            label: 'Long (500 words)',
+            data: pData.longData,
+            borderColor: '#ff6b6b',
+            tension: 0.3, pointRadius: 0, borderWidth: 2.5,
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        animation: { duration: 300 },
+        interaction: { mode: 'index', intersect: false },
+        scales: {
+          x: {
+            title: { display: true, text: 'Term Frequency', color: '#8b8fa7' },
+            ticks: { color: '#8b8fa7' },
+            grid: { color: 'rgba(46,51,69,0.5)' }
+          },
+          y: {
+            title: { display: true, text: 'BM25 TF Component', color: '#8b8fa7' },
+            ticks: { color: '#8b8fa7' },
+            grid: { color: 'rgba(46,51,69,0.5)' },
+            min: 0,
+          }
+        },
+        plugins: {
+          legend: {
+            labels: { color: '#e8eaf0', usePointStyle: true, pointStyle: 'line' }
+          }
+        }
+      }
+    });
+
+    function updateParamChart() {
+      const k1 = parseFloat(document.getElementById('param-k1').value);
+      const b = parseFloat(document.getElementById('param-b').value);
+      document.getElementById('param-k1-val').textContent = k1.toFixed(1);
+      document.getElementById('param-b-val').textContent = b.toFixed(2);
+
+      const d = genParamData(k1, b);
+      paramChart.data.datasets[0].data = d.shortData;
+      paramChart.data.datasets[1].data = d.avgData;
+      paramChart.data.datasets[2].data = d.longData;
+      paramChart.update();
+
+      const tf = 5;
+      const shortScore = tf * (k1 + 1) / (tf + k1 * (1 - b + b * 50 / avgdlParam));
+      const avgScore = tf * (k1 + 1) / (tf + k1 * (1 - b + b * 200 / avgdlParam));
+      const longScore = tf * (k1 + 1) / (tf + k1 * (1 - b + b * 500 / avgdlParam));
+
+      document.getElementById('param-short').textContent = shortScore.toFixed(3);
+      document.getElementById('param-avg').textContent = avgScore.toFixed(3);
+      document.getElementById('param-long').textContent = longScore.toFixed(3);
+    }
+
+    document.getElementById('param-k1').addEventListener('input', updateParamChart);
+    document.getElementById('param-b').addEventListener('input', updateParamChart);
+    updateParamChart();
+
+    // ======== SIDE-BY-SIDE SEARCH ========
+    function runVsSearch() {
+      const query = document.getElementById('vs-query').value.trim();
+      const docsRaw = document.getElementById('vs-docs').value.trim().split('\n').filter(Boolean);
+      const k1 = parseFloat(document.getElementById('vs-k1').value);
+      const b = parseFloat(document.getElementById('vs-b').value);
+      const qTerms = query.toLowerCase().split(/\s+/).filter(Boolean);
+
+      const tfidfResults = docsRaw.map((text, i) => ({
+        text, idx: i,
+        score: computeTFIDF(query, text, docsRaw)
+      })).sort((a, c) => c.score - a.score);
+
+      const bm25Results = docsRaw.map((text, i) => ({
+        text, idx: i,
+        score: computeBM25(query, text, docsRaw, k1, b)
+      })).sort((a, c) => c.score - a.score);
+
+      function highlight(text) {
+        let h = text;
+        for (const t of qTerms) {
+          const re = new RegExp(`(${t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+          h = h.replace(re, '<mark>$1</mark>');
+        }
+        return h;
+      }
+
+      function renderList(results, containerId, color) {
+        document.getElementById(containerId).innerHTML = results.map((r, rank) => `
+          <div class="doc-result-item" data-idx="${r.idx}">
+            <div style="display:flex;align-items:center;flex:1;min-width:0;">
+              <span class="rank" style="background:${color};">${rank + 1}</span>
+              <span class="text">${highlight(r.text)}</span>
+            </div>
+            <span class="score" style="color:${color};">${r.score.toFixed(3)}</span>
+          </div>
+        `).join('');
+      }
+
+      renderList(tfidfResults, 'vs-tfidf-results', '#6c63ff');
+      renderList(bm25Results, 'vs-bm25-results', '#00c9a7');
+
+      let rankChanges = 0;
+      for (let i = 0; i < tfidfResults.length; i++) {
+        const bm25Rank = bm25Results.findIndex(r => r.idx === tfidfResults[i].idx);
+        if (bm25Rank !== i) rankChanges++;
+      }
+
+      const diffEl = document.getElementById('vs-diff');
+      if (rankChanges > 0) {
+        diffEl.innerHTML = `<div class="card card-yellow"><strong>${rankChanges} ranking change${rankChanges > 1 ? 's' : ''} detected!</strong>
+          <p class="dim">BM25's saturation and length normalization produced different rankings than TF-IDF. Documents that stuffed query terms or were unusually long likely dropped in BM25's ranking.</p></div>`;
+      } else {
+        diffEl.innerHTML = `<div class="card card-green"><strong>Rankings match!</strong>
+          <p class="dim">Both algorithms agree on document ordering for this query and corpus. Try adding a longer document with repeated terms to see differences.</p></div>`;
+      }
+    }
+
+    document.getElementById('vs-k1').addEventListener('input', function() {
+      document.getElementById('vs-k1-val').textContent = parseFloat(this.value).toFixed(1);
+    });
+    document.getElementById('vs-b').addEventListener('input', function() {
+      document.getElementById('vs-b-val').textContent = parseFloat(this.value).toFixed(2);
+    });
+    runVsSearch();
+
+    // ======== TOC SCROLL HIGHLIGHTING ========
+    const sections = document.querySelectorAll('section[id]');
+    const navLinks = document.querySelectorAll('.toc a');
+    window.addEventListener('scroll', () => {
+      let current = '';
+      sections.forEach(s => {
+        if (window.scrollY >= s.offsetTop - 120) current = s.id;
+      });
+      navLinks.forEach(a => {
+        a.classList.toggle('active', a.getAttribute('href') === '#' + current);
+      });
+    });
+  </script>
+</body>
+
+</html>

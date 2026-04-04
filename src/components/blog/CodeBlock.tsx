@@ -19,8 +19,8 @@ export default function CodeBlock({ code, language = "python", filename }: CodeB
   };
 
   return (
-    <div className="rounded-xl overflow-hidden border border-[#2a2d3a] my-6 group">
-      <div className="flex items-center justify-between px-4 py-2 bg-[#1a1c25] border-b border-[#2a2d3a]">
+    <div className="rounded-xl overflow-hidden border border-border my-6 group">
+      <div className="flex items-center justify-between px-4 py-2 bg-bg-tertiary border-b border-border">
         <div className="flex items-center gap-3">
           <div className="flex gap-1.5">
             <div className="w-3 h-3 rounded-full bg-[#ff5f57]" />
@@ -28,15 +28,15 @@ export default function CodeBlock({ code, language = "python", filename }: CodeB
             <div className="w-3 h-3 rounded-full bg-[#28c840]" />
           </div>
           {filename && (
-            <span className="text-xs text-[#9398ab] font-mono">{filename}</span>
+            <span className="text-xs text-text-secondary font-mono">{filename}</span>
           )}
         </div>
         <button
           onClick={handleCopy}
-          className="text-[#9398ab] hover:text-white transition-colors p-1"
+          className="text-text-secondary hover:text-white transition-colors p-1"
           aria-label="Copy code"
         >
-          {copied ? <FiCheck size={14} className="text-[#00c9a7]" /> : <FiCopy size={14} />}
+          {copied ? <FiCheck size={14} className="text-accent-teal" /> : <FiCopy size={14} />}
         </button>
       </div>
       <SyntaxHighlighter

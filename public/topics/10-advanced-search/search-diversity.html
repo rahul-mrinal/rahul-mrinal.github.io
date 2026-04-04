@@ -1,0 +1,773 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Search Diversity</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js" onload="renderMathInElement(document.body, {
+    delimiters: [
+      {left: '$$', right: '$$', display: true},
+      {left: '\\[', right: '\\]', display: true},
+      {left: '$', right: '$', display: false},
+      {left: '\\(', right: '\\)', display: false}
+    ],
+    throwOnError: false
+  });"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../playground.css" />
+</head>
+
+<body>
+<div class="topbar">
+  <a href="/" class="topbar-brand">
+    <div class="topbar-logo">RM</div>
+    <span class="topbar-label">Rahul Mrinal</span>
+  </a>
+  <a href="/blog" class="topbar-back">← Back to Blog</a>
+</div>
+
+<div class="hero">
+  <h1>Search Diversity</h1>
+  <p class="subtitle">Don't show 10 identical results — MMR and intent-aware diversification</p>
+  <div class="badges">
+    <span class="badge badge-hnsw">MMR Algorithm</span>
+    <span class="badge badge-ivf">Intent Coverage</span>
+    <span class="badge badge-pq">Deduplication</span>
+  </div>
+</div>
+
+<nav class="toc">
+  <div class="toc-inner">
+    <a href="#s1">Jaguar Problem</a>
+    <a href="#s2">Why Diversity</a>
+    <a href="#s3">Intent Coverage</a>
+    <a href="#s4">MMR</a>
+    <a href="#s5">MMR Playground</a>
+    <a href="#s6">Category Diversity</a>
+    <a href="#s7">Deduplication</a>
+    <a href="#s8">Measuring</a>
+    <a href="#s9">Takeaway</a>
+  </div>
+</nav>
+
+<div class="container">
+
+  <!-- ===== SECTION 1 ===== -->
+  <section id="s1">
+    <h2><span class="num">01</span> The Jaguar Problem</h2>
+    <p class="lead">Type <code>"jaguar"</code> into a search engine. What do you mean? The same query has at least four completely distinct interpretations — and the search engine doesn't know which one you want.</p>
+
+    <div class="grid-2">
+      <div class="card card-accent">
+        <h3>Jaguar (Car)</h3>
+        <p>Luxury British automaker. F-Type, XJ, E-Pace. "Jaguar dealer near me." Most popular interpretation in many markets.</p>
+      </div>
+      <div class="card card-green">
+        <h3>Jaguar (Animal)</h3>
+        <p>Panthera onca. Third-largest big cat. Amazon rainforest apex predator. Popular for nature enthusiasts and students.</p>
+      </div>
+      <div class="card card-yellow">
+        <h3>Jaguar (NFL Team)</h3>
+        <p>Jacksonville Jaguars. AFC South division. "Jaguars game schedule 2025." Spikes during football season.</p>
+      </div>
+      <div class="card card-red">
+        <h3>Jaguar (macOS)</h3>
+        <p>Mac OS X 10.2 Jaguar. Apple's 2002 operating system release. Niche but still searched by tech historians.</p>
+      </div>
+    </div>
+
+    <div class="analogy">
+      <div class="icon">🎯</div>
+      <p><strong>Analogy:</strong> Imagine ordering "chips" in a global restaurant. In the US you'd get potato chips, in the UK you'd get french fries, and in a casino you'd get poker chips. The word is the same — the intent is ambiguous. A good search engine hedges its bets by covering all plausible intents.</p>
+    </div>
+
+    <h3>Ambiguity Is the Norm</h3>
+    <p>Research from TREC and Microsoft shows that <strong>over 30% of web queries are ambiguous</strong> — they have multiple valid interpretations. For these queries, a pure relevance ranking is actually a bad strategy, because it bets everything on a single interpretation.</p>
+
+    <table>
+      <thead>
+        <tr><th>Query</th><th>Interpretations</th><th>% Ambiguous</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>apple</code></td><td>Company, fruit, records</td><td>~40%</td></tr>
+        <tr><td><code>mercury</code></td><td>Planet, element, Freddie, car brand</td><td>~60%</td></tr>
+        <tr><td><code>python</code></td><td>Language, snake, Monty Python</td><td>~35%</td></tr>
+        <tr><td><code>corona</code></td><td>Beer, virus, solar, city</td><td>~70%</td></tr>
+        <tr><td><code>jaguar</code></td><td>Car, animal, NFL team, macOS</td><td>~55%</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ===== SECTION 2 ===== -->
+  <section id="s2">
+    <h2><span class="num">02</span> Why Diversity?</h2>
+    <p class="lead">When a query is ambiguous, showing 10 results from the most popular interpretation fails users with minority intents. Diversity ensures coverage across all plausible meanings.</p>
+
+    <div class="grid-2">
+      <div class="card card-red">
+        <h3>Without Diversity</h3>
+        <p>Query "apple": 10 results about Apple Inc. A user looking for apple recipes is completely unserved. They have to reformulate their query, adding friction.</p>
+      </div>
+      <div class="card card-green">
+        <h3>With Diversity</h3>
+        <p>Query "apple": 6 Apple Inc., 2 apple recipes, 1 apple nutrition, 1 Apple Records. Everyone finds something relevant within the first few results.</p>
+      </div>
+    </div>
+
+    <div class="insight">
+      <div class="insight-title">The Diversity Principle</div>
+      <p>Diversity doesn't mean sacrificing relevance — it means maximizing the probability that <strong>at least one result</strong> satisfies the user's actual intent, whatever it may be. It's a form of <em>risk management</em> for ambiguous queries.</p>
+    </div>
+
+    <h3>The Portfolio Theory Connection</h3>
+    <p>Diversity in search is mathematically analogous to <strong>portfolio diversification in finance</strong>. Just as a diversified investment portfolio reduces risk by spreading across sectors, a diverse search result page reduces the risk of completely missing the user's intent.</p>
+
+    <div class="formula-box">
+      $$P(\text{user satisfied}) = 1 - \prod_{i=1}^{k} (1 - P(\text{result}_i \text{ matches intent}))$$
+      <div class="label">With diverse results, the probability of at least one hit increases multiplicatively</div>
+    </div>
+
+    <div class="pro-tip">
+      <div class="tip-header">When NOT to Diversify</div>
+      <p>Navigational queries ("gmail login", "amazon.com") have a single clear intent — diversifying these would be counterproductive. Diversity is most valuable for informational and ambiguous queries.</p>
+    </div>
+  </section>
+
+  <!-- ===== SECTION 3: Intent Coverage ===== -->
+  <section id="s3">
+    <h2><span class="num">03</span> Intent Coverage</h2>
+    <p class="lead">Toggle diversity on/off to see how results distribute across intent categories for the query <code>"jaguar"</code>. Without diversity, all top results cluster around the most popular interpretation.</p>
+
+    <div class="playground">
+      <h4>Interactive: Intent-Aware Diversification</h4>
+      <p class="dim" style="margin-bottom:16px;">With diversity OFF, the top 10 results come almost entirely from "car" and "animal" intents. Toggle it ON to see balanced coverage across all 4 intents.</p>
+
+      <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:20px;">
+        <button class="demo-btn" id="diversityToggleBtn" onclick="toggleIntentDiversity()">Enable Diversity</button>
+        <span class="dim" id="diversityStatusText">Diversity: OFF — ranked by relevance only</span>
+      </div>
+
+      <div class="grid-2">
+        <div id="intent-results"></div>
+        <div class="chart-wrap" style="margin:0;">
+          <canvas id="intentPieChart" style="max-height:280px;"></canvas>
+        </div>
+      </div>
+
+      <div class="result-box" style="margin-top:16px;" id="intent-coverage-info"></div>
+
+      <div class="grid-2" style="margin-top:16px;">
+        <div class="metric-card">
+          <div class="metric-label">Intent Coverage</div>
+          <div class="metric-value" id="intentCoverageMetric" style="color:var(--accent2)">—</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Avg Relevance (Top 10)</div>
+          <div class="metric-value" id="intentRelevanceMetric" style="color:var(--accent)">—</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== SECTION 4 ===== -->
+  <section id="s4">
+    <h2><span class="num">04</span> MMR — Maximal Marginal Relevance</h2>
+    <p class="lead">MMR is the standard algorithm for balancing relevance and diversity. At each step, it selects the document that maximizes a weighted combination of relevance to the query and novelty relative to already-selected documents.</p>
+
+    <div class="formula-box">
+      $$\text{MMR}(d) = \lambda \cdot \text{Sim}(d, q) - (1 - \lambda) \cdot \max_{d_j \in S} \text{Sim}(d, d_j)$$
+      <div class="label">λ=1 → pure relevance &nbsp;|&nbsp; λ=0 → maximum diversity</div>
+    </div>
+
+    <h3>How MMR Works Step by Step</h3>
+    <ol>
+      <li><strong>Initialize:</strong> Start with an empty selected set S and all candidates in C</li>
+      <li><strong>First pick:</strong> Select the most relevant document (greedy, same as pure relevance)</li>
+      <li><strong>For each subsequent slot:</strong>
+        <ul>
+          <li>For each remaining candidate d in C, compute relevance to query: \(\text{Sim}(d, q)\)</li>
+          <li>Compute max similarity to any already-selected doc: \(\max_{d_j \in S} \text{Sim}(d, d_j)\)</li>
+          <li>Compute MMR score: \(\lambda \cdot \text{rel} - (1-\lambda) \cdot \text{max\_sim}\)</li>
+        </ul>
+      </li>
+      <li><strong>Select</strong> the candidate with the highest MMR score, add to S, remove from C</li>
+      <li><strong>Repeat</strong> until you have enough results</li>
+    </ol>
+
+    <div class="grid-2">
+      <div class="card card-accent">
+        <h3>The λ Knob</h3>
+        <p><strong>λ = 1.0:</strong> Pure relevance ranking (no diversity consideration at all).<br>
+        <strong>λ = 0.5:</strong> Balanced trade-off — good default for ambiguous queries.<br>
+        <strong>λ = 0.0:</strong> Maximum diversity — each new result is as different as possible from what's already shown.</p>
+      </div>
+      <div class="card card-green">
+        <h3>Similarity Function</h3>
+        <p>The similarity between documents can be computed via:<br>
+        • <strong>Category match</strong> (same topic = high sim)<br>
+        • <strong>Embedding cosine</strong> (semantic similarity)<br>
+        • <strong>Snippet overlap</strong> (textual similarity)<br>
+        The choice of similarity function shapes what "diversity" means.</p>
+      </div>
+    </div>
+
+    <h3>MMR Complexity</h3>
+    <div class="formula-box compact">
+      $$O(k \times n) \text{ where } k = \text{results to select}, \; n = \text{candidate pool size}$$
+      <div class="label">Linear in both outputs and candidates — efficient for typical search result pages</div>
+    </div>
+  </section>
+
+  <!-- ===== SECTION 5: MMR Playground ===== -->
+  <section id="s5">
+    <h2><span class="num">05</span> MMR Playground</h2>
+    <p class="lead">Adjust λ to control the relevance-diversity trade-off. The table below shows each selection step: the candidate's relevance, its maximum similarity to already-selected results, and the resulting MMR score. The chart visualizes how the balance shifts.</p>
+
+    <div class="playground">
+      <h4>Interactive: MMR Step-by-Step Selection</h4>
+      <p class="dim" style="margin-bottom:16px;">Try λ=1.0 (all cars at top) vs λ=0.0 (maximum category spread). Watch the selection log to see how MMR penalizes redundancy at each step.</p>
+
+      <div class="slider-group" style="grid-template-columns:1fr;">
+        <div class="slider-item">
+          <label>λ (lambda) <span id="mmrLambdaVal">0.50</span></label>
+          <input type="range" id="mmrLambda" min="0" max="1" step="0.05" value="0.50" oninput="renderMMR()">
+        </div>
+      </div>
+
+      <div id="mmr-selection-log" style="margin-bottom:20px;overflow-x:auto;"></div>
+
+      <div class="grid-2">
+        <div>
+          <h4 style="color:var(--accent);font-size:0.9rem;margin-bottom:12px;">Final Ranking</h4>
+          <div id="mmr-results"></div>
+        </div>
+        <div class="chart-wrap" style="margin:0;">
+          <canvas id="mmrChart" style="max-height:300px;"></canvas>
+        </div>
+      </div>
+
+      <div class="grid-3" style="margin-top:16px;">
+        <div class="metric-card">
+          <div class="metric-label">Categories Used</div>
+          <div class="metric-value" id="mmrCategoriesUsed" style="color:var(--accent2)">—</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Avg Relevance</div>
+          <div class="metric-value" id="mmrAvgRel" style="color:var(--accent)">—</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Avg MMR Score</div>
+          <div class="metric-value" id="mmrAvgScore" style="color:var(--accent4)">—</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== SECTION 6 ===== -->
+  <section id="s6">
+    <h2><span class="num">06</span> Category Diversification</h2>
+    <p class="lead">In e-commerce, diversity means spreading results across brands, price ranges, and product categories — not just topic intents. Users searching for "running shoes" don't want 10 Nike models; they want to compare across brands.</p>
+
+    <table>
+      <thead>
+        <tr><th>Dimension</th><th>Without Diversity</th><th>With Diversity</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Brand</strong></td>
+          <td style="color:var(--accent3)">10 Nike shoes</td>
+          <td style="color:var(--accent2)">3 Nike, 3 Adidas, 2 New Balance, 2 Puma</td>
+        </tr>
+        <tr>
+          <td><strong>Price</strong></td>
+          <td style="color:var(--accent3)">All $100-120</td>
+          <td style="color:var(--accent2)">Spread: $50, $100, $150, $200 ranges</td>
+        </tr>
+        <tr>
+          <td><strong>Category</strong></td>
+          <td style="color:var(--accent3)">All running shoes</td>
+          <td style="color:var(--accent2)">Running, casual, training, hiking</td>
+        </tr>
+        <tr>
+          <td><strong>Rating</strong></td>
+          <td style="color:var(--accent3)">All 4.5+ stars</td>
+          <td style="color:var(--accent2)">Mix of highly-rated and popular new arrivals</td>
+        </tr>
+        <tr>
+          <td><strong>Seller</strong></td>
+          <td style="color:var(--accent3)">All from same seller</td>
+          <td style="color:var(--accent2)">Mix of sellers for competitive pricing</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="pro-tip">
+      <div class="tip-header">Stripe-Based Diversification</div>
+      <p>A simple approach: round-robin across categories. Position 1 = top from category A, position 2 = top from category B, etc. Not mathematically optimal like MMR, but easy to implement, debug, and explain to stakeholders.</p>
+    </div>
+
+    <h3>Multi-Dimensional Diversity</h3>
+    <p>Real e-commerce search diversifies across <strong>multiple dimensions simultaneously</strong>. You want brand diversity AND price diversity AND category diversity. This is harder than single-dimension MMR — it requires multi-objective optimization.</p>
+
+    <div class="grid-2">
+      <div class="card card-accent">
+        <h3>Greedy Round-Robin</h3>
+        <p>Simple and fast. Cycle through categories, picking the best remaining from each. Works well for 2-3 dimensions. O(k × n) complexity.</p>
+      </div>
+      <div class="card card-green">
+        <h3>Multi-MMR</h3>
+        <p>Extend MMR with multiple similarity functions (one per dimension). Weight each dimension. More principled but harder to tune and explain.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== SECTION 7 ===== -->
+  <section id="s7">
+    <h2><span class="num">07</span> Result Deduplication</h2>
+    <p class="lead">Before diversifying, remove near-duplicate results — multiple pages with essentially the same content waste precious result slots and frustrate users.</p>
+
+    <h3>Deduplication Techniques</h3>
+    <div class="grid-2">
+      <div class="card card-accent">
+        <h3>URL Dedup</h3>
+        <p>Normalize URLs (strip tracking params, www prefix, trailing slashes). Cheapest check — catches exact duplicates and tracking-parameter variants.</p>
+        <p class="dim">Cost: O(1) per doc &nbsp;|&nbsp; Catches: ~30% of dupes</p>
+      </div>
+      <div class="card card-green">
+        <h3>Content Fingerprinting</h3>
+        <p>SimHash or MinHash on page content. Catches pages with same text but different URLs (syndicated articles, content farms, mirror sites).</p>
+        <p class="dim">Cost: O(n) build, O(1) compare &nbsp;|&nbsp; Catches: ~60% of dupes</p>
+      </div>
+      <div class="card card-yellow">
+        <h3>Snippet Dedup</h3>
+        <p>Compare extracted snippets. If two results would show identical text in the SERP, collapse them — users would see redundant content anyway.</p>
+        <p class="dim">Cost: O(n²) naive &nbsp;|&nbsp; Catches: ~20% of dupes</p>
+      </div>
+      <div class="card card-red">
+        <h3>Semantic Dedup</h3>
+        <p>Embedding cosine similarity > 0.95 = near-duplicate. Most expensive but catches paraphrased content and translations.</p>
+        <p class="dim">Cost: O(n²) or ANN &nbsp;|&nbsp; Catches: ~90% of dupes</p>
+      </div>
+    </div>
+
+    <div class="formula-box">
+      $$\text{SimHash}(d_1, d_2) = \frac{\text{matching\_bits}}{\text{total\_bits}} > \theta \implies \text{duplicate}$$
+      <div class="label">SimHash: O(1) comparison after O(n) fingerprint computation. Typically θ ≥ 0.95</div>
+    </div>
+
+    <h3>Dedup Pipeline</h3>
+    <div class="pipeline">
+      <div class="pipeline-node accent">URL Dedup<div style="font-size:0.7rem;color:var(--text-dim)">O(1)</div></div>
+      <div class="pipeline-arrow">→</div>
+      <div class="pipeline-node green">SimHash<div style="font-size:0.7rem;color:var(--text-dim)">O(1)</div></div>
+      <div class="pipeline-arrow">→</div>
+      <div class="pipeline-node yellow">Snippet<div style="font-size:0.7rem;color:var(--text-dim)">O(n)</div></div>
+      <div class="pipeline-arrow">→</div>
+      <div class="pipeline-node red">Semantic<div style="font-size:0.7rem;color:var(--text-dim)">O(ANN)</div></div>
+    </div>
+    <p class="dim" style="text-align:center;font-size:0.82rem;">Each layer catches progressively more subtle duplicates, at increasing cost. Run cheapest first.</p>
+
+    <div class="insight">
+      <div class="insight-title">Host Collapsing</div>
+      <p>A related technique: <strong>host collapsing</strong> limits results from any single domain to 2-3 entries. This prevents one authoritative site from dominating the entire first page, even if all its pages are technically unique.</p>
+    </div>
+  </section>
+
+  <!-- ===== SECTION 8 ===== -->
+  <section id="s8">
+    <h2><span class="num">08</span> Measuring Diversity</h2>
+    <p class="lead">How do you know if your diversification is working? Standard metrics capture different facets of diversity.</p>
+
+    <table>
+      <thead>
+        <tr><th>Metric</th><th>What It Measures</th><th>Range</th><th>Higher = ?</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>α-NDCG</strong></td>
+          <td>Relevance with diminishing returns per intent — repeated intents are penalized</td>
+          <td>[0, 1]</td>
+          <td style="color:var(--accent2)">Better</td>
+        </tr>
+        <tr>
+          <td><strong>Intent Coverage</strong></td>
+          <td>Fraction of known intents represented in top-k results</td>
+          <td>[0, 1]</td>
+          <td style="color:var(--accent2)">Better</td>
+        </tr>
+        <tr>
+          <td><strong>Subtopic Recall</strong></td>
+          <td>How many distinct subtopics appear at least once in top-k</td>
+          <td>[0, 1]</td>
+          <td style="color:var(--accent2)">Better</td>
+        </tr>
+        <tr>
+          <td><strong>ILS (Intra-List Similarity)</strong></td>
+          <td>Average pairwise similarity of results — measures homogeneity</td>
+          <td>[0, 1]</td>
+          <td style="color:var(--accent3)">Less diverse</td>
+        </tr>
+        <tr>
+          <td><strong>ERR-IA</strong></td>
+          <td>Expected Reciprocal Rank, intent-aware — probability user is satisfied at each position</td>
+          <td>[0, 1]</td>
+          <td style="color:var(--accent2)">Better</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="formula-box">
+      $$\alpha\text{-NDCG} = \frac{\sum_{i=1}^{k} \frac{J(d_i, \theta) \cdot (1 - \alpha)^{c_{i-1}(\theta)}}{\log_2(i+1)}}{\text{Ideal}_\alpha}$$
+      <div class="label">α-NDCG: penalizes redundant coverage of the same intent (α typically 0.5)</div>
+    </div>
+
+    <h3>Reading the Formula</h3>
+    <ul>
+      <li>\(J(d_i, \theta)\): Does document \(d_i\) cover intent \(\theta\)? (0 or 1)</li>
+      <li>\(c_{i-1}(\theta)\): How many documents <em>above</em> position \(i\) already cover intent \(\theta\)?</li>
+      <li>\((1-\alpha)^{c_{i-1}}\): Novelty discount — each additional document covering the same intent is worth less</li>
+      <li>When \(\alpha = 0\), this reduces to standard NDCG (no diversity reward)</li>
+      <li>When \(\alpha = 1\), only the <em>first</em> document per intent counts (maximum diversity reward)</li>
+    </ul>
+
+    <div class="insight">
+      <div class="insight-title">Key Insight</div>
+      <p>Standard NDCG rewards relevance without considering diversity. α-NDCG adds a <strong>novelty discount</strong>: the second result about "jaguar cars" is worth less than the first result about "jaguar animals," because the car intent is already covered. This aligns the metric with the user's actual experience — once an intent is satisfied, additional results for that intent have diminishing value.</p>
+    </div>
+
+    <h3>Metric Comparison</h3>
+    <div class="grid-2">
+      <div class="card card-accent">
+        <h3>Offline Metrics</h3>
+        <p>α-NDCG, ERR-IA, and subtopic recall are computed on labeled datasets where each result is tagged with its intent. Useful for algorithm development and regression testing.</p>
+      </div>
+      <div class="card card-green">
+        <h3>Online Metrics</h3>
+        <p>In production, measure <strong>query reformulation rate</strong> (lower = more diverse), <strong>pogo-sticking</strong> (bouncing between results = not diverse enough), and <strong>abandonment rate</strong> (users giving up).</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== SECTION 9 ===== -->
+  <section id="s9">
+    <h2><span class="num">09</span> Key Takeaway</h2>
+
+    <div class="card card-green">
+      <h3>Diversity is a ranking objective, not an afterthought</h3>
+      <p>For ambiguous queries, relevance alone produces redundant results that fail minority-intent users. <strong>MMR, intent-aware diversification, and category balancing</strong> ensure that your search results serve the broadest possible set of user intents. The goal: every user finds what they need within the first page — even if the search engine can't know which interpretation they meant.</p>
+    </div>
+
+    <h3>Summary of Techniques</h3>
+    <table>
+      <thead>
+        <tr><th>Technique</th><th>Best For</th><th>Complexity</th><th>Tuning Knob</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><strong>MMR</strong></td><td>General diversity</td><td>O(k × n)</td><td>λ parameter</td></tr>
+        <tr><td><strong>Intent Round-Robin</strong></td><td>Known intent categories</td><td>O(k)</td><td>Category weights</td></tr>
+        <tr><td><strong>Host Collapsing</strong></td><td>Prevent domain dominance</td><td>O(n)</td><td>Max per host</td></tr>
+        <tr><td><strong>Deduplication</strong></td><td>Remove redundant content</td><td>O(n) to O(n²)</td><td>Similarity threshold</td></tr>
+      </tbody>
+    </table>
+
+    <div class="arch-diagram">
+      <div class="arch-section-label">Diversity Pipeline in Production</div>
+      <div class="arch-row">
+        <div class="arch-box accent">Retrieve<div class="arch-label">top-1000 candidates</div></div>
+        <div class="arch-arrow">→</div>
+        <div class="arch-box red">Dedup<div class="arch-label">remove near-duplicates</div></div>
+        <div class="arch-arrow">→</div>
+        <div class="arch-box yellow">Host Collapse<div class="arch-label">limit per domain</div></div>
+        <div class="arch-arrow">→</div>
+        <div class="arch-box green">MMR / Diversify<div class="arch-label">balance relevance + novelty</div></div>
+        <div class="arch-arrow">→</div>
+        <div class="arch-box accent">Top-10<div class="arch-label">final SERP</div></div>
+      </div>
+    </div>
+
+    <div class="insight">
+      <div class="insight-title">Final Thought</div>
+      <p>The best search results feel obvious in hindsight — "of course the first page should cover cars, animals, and the NFL team." But achieving that coverage requires deliberate algorithmic effort. Without diversity mechanisms, even the most sophisticated relevance model will produce a monotonous, single-intent result page. Diversity is what transforms a good search engine into a great one.</p>
+    </div>
+  </section>
+
+</div>
+
+<footer>Advanced Search Series — Search Diversity Playground</footer>
+
+<script>
+(function() {
+
+// ===== Intent Coverage =====
+const JAGUAR_RESULTS = [
+  { title: 'Jaguar F-Type 2025 Review — Car and Driver', intent: 'car', rel: 0.95 },
+  { title: 'Jaguar XE Sedan — Official Site', intent: 'car', rel: 0.93 },
+  { title: 'Jaguar E-Pace SUV — Pricing & Specs', intent: 'car', rel: 0.91 },
+  { title: 'Jaguar Dealer Near Me — Find Locations', intent: 'car', rel: 0.89 },
+  { title: 'Jaguar vs BMW: Luxury Car Comparison', intent: 'car', rel: 0.87 },
+  { title: 'Jaguar — Wikipedia (Animal)', intent: 'animal', rel: 0.85 },
+  { title: 'Jaguar Facts — National Geographic', intent: 'animal', rel: 0.82 },
+  { title: 'Jaguar Habitat & Conservation Status', intent: 'animal', rel: 0.78 },
+  { title: 'Jaguar vs Leopard: Key Differences', intent: 'animal', rel: 0.75 },
+  { title: 'Baby Jaguar Cubs — Wildlife Video', intent: 'animal', rel: 0.70 },
+  { title: 'Jacksonville Jaguars — Official NFL Site', intent: 'team', rel: 0.80 },
+  { title: 'Jaguars 2025 Schedule & Roster', intent: 'team', rel: 0.76 },
+  { title: 'Jaguars Trade Rumors — ESPN', intent: 'team', rel: 0.72 },
+  { title: 'Jaguars Stadium — EverBank Field', intent: 'team', rel: 0.68 },
+  { title: 'Jaguars Draft Picks Analysis', intent: 'team', rel: 0.65 },
+  { title: 'Mac OS X Jaguar (10.2) — Apple Archive', intent: 'os', rel: 0.60 },
+  { title: 'Mac OS X Jaguar Features Retrospective', intent: 'os', rel: 0.55 },
+  { title: 'Jaguar macOS — EveryMac.com', intent: 'os', rel: 0.50 },
+  { title: 'Apple OS History: From Cheetah to Sonoma', intent: 'os', rel: 0.45 },
+  { title: 'Mac OS X Jaguar Installation Guide', intent: 'os', rel: 0.40 }
+];
+
+const INTENT_COLORS = { car: '#6c63ff', animal: '#00c9a7', team: '#ffd93d', os: '#ff6b6b' };
+let diversityOn = false;
+let intentPieChart = null;
+
+function getDiverseResults() {
+  const intents = ['car', 'animal', 'team', 'os'];
+  const result = [];
+  const byIntent = {};
+  intents.forEach(i => byIntent[i] = JAGUAR_RESULTS.filter(r => r.intent === i));
+
+  for (let round = 0; result.length < 10; round++) {
+    for (const intent of intents) {
+      if (result.length >= 10) break;
+      if (byIntent[intent][round]) result.push(byIntent[intent][round]);
+    }
+  }
+  return result;
+}
+
+function renderIntentCoverage() {
+  const results = diversityOn
+    ? getDiverseResults()
+    : [...JAGUAR_RESULTS].sort((a, b) => b.rel - a.rel).slice(0, 10);
+
+  const container = document.getElementById('intent-results');
+  container.innerHTML = results.map((r, i) => {
+    const color = INTENT_COLORS[r.intent];
+    return `<div class="doc-result-item">
+      <div class="rank">${i + 1}</div>
+      <div class="text">${r.title}</div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span style="font-size:0.75rem;padding:2px 10px;border:1px solid ${color}55;border-radius:12px;color:${color}">${r.intent}</span>
+        <span class="score">${r.rel.toFixed(2)}</span>
+      </div>
+    </div>`;
+  }).join('');
+
+  const counts = { car: 0, animal: 0, team: 0, os: 0 };
+  results.forEach(r => counts[r.intent]++);
+  const covered = Object.values(counts).filter(c => c > 0).length;
+  const avgRel = (results.reduce((s, r) => s + r.rel, 0) / results.length);
+
+  const ctx = document.getElementById('intentPieChart').getContext('2d');
+  if (intentPieChart) intentPieChart.destroy();
+  intentPieChart = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: Object.keys(counts).map(k => k.charAt(0).toUpperCase() + k.slice(1)),
+      datasets: [{
+        data: Object.values(counts),
+        backgroundColor: Object.keys(counts).map(k => INTENT_COLORS[k]),
+        borderColor: '#0a0b10',
+        borderWidth: 3
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { labels: { color: '#9398ab', padding: 16 } },
+        title: { display: true, text: 'Intent Distribution (Top 10)', color: '#9398ab' }
+      }
+    }
+  });
+
+  document.getElementById('intent-coverage-info').innerHTML =
+    `<span class="result-label">Intent Breakdown</span><br>` +
+    Object.entries(counts).map(([k, v]) =>
+      `<span style="color:${INTENT_COLORS[k]};font-weight:600;">${k}: ${v}</span>`).join(' &nbsp;·&nbsp; ');
+
+  document.getElementById('intentCoverageMetric').textContent = covered + '/4';
+  document.getElementById('intentRelevanceMetric').textContent = avgRel.toFixed(2);
+
+  document.getElementById('diversityToggleBtn').textContent = diversityOn ? 'Disable Diversity' : 'Enable Diversity';
+  document.getElementById('diversityStatusText').textContent = diversityOn
+    ? 'Diversity: ON — balanced round-robin across intents'
+    : 'Diversity: OFF — ranked by relevance only';
+}
+
+window.toggleIntentDiversity = function() {
+  diversityOn = !diversityOn;
+  renderIntentCoverage();
+};
+renderIntentCoverage();
+
+// ===== MMR Playground =====
+const MMR_CANDIDATES = [
+  { title: 'Jaguar F-Type Review', rel: 0.95, category: 'car' },
+  { title: 'Jaguar XE Sedan', rel: 0.90, category: 'car' },
+  { title: 'Jaguar — Wikipedia (Animal)', rel: 0.88, category: 'animal' },
+  { title: 'Jaguar SUV Lineup', rel: 0.85, category: 'car' },
+  { title: 'Jaguars NFL Schedule', rel: 0.82, category: 'team' },
+  { title: 'Jaguar Conservation', rel: 0.78, category: 'animal' },
+  { title: 'Jaguar vs Leopard', rel: 0.75, category: 'animal' },
+  { title: 'Jaguars Trade News', rel: 0.72, category: 'team' },
+  { title: 'Mac OS X Jaguar', rel: 0.65, category: 'os' },
+  { title: 'Jaguar Cub Video', rel: 0.60, category: 'animal' }
+];
+
+function catSim(a, b) { return a === b ? 1.0 : 0.1; }
+
+let mmrChart = null;
+
+window.renderMMR = function() {
+  const lambda = parseFloat(document.getElementById('mmrLambda').value);
+  document.getElementById('mmrLambdaVal').textContent = lambda.toFixed(2);
+
+  const selected = [];
+  const remaining = MMR_CANDIDATES.map(c => ({ ...c }));
+  const log = [];
+
+  while (selected.length < 10 && remaining.length > 0) {
+    let bestIdx = -1, bestScore = -Infinity, bestMaxSim = 0;
+
+    for (let i = 0; i < remaining.length; i++) {
+      const doc = remaining[i];
+      let maxSim = 0;
+      for (const sel of selected) {
+        const sim = catSim(doc.category, sel.category);
+        if (sim > maxSim) maxSim = sim;
+      }
+      const mmrScore = lambda * doc.rel - (1 - lambda) * maxSim;
+      if (mmrScore > bestScore) {
+        bestScore = mmrScore;
+        bestIdx = i;
+        bestMaxSim = maxSim;
+      }
+    }
+
+    const winner = remaining.splice(bestIdx, 1)[0];
+    selected.push({ ...winner, mmrScore: bestScore, maxSim: bestMaxSim });
+    log.push({
+      step: selected.length,
+      title: winner.title,
+      rel: winner.rel,
+      maxSim: bestMaxSim,
+      mmr: bestScore,
+      category: winner.category
+    });
+  }
+
+  const container = document.getElementById('mmr-results');
+  container.innerHTML = selected.map((r, i) => {
+    const color = INTENT_COLORS[r.category] || '#9398ab';
+    return `<div class="doc-result-item">
+      <div class="rank">${i + 1}</div>
+      <div class="text">${r.title}</div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span style="font-size:0.75rem;padding:2px 10px;border:1px solid ${color}55;border-radius:12px;color:${color}">${r.category}</span>
+        <span class="score">${r.mmrScore.toFixed(2)}</span>
+      </div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('mmr-selection-log').innerHTML =
+    '<table style="font-size:0.85rem;"><thead><tr>' +
+    '<th>Step</th><th>Selected</th><th>Category</th><th>Relevance</th><th>Max Sim to Selected</th><th>MMR Score</th>' +
+    '</tr></thead><tbody>' +
+    log.map(l => {
+      const color = INTENT_COLORS[l.category] || '#9398ab';
+      return `<tr>
+        <td>${l.step}</td>
+        <td>${l.title}</td>
+        <td><span style="color:${color}">${l.category}</span></td>
+        <td style="color:var(--accent)">${l.rel.toFixed(2)}</td>
+        <td style="color:var(--accent3)">${l.maxSim.toFixed(2)}</td>
+        <td style="color:var(--accent2);font-weight:700">${l.mmr.toFixed(2)}</td>
+      </tr>`;
+    }).join('') + '</tbody></table>';
+
+  const categories = new Set(selected.map(s => s.category));
+  const avgRel = (selected.reduce((s, r) => s + r.rel, 0) / selected.length);
+  const avgMMR = (selected.reduce((s, r) => s + r.mmrScore, 0) / selected.length);
+
+  document.getElementById('mmrCategoriesUsed').textContent = categories.size + '/4';
+  document.getElementById('mmrAvgRel').textContent = avgRel.toFixed(2);
+  document.getElementById('mmrAvgScore').textContent = avgMMR.toFixed(2);
+
+  const ctx = document.getElementById('mmrChart').getContext('2d');
+  if (mmrChart) mmrChart.destroy();
+  mmrChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: log.map(l => '#' + l.step),
+      datasets: [
+        {
+          label: 'Relevance',
+          data: log.map(l => l.rel),
+          backgroundColor: 'rgba(108,99,255,0.6)',
+          borderRadius: 4
+        },
+        {
+          label: 'Max Similarity',
+          data: log.map(l => l.maxSim),
+          backgroundColor: 'rgba(255,107,107,0.5)',
+          borderRadius: 4
+        },
+        {
+          label: 'MMR Score',
+          data: log.map(l => l.mmr),
+          backgroundColor: 'rgba(0,201,167,0.6)',
+          borderRadius: 4
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { labels: { color: '#9398ab' } },
+        title: { display: true, text: 'Relevance vs Novelty per Selection Step', color: '#9398ab' }
+      },
+      scales: {
+        x: { ticks: { color: '#9398ab' }, grid: { color: 'rgba(42,45,58,0.5)' } },
+        y: {
+          ticks: { color: '#9398ab' },
+          grid: { color: 'rgba(42,45,58,0.5)' },
+          min: -0.5, max: 1,
+          title: { display: true, text: 'Score', color: '#9398ab' }
+        }
+      }
+    }
+  });
+};
+renderMMR();
+
+// ===== TOC scroll highlighting =====
+const tocLinks = document.querySelectorAll('.toc a');
+const sections = Array.from(tocLinks).map(a => document.querySelector(a.getAttribute('href')));
+
+function onScroll() {
+  let current = 0;
+  const offset = 160;
+  sections.forEach((sec, i) => {
+    if (sec && sec.getBoundingClientRect().top <= offset) current = i;
+  });
+  tocLinks.forEach((a, i) => a.classList.toggle('active', i === current));
+}
+window.addEventListener('scroll', onScroll, { passive: true });
+onScroll();
+
+})();
+</script>
+</body>
+</html>

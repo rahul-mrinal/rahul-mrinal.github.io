@@ -1,0 +1,847 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RAG Evaluation</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js" onload="renderMathInElement(document.body, {
+    delimiters: [
+      {left: '$$', right: '$$', display: true},
+      {left: '\\[', right: '\\]', display: true},
+      {left: '$', right: '$', display: false},
+      {left: '\\(', right: '\\)', display: false}
+    ],
+    throwOnError: false
+  });"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../playground.css" />
+</head>
+
+<body>
+<div class="topbar">
+  <a href="/" class="topbar-brand">
+    <div class="topbar-logo">RM</div>
+    <span class="topbar-label">Rahul Mrinal</span>
+  </a>
+  <a href="/blog" class="topbar-back">← Back to Blog</a>
+</div>
+
+<div class="hero">
+  <div class="container">
+    <h1>RAG Evaluation</h1>
+    <p class="subtitle">Four metrics to measure if your RAG system actually works</p>
+    <div class="badges">
+      <span class="badge badge-hnsw">Context Relevance</span>
+      <span class="badge badge-ivf">Faithfulness</span>
+      <span class="badge badge-pq">Answer Quality</span>
+    </div>
+  </div>
+</div>
+
+<nav class="toc">
+  <div class="toc-inner">
+    <a href="#s1">Why Evaluate?</a>
+    <a href="#s2">Context Relevance</a>
+    <a href="#s3">Faithfulness</a>
+    <a href="#s4">Answer Relevance</a>
+    <a href="#s5">Chunk Utilization</a>
+    <a href="#s6">RAG Evaluator</a>
+    <a href="#s7">Failure Detector</a>
+    <a href="#s8">Eval Dataset</a>
+    <a href="#s9">Takeaway</a>
+  </div>
+</nav>
+
+<div class="container">
+
+  <!-- ===== SECTION 1 ===== -->
+  <section id="s1">
+    <h2><span class="num">01</span> Why Evaluate RAG Separately?</h2>
+    <p>A RAG system has two independently failing components: <strong>retrieval</strong> and <strong>generation</strong>. Evaluating only the final answer hides where things went wrong.</p>
+
+    <div class="analogy">
+      <div class="icon">🔍</div>
+      <p><strong>Analogy:</strong> Imagine grading a student's essay. If the essay is wrong, was it because they researched the wrong sources (retrieval failure), or because they had good sources but misinterpreted them (generation failure)? You need to grade both the research and the writing separately.</p>
+    </div>
+
+    <div class="grid-2">
+      <div class="card card-red">
+        <h3>Bad Retrieval, Good Generation</h3>
+        <p>The LLM perfectly summarizes irrelevant context. The answer sounds great but is completely wrong. This is the <strong>most dangerous</strong> failure mode because it looks correct and reads confidently.</p>
+      </div>
+      <div class="card card-yellow">
+        <h3>Good Retrieval, Bad Generation</h3>
+        <p>The right chunks were retrieved but the LLM hallucinated, ignored the context, or extracted the wrong information. Easier to catch because the evidence is right there in the context.</p>
+      </div>
+    </div>
+
+    <div class="card card-green">
+      <h3>Why End-to-End Evaluation Alone Fails</h3>
+      <p>If you only evaluate the final answer, you can't tell whether a wrong answer came from bad retrieval or bad generation. This matters because the fixes are completely different:</p>
+      <ul>
+        <li><strong>Bad retrieval:</strong> Fix chunking, embedding model, metadata filters, re-ranking</li>
+        <li><strong>Bad generation:</strong> Fix prompt template, grounding instructions, model selection</li>
+      </ul>
+      <p>Component-level evaluation (measuring retrieval and generation separately) gives you actionable diagnostics.</p>
+    </div>
+
+    <div class="arch-diagram">
+      <div class="arch-section-label">RAG Evaluation Framework</div>
+      <div class="arch-row">
+        <div class="arch-box accent">Context Relevance</div>
+        <div class="arch-box green">Faithfulness</div>
+        <div class="arch-box yellow">Answer Relevance</div>
+        <div class="arch-box red">Chunk Utilization</div>
+      </div>
+      <div class="arch-label-row">Retrieval Quality ←→ Generation Quality</div>
+    </div>
+
+    <h3>The Four Metrics at a Glance</h3>
+    <table class="comparison">
+      <thead><tr><th>Metric</th><th>What It Measures</th><th>Component</th><th>Target</th></tr></thead>
+      <tbody>
+        <tr><td>Context Relevance</td><td>Are retrieved chunks on-topic?</td><td>Retrieval</td><td>> 0.7</td></tr>
+        <tr><td>Faithfulness</td><td>Does the answer stay grounded?</td><td>Generation</td><td>> 0.8</td></tr>
+        <tr><td>Answer Relevance</td><td>Does the answer match the question?</td><td>Generation</td><td>> 0.7</td></tr>
+        <tr><td>Chunk Utilization</td><td>How much context is actually used?</td><td>Efficiency</td><td>0.5-0.8</td></tr>
+      </tbody>
+    </table>
+
+    <div class="pro-tip">
+      <div class="tip-header">Evaluation is Not Optional</div>
+      <p>"The system seems to be working" is not acceptable for production RAG. Without systematic evaluation, you will miss silent failures where the system confidently returns wrong answers. These are the most dangerous failures because users trust the system and act on incorrect information.</p>
+    </div>
+  </section>
+
+  <!-- ===== SECTION 2 ===== -->
+  <section id="s2">
+    <h2><span class="num">02</span> Metric 1: Context Relevance</h2>
+    <p><strong>Are the retrieved chunks actually relevant to the question?</strong> This metric evaluates the retrieval component in isolation, before the LLM ever sees the context.</p>
+
+    <div class="formula-box">
+      $$\text{Context Relevance} = \frac{\text{Number of relevant chunks retrieved}}{\text{Total chunks retrieved}}$$
+      <div class="label">Measures retrieval precision — are we retrieving the right chunks?</div>
+    </div>
+
+    <div class="card card-accent">
+      <h3>What It Catches</h3>
+      <ul>
+        <li>Embedding model returning semantically distant chunks</li>
+        <li>Keyword mismatch between query and indexed terms</li>
+        <li>Stale or outdated content being retrieved</li>
+        <li>Chunks from wrong document sections</li>
+        <li>Index contamination from unrelated documents</li>
+      </ul>
+    </div>
+
+    <div class="grid-2">
+      <div class="card card-green">
+        <h3>High Score (0.8+)</h3>
+        <p>Most retrieved chunks directly address the question. The retrieval pipeline is working well. The LLM has strong evidence to work with.</p>
+      </div>
+      <div class="card card-red">
+        <h3>Low Score (&lt;0.4)</h3>
+        <p>Retrieved chunks are off-topic. Fix your chunking strategy, try a better embedding model, add metadata filtering, or consider a re-ranker.</p>
+      </div>
+    </div>
+
+    <h3>Common Causes of Low Context Relevance</h3>
+    <table class="comparison">
+      <thead><tr><th>Cause</th><th>Symptom</th><th>Fix</th></tr></thead>
+      <tbody>
+        <tr><td>Poor chunking</td><td>Chunks mix multiple topics</td><td>Use semantic or recursive chunking</td></tr>
+        <tr><td>Wrong embedding model</td><td>Semantic similarity doesn't match human judgment</td><td>Test multiple models on your domain</td></tr>
+        <tr><td>Vocabulary mismatch</td><td>User terms differ from doc terms</td><td>Add HyDE or multi-query retrieval</td></tr>
+        <tr><td>No metadata filtering</td><td>Results from irrelevant categories</td><td>Add category/date filters to search</td></tr>
+        <tr><td>Stale index</td><td>Outdated info ranked highly</td><td>Implement incremental re-indexing</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ===== SECTION 3 ===== -->
+  <section id="s3">
+    <h2><span class="num">03</span> Metric 2: Faithfulness</h2>
+    <p><strong>Does the answer stick to the provided context, or does the LLM hallucinate?</strong></p>
+
+    <div class="formula-box">
+      $$\text{Faithfulness} = \frac{\text{Claims in answer supported by context}}{\text{Total claims in answer}}$$
+      <div class="label">Measures grounding — 1.0 means zero hallucination</div>
+    </div>
+
+    <div class="card card-accent">
+      <h3>What It Catches</h3>
+      <ul>
+        <li>LLM adding information not in the retrieved context</li>
+        <li>Fabricated statistics, dates, or names</li>
+        <li>Overconfident answers when context is insufficient</li>
+        <li>Subtle distortions of factual claims</li>
+      </ul>
+    </div>
+
+    <div class="analogy">
+      <div class="icon">⚖️</div>
+      <p><strong>Think of a courtroom:</strong> A faithful witness only testifies about what they personally observed (the context). An unfaithful witness adds speculation and hearsay. We want our RAG system to be a faithful witness.</p>
+    </div>
+
+    <div class="grid-2">
+      <div class="card card-green">
+        <h3>Faithful Answer</h3>
+        <p><strong>Context:</strong> "Python 3.12 was released in October 2023."</p>
+        <p><strong>Answer:</strong> "Python 3.12 was released in October 2023."</p>
+        <p class="dim" style="font-size:0.82rem;margin-top:8px;">Score: 1.0 &mdash; Every claim is directly supported.</p>
+      </div>
+      <div class="card card-red">
+        <h3>Unfaithful Answer</h3>
+        <p><strong>Context:</strong> "Python 3.12 was released in October 2023."</p>
+        <p><strong>Answer:</strong> "Python 3.12, created by Guido van Rossum, was released in October 2023 with 40% speed improvements."</p>
+        <p class="dim" style="font-size:0.82rem;margin-top:8px;">Score: 0.33 &mdash; Only the release date is in context. Creator and speed claims are hallucinated.</p>
+      </div>
+    </div>
+
+    <div class="pro-tip">
+      <div class="tip-header">Measuring Faithfulness in Practice</div>
+      <p>Automated faithfulness scoring decomposes the answer into individual claims, then checks each against the context. Tools like <strong>RAGAS</strong>, <strong>DeepEval</strong>, and <strong>TruLens</strong> use LLM-as-judge approaches for this. Keyword overlap heuristics (like the one in our playground) are a fast approximation but miss paraphrasing.</p>
+    </div>
+  </section>
+
+  <!-- ===== SECTION 4 ===== -->
+  <section id="s4">
+    <h2><span class="num">04</span> Metric 3: Answer Relevance</h2>
+    <p><strong>Does the answer actually address what the user asked?</strong></p>
+
+    <div class="formula-box">
+      $$\text{Answer Relevance} = \text{Semantic Similarity}(\text{question},\; \text{answer})$$
+      <div class="label">Measures whether the answer is on-topic</div>
+    </div>
+
+    <div class="card card-accent">
+      <h3>What It Catches</h3>
+      <ul>
+        <li>Answer discusses the right topic but misses the specific question</li>
+        <li>Tangential responses that address context but not query</li>
+        <li>"I don't know" when the context actually contains the answer</li>
+        <li>Overly broad answers that don't address specifics</li>
+      </ul>
+    </div>
+
+    <div class="grid-2">
+      <div class="card card-green">
+        <h3>High Score (0.9)</h3>
+        <p><strong>Q:</strong> What is the time complexity of binary search?<br><strong>A:</strong> Binary search has O(log n) time complexity because it halves the search space with each comparison.</p>
+        <p class="dim" style="font-size:0.82rem;margin-top:6px;">Directly addresses the specific question asked.</p>
+      </div>
+      <div class="card card-red">
+        <h3>Low Score (0.2)</h3>
+        <p><strong>Q:</strong> What is the time complexity of binary search?<br><strong>A:</strong> Binary search is a classic algorithm taught in computer science courses. It was invented by John Mauchly in 1946.</p>
+        <p class="dim" style="font-size:0.82rem;margin-top:6px;">Talks about binary search but never answers the actual question.</p>
+      </div>
+    </div>
+
+    <h3>Measuring Answer Relevance</h3>
+    <p>There are several approaches to computing answer relevance, ranging from simple heuristics to LLM-based judges:</p>
+
+    <div class="grid-2">
+      <div class="card">
+        <h3 style="color:var(--accent);">Keyword Overlap</h3>
+        <p>Count shared terms between question and answer. Fast but misses synonyms and paraphrasing. Good for a quick first pass.</p>
+      </div>
+      <div class="card">
+        <h3 style="color:var(--accent2);">Embedding Similarity</h3>
+        <p>Embed both question and answer, compute cosine similarity. Handles paraphrasing well. The approach used by RAGAS framework.</p>
+      </div>
+      <div class="card">
+        <h3 style="color:var(--accent4);">LLM-as-Judge</h3>
+        <p>Ask an LLM "Does this answer address the question?" on a 1-5 scale. Most accurate but slowest and most expensive.</p>
+      </div>
+      <div class="card">
+        <h3 style="color:var(--accent3);">Question Regeneration</h3>
+        <p>Generate questions from the answer, check if they match the original. If the answer is relevant, regenerated questions should be similar. Used by RAGAS for answer relevance scoring.</p>
+      </div>
+    </div>
+
+    <div class="insight">
+      <div class="insight-title">Practical Tip</div>
+      <p>When answer relevance is low but context relevance and faithfulness are high, the problem is almost always in the <strong>prompt template</strong>. The LLM has the right information and is using it faithfully, but it's not extracting the specific answer the user needs. Add explicit instructions like "Directly answer the question in the first sentence" to fix this.</p>
+    </div>
+
+    <div class="pro-tip">
+      <div class="tip-header">Improving Answer Relevance</div>
+      <p>If answer relevance is consistently low despite good retrieval, the issue is almost always in the <strong>prompt template</strong>. Add explicit instructions like "Answer the specific question asked" and "Be concise and directly address the query." Chain-of-thought prompting can also help the model stay focused on the question.</p>
+    </div>
+
+    <h3>Answer Relevance vs Faithfulness</h3>
+    <p>These metrics are independent. An answer can be highly faithful (everything it says is in the context) but completely irrelevant (it doesn't answer the question). Conversely, an answer can be highly relevant (it addresses the question perfectly) but unfaithful (it hallucinated the response).</p>
+
+    <div class="grid-2">
+      <div class="card card-yellow">
+        <h3>Faithful but Irrelevant</h3>
+        <p><strong>Q:</strong> How fast is binary search?<br><strong>Context:</strong> "Binary search requires a sorted array..."<br><strong>A:</strong> "Binary search requires a sorted array as input." <span class="dim">(True but doesn't answer the speed question)</span></p>
+      </div>
+      <div class="card card-yellow">
+        <h3>Relevant but Unfaithful</h3>
+        <p><strong>Q:</strong> How fast is binary search?<br><strong>Context:</strong> "Binary search is a search algorithm."<br><strong>A:</strong> "Binary search runs in O(log n) time." <span class="dim">(Correct answer but not from the context)</span></p>
+      </div>
+    </div>
+
+    <div class="analogy">
+      <div class="icon">🎯</div>
+      <p><strong>The 2×2 matrix of RAG quality:</strong> Faithful + Relevant = ideal. Faithful + Irrelevant = the system is honest but unhelpful. Unfaithful + Relevant = the answer is correct but we got lucky — can't trust the pipeline. Unfaithful + Irrelevant = complete failure. You need <em>both</em> metrics to be high simultaneously.</p>
+    </div>
+  </section>
+
+  <!-- ===== SECTION 5 ===== -->
+  <section id="s5">
+    <h2><span class="num">05</span> Metric 4: Chunk Utilization</h2>
+    <p><strong>How much of the retrieved context did the LLM actually use?</strong></p>
+
+    <div class="formula-box">
+      $$\text{Chunk Utilization} = \frac{\text{Chunks referenced in answer}}{\text{Total chunks provided}}$$
+      <div class="label">Measures efficiency of context usage</div>
+    </div>
+
+    <div class="card card-accent">
+      <h3>What It Catches</h3>
+      <ul>
+        <li>Retrieving 10 chunks but only using 2 (wasting context window)</li>
+        <li>LLM fixating on the first chunk and ignoring the rest</li>
+        <li>Retrieved chunks being redundant (same info repeated)</li>
+        <li>Opportunity to reduce K and save tokens/cost</li>
+        <li>Position bias — LLMs attend more to chunks at the beginning</li>
+      </ul>
+    </div>
+
+    <div class="grid-2">
+      <div class="card card-green">
+        <h3>Good Utilization (0.6-0.8)</h3>
+        <p>Most chunks contribute something to the answer. The retrieval pipeline is well-calibrated and not over-fetching. Some chunks may serve as supporting context without being directly cited.</p>
+      </div>
+      <div class="card card-red">
+        <h3>Low Utilization (&lt;0.3)</h3>
+        <p>Most of the context window is wasted on chunks the LLM ignores. You're paying for tokens that add noise, not signal. Reduce K, improve re-ranking, or check for chunk redundancy.</p>
+      </div>
+    </div>
+
+    <div class="pro-tip">
+      <div class="tip-header">Optimal Utilization</div>
+      <p>Perfect utilization (1.0) isn't the goal &mdash; some chunks serve as background context. Aim for <strong>0.5-0.8</strong>. Below 0.3 means you're retrieving too many chunks. Above 0.9 means you might not be retrieving enough variety.</p>
+    </div>
+
+    <h3>How the Four Metrics Interact</h3>
+    <p>No single metric tells the whole story. The power of this framework comes from reading the metrics <em>together</em>.</p>
+
+    <table class="comparison">
+      <thead><tr><th>Pattern</th><th>Context Rel.</th><th>Faithfulness</th><th>Answer Rel.</th><th>Utilization</th><th>Diagnosis</th></tr></thead>
+      <tbody>
+        <tr><td>Healthy RAG</td><td>High</td><td>High</td><td>High</td><td>Medium</td><td>System working well</td></tr>
+        <tr><td>Bad retrieval</td><td style="color:var(--accent3);">Low</td><td>High</td><td>Low</td><td>Low</td><td>Fix chunking/embedding</td></tr>
+        <tr><td>Hallucination</td><td>High</td><td style="color:var(--accent3);">Low</td><td>High</td><td>Medium</td><td>Improve grounding prompt</td></tr>
+        <tr><td>Off-topic answer</td><td>High</td><td>High</td><td style="color:var(--accent3);">Low</td><td>Low</td><td>Fix prompt template</td></tr>
+        <tr><td>Over-retrieval</td><td>Medium</td><td>High</td><td>High</td><td style="color:var(--accent3);">Low</td><td>Reduce K or improve ranking</td></tr>
+        <tr><td>Total failure</td><td style="color:var(--accent3);">Low</td><td style="color:var(--accent3);">Low</td><td style="color:var(--accent3);">Low</td><td style="color:var(--accent3);">Low</td><td>Fundamental pipeline issue</td></tr>
+      </tbody>
+    </table>
+
+    <div class="chart-wrap" style="margin-top:24px;">
+      <canvas id="metricCorrelationChart"></canvas>
+    </div>
+  </section>
+
+  <!-- ===== SECTION 6: RAG EVALUATOR PLAYGROUND ===== -->
+  <section id="s6">
+    <h2><span class="num">06</span> RAG Evaluator</h2>
+    <p>Enter a question, retrieved context, and generated answer to see how the four metrics score the RAG response. Scores are computed using keyword overlap heuristics.</p>
+
+    <div class="playground">
+      <h4>Evaluate Your RAG Output</h4>
+
+      <p class="dim" style="font-size:0.85rem;margin-bottom:16px;">Try different combinations to see how the metrics respond. For example, paste in context that is irrelevant to the question to see Context Relevance drop, or write an answer that adds facts not in the context to see Faithfulness drop.</p>
+
+      <label style="font-size:0.88rem;font-weight:500;display:block;margin-bottom:4px;">Question</label>
+      <input type="text" id="evalQuestion" class="demo-input" value="How does gradient descent optimize neural networks?" style="margin-bottom:12px;" />
+
+      <label style="font-size:0.88rem;font-weight:500;display:block;margin-bottom:4px;">Retrieved Context</label>
+      <textarea id="evalContext" class="demo-input" rows="5" style="margin-bottom:12px;">Gradient descent is an optimization algorithm used to minimize the loss function of a neural network. It works by computing the gradient of the loss with respect to each parameter, then updating parameters in the direction that reduces the loss. The learning rate controls the step size. Stochastic gradient descent (SGD) processes one sample at a time, while mini-batch gradient descent uses small batches. Adam optimizer combines momentum and adaptive learning rates for faster convergence. Backpropagation efficiently computes gradients using the chain rule.</textarea>
+
+      <label style="font-size:0.88rem;font-weight:500;display:block;margin-bottom:4px;">Generated Answer</label>
+      <textarea id="evalAnswer" class="demo-input" rows="4" style="margin-bottom:12px;">Gradient descent optimizes neural networks by iteratively adjusting parameters to minimize the loss function. It computes gradients via backpropagation using the chain rule, then updates weights in the direction that reduces error. The learning rate determines step size. Variants like SGD and Adam offer different trade-offs between speed and stability.</textarea>
+
+      <button class="demo-btn" id="evalBtn">Evaluate</button>
+
+      <div class="insight" style="margin-top:16px;">
+        <div class="insight-title">How Scoring Works</div>
+        <p>This playground uses <strong>keyword overlap heuristics</strong> as a fast approximation. Context Relevance measures token overlap between question and context. Faithfulness measures overlap between context and answer. Answer Relevance measures overlap between question and answer. Chunk Utilization counts how many context sentences share keywords with the answer. Production systems use LLM-as-judge for much better accuracy.</p>
+      </div>
+
+      <div id="evalResults" style="margin-top:20px;display:none;">
+        <div class="grid-2" style="margin-bottom:16px;">
+          <div class="metric-card" id="metricCR"><div class="metric-label">Context Relevance</div><div class="metric-value">—</div><div class="sim-bar-wrap"><div class="sim-bar-outer"><div class="sim-bar-inner" style="width:0;background:var(--accent);"></div></div></div></div>
+          <div class="metric-card" id="metricF"><div class="metric-label">Faithfulness</div><div class="metric-value">—</div><div class="sim-bar-wrap"><div class="sim-bar-outer"><div class="sim-bar-inner" style="width:0;background:var(--accent2);"></div></div></div></div>
+          <div class="metric-card" id="metricAR"><div class="metric-label">Answer Relevance</div><div class="metric-value">—</div><div class="sim-bar-wrap"><div class="sim-bar-outer"><div class="sim-bar-inner" style="width:0;background:var(--accent4);"></div></div></div></div>
+          <div class="metric-card" id="metricCU"><div class="metric-label">Chunk Utilization</div><div class="metric-value">—</div><div class="sim-bar-wrap"><div class="sim-bar-outer"><div class="sim-bar-inner" style="width:0;background:var(--orange);"></div></div></div></div>
+        </div>
+
+        <div class="result-box">
+          <div class="result-label">Overall Grade</div>
+          <div class="result-value" id="overallGrade">—</div>
+          <div id="gradeExplanation" style="color:var(--text-dim);font-size:0.85rem;margin-top:4px;"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== SECTION 7: FAILURE MODE DETECTOR ===== -->
+  <section id="s7">
+    <h2><span class="num">07</span> Failure Mode Detector</h2>
+    <p>See how the four metrics diagnose different RAG failure modes. Each scenario highlights a specific problem that metrics can identify.</p>
+
+    <div class="playground">
+      <h4>Select a Failure Scenario</h4>
+
+      <select id="failureSelect" class="demo-input" style="margin-bottom:16px;">
+        <option value="good">Good RAG — Everything works correctly</option>
+        <option value="bad_retrieval">Bad Retrieval — Wrong chunks retrieved</option>
+        <option value="hallucination">Hallucination — Answer invents facts</option>
+        <option value="irrelevant_answer">Irrelevant Answer — Answer misses the question</option>
+        <option value="low_utilization">Low Utilization — Most context ignored</option>
+      </select>
+
+      <div id="failureScenario" style="margin-bottom:16px;"></div>
+
+      <button class="demo-btn" id="failureEvalBtn">Run Evaluator on This Scenario</button>
+
+      <div class="grid-2" style="margin-top:16px;margin-bottom:16px;">
+        <div class="card" style="padding:16px;">
+          <h3 style="font-size:0.85rem;color:var(--accent);margin:0 0 6px;">What to Look For</h3>
+          <p class="dim" style="font-size:0.82rem;margin:0;">Each failure mode creates a distinctive "fingerprint" across the four metrics. Low Context Relevance points to retrieval issues. Low Faithfulness flags hallucination. Low Answer Relevance means the question wasn't addressed. Low Utilization suggests over-retrieval.</p>
+        </div>
+        <div class="card" style="padding:16px;">
+          <h3 style="font-size:0.85rem;color:var(--accent2);margin:0 0 6px;">Fixing Each Failure</h3>
+          <p class="dim" style="font-size:0.82rem;margin:0;">Bad retrieval → improve embedding model or chunking. Hallucination → strengthen grounding instructions in prompt. Irrelevant answer → fix prompt template, add CoT. Low utilization → reduce K or improve re-ranking to surface better chunks.</p>
+        </div>
+      </div>
+
+      <div id="failureResults" style="margin-top:20px;display:none;">
+        <div class="grid-2" style="margin-bottom:16px;">
+          <div class="metric-card" id="fMetricCR"><div class="metric-label">Context Relevance</div><div class="metric-value">—</div><div class="sim-bar-wrap"><div class="sim-bar-outer"><div class="sim-bar-inner" style="width:0;background:var(--accent);"></div></div></div></div>
+          <div class="metric-card" id="fMetricF"><div class="metric-label">Faithfulness</div><div class="metric-value">—</div><div class="sim-bar-wrap"><div class="sim-bar-outer"><div class="sim-bar-inner" style="width:0;background:var(--accent2);"></div></div></div></div>
+          <div class="metric-card" id="fMetricAR"><div class="metric-label">Answer Relevance</div><div class="metric-value">—</div><div class="sim-bar-wrap"><div class="sim-bar-outer"><div class="sim-bar-inner" style="width:0;background:var(--accent4);"></div></div></div></div>
+          <div class="metric-card" id="fMetricCU"><div class="metric-label">Chunk Utilization</div><div class="metric-value">—</div><div class="sim-bar-wrap"><div class="sim-bar-outer"><div class="sim-bar-inner" style="width:0;background:var(--orange);"></div></div></div></div>
+        </div>
+        <div class="result-box">
+          <div class="result-label">Diagnosis</div>
+          <div id="failureDiagnosis" style="color:var(--text-dim);font-size:0.9rem;line-height:1.7;"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== SECTION 8 ===== -->
+  <section id="s8">
+    <h2><span class="num">08</span> Building an Eval Dataset</h2>
+    <p>Automated metrics are approximations. To truly evaluate your RAG system, you need a ground-truth evaluation dataset.</p>
+
+    <div class="card card-accent">
+      <h3>Step 1: Collect Real User Questions</h3>
+      <p>Use actual queries from your users or domain experts. Don't make up questions &mdash; they'll miss the real failure modes. Pull from search logs, support tickets, and FAQ databases.</p>
+    </div>
+    <div class="card card-green">
+      <h3>Step 2: Annotate Golden Answers</h3>
+      <p>For each question, have a domain expert write the ideal answer and identify which source passages support it. These golden passages become the ground truth for retrieval metrics.</p>
+    </div>
+    <div class="card card-yellow">
+      <h3>Step 3: Include Edge Cases</h3>
+      <p>Add questions where the answer isn't in the knowledge base, ambiguous questions, and multi-hop questions that require combining multiple chunks. Also include negative examples where the system should say "I don't know."</p>
+    </div>
+    <div class="card card-red">
+      <h3>Step 4: Automate and Monitor</h3>
+      <p>Run your eval suite on every pipeline change. Track metrics over time. Alert when scores drop below thresholds. Version your eval dataset alongside your code.</p>
+    </div>
+
+    <table class="comparison">
+      <thead><tr><th>Dataset Size</th><th>Purpose</th><th>When</th></tr></thead>
+      <tbody>
+        <tr><td>20-30 examples</td><td>Quick smoke test</td><td>During development</td></tr>
+        <tr><td>100-200 examples</td><td>Reliable benchmarking</td><td>Pre-deployment</td></tr>
+        <tr><td>500+ examples</td><td>Statistical significance</td><td>Production monitoring</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Eval Dataset Structure</h3>
+    <div class="meta-doc">
+      <span class="meta-bracket">{</span><br>
+      &nbsp;&nbsp;<span class="meta-key">"question"</span>: <span class="meta-str">"What is the default timeout?"</span>,<br>
+      &nbsp;&nbsp;<span class="meta-key">"golden_answer"</span>: <span class="meta-str">"The default timeout is 30 seconds."</span>,<br>
+      &nbsp;&nbsp;<span class="meta-key">"golden_chunks"</span>: [<span class="meta-str">"doc_config.md#L42-L48"</span>],<br>
+      &nbsp;&nbsp;<span class="meta-key">"category"</span>: <span class="meta-str">"factual_lookup"</span>,<br>
+      &nbsp;&nbsp;<span class="meta-key">"difficulty"</span>: <span class="meta-str">"easy"</span><br>
+      <span class="meta-bracket">}</span>
+    </div>
+
+    <div class="pro-tip">
+      <div class="tip-header">Eval Dataset Anti-Patterns</div>
+      <p>Don't auto-generate eval questions with the same LLM you're evaluating. Don't use only simple factual queries. Don't skip adversarial examples (queries designed to trigger hallucination). Don't evaluate once and forget &mdash; eval is ongoing.</p>
+    </div>
+
+    <h3>Popular RAG Evaluation Frameworks</h3>
+    <div class="grid-2">
+      <div class="card">
+        <h3 style="color:var(--accent);">RAGAS</h3>
+        <p>Open-source framework specifically designed for RAG evaluation. Computes Context Relevance, Faithfulness, Answer Relevance, and Answer Correctness using LLM-as-judge.</p>
+      </div>
+      <div class="card">
+        <h3 style="color:var(--accent2);">DeepEval</h3>
+        <p>Unit testing framework for LLM applications. Provides RAG-specific metrics plus custom metric definitions. Integrates with pytest for CI/CD pipelines.</p>
+      </div>
+      <div class="card">
+        <h3 style="color:var(--accent4);">TruLens</h3>
+        <p>Evaluation and tracking for LLM apps. Provides feedback functions for grounding, relevance, and safety. Includes a dashboard for monitoring metrics over time.</p>
+      </div>
+      <div class="card">
+        <h3 style="color:var(--accent3);">LangSmith</h3>
+        <p>LangChain's evaluation platform. Supports dataset management, automated evals, human annotation, and A/B testing of RAG configurations.</p>
+      </div>
+    </div>
+
+    <h3>Human vs Automated Evaluation</h3>
+    <p>Automated metrics are scalable but approximate. Human evaluation is accurate but expensive. The best approach combines both.</p>
+
+    <table class="comparison">
+      <thead><tr><th>Aspect</th><th>Automated (LLM-as-Judge)</th><th>Human Evaluation</th></tr></thead>
+      <tbody>
+        <tr><td>Cost</td><td>~$0.01-0.05 per eval</td><td>~$0.50-5.00 per eval</td></tr>
+        <tr><td>Speed</td><td>Seconds per example</td><td>Minutes per example</td></tr>
+        <tr><td>Scale</td><td>Thousands per hour</td><td>Dozens per hour</td></tr>
+        <tr><td>Accuracy</td><td>~80-90% agreement with humans</td><td>Ground truth (but subjective)</td></tr>
+        <tr><td>Consistency</td><td>Deterministic (mostly)</td><td>Inter-annotator disagreement</td></tr>
+        <tr><td>When to use</td><td>CI/CD, daily monitoring, A/B tests</td><td>Calibration, edge cases, launch decisions</td></tr>
+      </tbody>
+    </table>
+
+    <div class="pro-tip">
+      <div class="tip-header">Calibrate Your Automated Evals</div>
+      <p>Run 50-100 examples through both human evaluation and your automated metrics. Compute the correlation. If automated metrics disagree with humans more than 20% of the time on faithfulness, adjust your prompts or switch to a different LLM judge. Re-calibrate quarterly as your data evolves.</p>
+    </div>
+
+    <h3>Recommended Evaluation Workflow</h3>
+    <div class="arch-diagram">
+      <div class="arch-row">
+        <div class="arch-box accent">1. Curate 100+ eval examples</div>
+      </div>
+      <div class="arch-arrow down">↓</div>
+      <div class="arch-row">
+        <div class="arch-box green">2. Human-annotate 50 for calibration</div>
+      </div>
+      <div class="arch-arrow down">↓</div>
+      <div class="arch-row">
+        <div class="arch-box yellow">3. Set up automated metrics (RAGAS/DeepEval)</div>
+      </div>
+      <div class="arch-arrow down">↓</div>
+      <div class="arch-row">
+        <div class="arch-box red">4. Run on every pipeline change (CI/CD)</div>
+      </div>
+      <div class="arch-arrow down">↓</div>
+      <div class="arch-row">
+        <div class="arch-box" style="border-color:var(--blue);color:var(--blue);">5. Dashboard + alerts for metric regression</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== SECTION 9 ===== -->
+  <section id="s9">
+    <h2><span class="num">09</span> Key Takeaway</h2>
+
+    <div class="analogy">
+      <div class="icon">📊</div>
+      <p><strong>Measure retrieval and generation separately.</strong> Context Relevance tells you if retrieval is working. Faithfulness tells you if the LLM is grounding its answers. Answer Relevance tells you if the user's question is being addressed. Chunk Utilization tells you if you're using your context window efficiently. All four together give you a complete picture of RAG health.</p>
+    </div>
+
+    <div class="grid-2">
+      <div class="card card-green">
+        <h3>Healthy RAG Thresholds</h3>
+        <ul>
+          <li>Context Relevance > 0.7</li>
+          <li>Faithfulness > 0.8</li>
+          <li>Answer Relevance > 0.7</li>
+          <li>Chunk Utilization 0.5-0.8</li>
+        </ul>
+      </div>
+      <div class="card card-red">
+        <h3>Warning Signs</h3>
+        <ul>
+          <li>High faithfulness + low context relevance = lucky</li>
+          <li>Low faithfulness + high context relevance = hallucinating</li>
+          <li>All metrics low = fundamental pipeline issue</li>
+          <li>Utilization &lt; 0.2 = retrieving too much</li>
+        </ul>
+      </div>
+    </div>
+
+    <h3>The RAG Evaluation Flywheel</h3>
+    <p>Evaluation isn't a one-time activity. It's a continuous improvement loop.</p>
+
+    <div class="arch-diagram">
+      <div class="arch-row">
+        <div class="arch-box accent">Deploy RAG</div>
+        <div class="arch-arrow">→</div>
+        <div class="arch-box green">Collect Queries</div>
+        <div class="arch-arrow">→</div>
+        <div class="arch-box yellow">Run Eval Suite</div>
+      </div>
+      <div class="arch-arrow down">↓</div>
+      <div class="arch-row">
+        <div class="arch-box red">Identify Failures</div>
+        <div class="arch-arrow">→</div>
+        <div class="arch-box" style="border-color:var(--blue);color:var(--blue);">Fix Pipeline</div>
+        <div class="arch-arrow">→</div>
+        <div class="arch-box accent">Re-deploy</div>
+      </div>
+    </div>
+
+    <div class="step-flow">
+      <div class="step-pill" style="border-color:var(--accent);color:var(--accent);">Build eval dataset</div>
+      <span class="step-arrow">→</span>
+      <div class="step-pill" style="border-color:var(--accent2);color:var(--accent2);">Automate scoring</div>
+      <span class="step-arrow">→</span>
+      <div class="step-pill" style="border-color:var(--accent4);color:var(--accent4);">Set alert thresholds</div>
+      <span class="step-arrow">→</span>
+      <div class="step-pill" style="border-color:var(--accent3);color:var(--accent3);">Monitor in production</div>
+    </div>
+
+    <div class="pro-tip">
+      <div class="tip-header">Start Simple, Iterate</div>
+      <p>You don't need all four metrics on day one. Start with <strong>Faithfulness</strong> (the most critical &mdash; prevents hallucination) and <strong>Context Relevance</strong> (catches retrieval failures). Add Answer Relevance and Chunk Utilization as your system matures and you need finer-grained diagnostics.</p>
+    </div>
+  </section>
+
+</div>
+
+<footer>
+  <p>RAG Evaluation &mdash; Interactive Playground &mdash; Rahul Mrinal</p>
+</footer>
+
+<script>
+// ===== TOC SCROLL HIGHLIGHTING =====
+(function() {
+  const tocLinks = document.querySelectorAll('.toc a');
+  const sections = [];
+  tocLinks.forEach(link => {
+    const id = link.getAttribute('href').slice(1);
+    const el = document.getElementById(id);
+    if (el) sections.push({ id, el, link });
+  });
+  function updateTOC() {
+    let current = sections[0];
+    for (const s of sections) { if (s.el.getBoundingClientRect().top <= 140) current = s; }
+    tocLinks.forEach(l => l.classList.remove('active'));
+    if (current) current.link.classList.add('active');
+  }
+  window.addEventListener('scroll', updateTOC, { passive: true });
+  updateTOC();
+})();
+
+// ===== METRIC CORRELATION CHART =====
+(function() {
+  const ctx = document.getElementById('metricCorrelationChart').getContext('2d');
+  new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: ['Healthy RAG', 'Bad Retrieval', 'Hallucination', 'Off-topic Answer', 'Over-retrieval', 'Total Failure'],
+      datasets: [
+        { label: 'Context Relevance', data: [0.85, 0.25, 0.80, 0.82, 0.55, 0.20], backgroundColor: 'rgba(108,99,255,0.7)' },
+        { label: 'Faithfulness', data: [0.90, 0.85, 0.30, 0.88, 0.82, 0.25], backgroundColor: 'rgba(0,201,167,0.7)' },
+        { label: 'Answer Relevance', data: [0.88, 0.35, 0.82, 0.30, 0.80, 0.15], backgroundColor: 'rgba(255,217,61,0.7)' },
+        { label: 'Chunk Utilization', data: [0.65, 0.20, 0.55, 0.25, 0.15, 0.10], backgroundColor: 'rgba(255,159,67,0.7)' }
+      ]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        title: { display: true, text: 'Metric Patterns Across Failure Modes', color: '#e8eaf0', font: { size: 14, weight: 600 } },
+        legend: { labels: { color: '#9398ab' } }
+      },
+      scales: {
+        x: { ticks: { color: '#6d7290', maxRotation: 45 }, grid: { color: 'rgba(42,45,58,0.5)' } },
+        y: { min: 0, max: 1, ticks: { color: '#6d7290' }, grid: { color: 'rgba(42,45,58,0.5)' } }
+      }
+    }
+  });
+})();
+
+// ===== EVALUATION HELPERS =====
+function tokenize(text) {
+  return text.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(w => w.length > 2);
+}
+
+function jaccardSimilarity(a, b) {
+  const setA = new Set(tokenize(a));
+  const setB = new Set(tokenize(b));
+  const inter = new Set([...setA].filter(x => setB.has(x)));
+  const union = new Set([...setA, ...setB]);
+  return union.size ? inter.size / union.size : 0;
+}
+
+function computeMetrics(question, context, answer) {
+  const qTokens = new Set(tokenize(question));
+  const cTokens = new Set(tokenize(context));
+  const aTokens = new Set(tokenize(answer));
+
+  const contextRelevance = Math.min(1, jaccardSimilarity(question, context) * 2.5 + 0.15);
+  const faithfulness = Math.min(1, jaccardSimilarity(context, answer) * 2.2 + 0.1);
+
+  const answerRelevance = Math.min(1, jaccardSimilarity(question, answer) * 2.5 + 0.15);
+
+  const contextSents = context.split(/[.!?]+/).filter(s => s.trim().length > 10);
+  let usedSents = 0;
+  contextSents.forEach(sent => {
+    const sentTokens = new Set(tokenize(sent));
+    const overlap = [...sentTokens].filter(t => aTokens.has(t)).length;
+    if (overlap >= 2) usedSents++;
+  });
+  const chunkUtilization = contextSents.length ? Math.min(1, usedSents / contextSents.length) : 0;
+
+  return {
+    contextRelevance: Math.round(contextRelevance * 100) / 100,
+    faithfulness: Math.round(faithfulness * 100) / 100,
+    answerRelevance: Math.round(answerRelevance * 100) / 100,
+    chunkUtilization: Math.round(chunkUtilization * 100) / 100
+  };
+}
+
+function scoreColor(score) {
+  if (score >= 0.7) return 'var(--accent2)';
+  if (score >= 0.4) return 'var(--accent4)';
+  return 'var(--accent3)';
+}
+
+function renderMetricCard(cardId, score, barColor) {
+  const card = document.getElementById(cardId);
+  const valEl = card.querySelector('.metric-value');
+  const barEl = card.querySelector('.sim-bar-inner');
+  valEl.textContent = score.toFixed(2);
+  valEl.style.color = scoreColor(score);
+  barEl.style.width = (score * 100) + '%';
+  barEl.style.background = scoreColor(score);
+}
+
+function overallGrade(metrics) {
+  const avg = (metrics.contextRelevance + metrics.faithfulness + metrics.answerRelevance + metrics.chunkUtilization) / 4;
+  if (avg >= 0.8) return { grade: 'A — Excellent', color: 'var(--accent2)' };
+  if (avg >= 0.65) return { grade: 'B — Good', color: 'var(--accent2)' };
+  if (avg >= 0.5) return { grade: 'C — Needs Work', color: 'var(--accent4)' };
+  if (avg >= 0.35) return { grade: 'D — Poor', color: 'var(--orange)' };
+  return { grade: 'F — Failing', color: 'var(--accent3)' };
+}
+
+// ===== SECTION 6: RAG EVALUATOR =====
+(function() {
+  document.getElementById('evalBtn').addEventListener('click', () => {
+    const q = document.getElementById('evalQuestion').value;
+    const c = document.getElementById('evalContext').value;
+    const a = document.getElementById('evalAnswer').value;
+    if (!q || !c || !a) return;
+
+    const m = computeMetrics(q, c, a);
+    document.getElementById('evalResults').style.display = 'block';
+
+    renderMetricCard('metricCR', m.contextRelevance, 'var(--accent)');
+    renderMetricCard('metricF', m.faithfulness, 'var(--accent2)');
+    renderMetricCard('metricAR', m.answerRelevance, 'var(--accent4)');
+    renderMetricCard('metricCU', m.chunkUtilization, 'var(--orange)');
+
+    const g = overallGrade(m);
+    document.getElementById('overallGrade').textContent = g.grade;
+    document.getElementById('overallGrade').style.color = g.color;
+
+    let explanation = '';
+    if (m.contextRelevance < 0.5) explanation += 'Low context relevance suggests retrieved chunks don\'t match the question well. ';
+    if (m.faithfulness < 0.5) explanation += 'Low faithfulness indicates the answer may contain claims not in the context. ';
+    if (m.answerRelevance < 0.5) explanation += 'Low answer relevance means the answer doesn\'t directly address the question. ';
+    if (m.chunkUtilization < 0.3) explanation += 'Low utilization means most context is being ignored. ';
+    if (!explanation) explanation = 'All metrics look healthy. This appears to be a well-functioning RAG response.';
+    document.getElementById('gradeExplanation').textContent = explanation;
+  });
+})();
+
+// ===== SECTION 7: FAILURE MODE DETECTOR =====
+(function() {
+  const scenarios = {
+    good: {
+      question: "What is the time complexity of quicksort?",
+      context: "Quicksort is a divide-and-conquer sorting algorithm. Its average time complexity is O(n log n), making it one of the fastest general-purpose sorting algorithms. In the worst case, when the pivot selection is poor, it degrades to O(n²). The space complexity is O(log n) for the recursive call stack. Randomized pivot selection helps avoid worst-case behavior in practice.",
+      answer: "Quicksort has an average time complexity of O(n log n). In the worst case with poor pivot selection, it degrades to O(n²). Randomized pivot selection helps avoid this worst case in practice.",
+      diagnosis: '<span style="color:var(--accent2);font-weight:700;">All healthy.</span> The retrieved context directly addresses quicksort complexity, the answer faithfully reflects the context, it answers the specific question asked, and it utilizes multiple context sentences.'
+    },
+    bad_retrieval: {
+      question: "What is the time complexity of quicksort?",
+      context: "Merge sort is a stable sorting algorithm that always runs in O(n log n) time. It uses O(n) extra space for the merge step. Bubble sort has O(n²) time complexity and is mainly used for educational purposes. Insertion sort performs well on nearly-sorted data with O(n) best case.",
+      answer: "Based on the available information, merge sort runs in O(n log n) time and bubble sort runs in O(n²). The context doesn't specifically address quicksort's time complexity.",
+      diagnosis: '<span style="color:var(--accent3);font-weight:700;">Bad retrieval detected.</span> Context Relevance is low because the retrieved chunks discuss merge sort and bubble sort instead of quicksort. The answer is faithful to the context and honestly states the limitation, but it can\'t answer the actual question.'
+    },
+    hallucination: {
+      question: "What is the time complexity of quicksort?",
+      context: "Quicksort is a divide-and-conquer sorting algorithm. Its average time complexity is O(n log n). In the worst case it degrades to O(n²). Randomized pivot selection helps avoid worst-case behavior.",
+      answer: "Quicksort has O(n log n) average complexity and O(n²) worst case. It was invented by Tony Hoare in 1959 at Moscow State University. The algorithm uses the Lomuto partition scheme by default and requires O(n) auxiliary space. Modern implementations in Python's sorted() function use Timsort instead, which achieves O(n) best case.",
+      diagnosis: '<span style="color:var(--accent3);font-weight:700;">Hallucination detected.</span> Faithfulness is low because the answer adds multiple claims not in the context: inventor details, Lomuto partition, O(n) space, and Timsort. While some facts may be correct, they\'re not grounded in the provided context.'
+    },
+    irrelevant_answer: {
+      question: "What is the time complexity of quicksort?",
+      context: "Quicksort is a divide-and-conquer sorting algorithm. Its average time complexity is O(n log n). In the worst case it degrades to O(n²). The space complexity is O(log n) for the recursive call stack.",
+      answer: "Quicksort is one of the most widely taught algorithms in computer science courses. It demonstrates important concepts like divide and conquer and recursion. Many programming languages include quicksort in their standard libraries. Understanding sorting algorithms is fundamental to software engineering interviews.",
+      diagnosis: '<span style="color:var(--accent4);font-weight:700;">Irrelevant answer detected.</span> Answer Relevance is low because the answer discusses quicksort in general terms but never actually states the time complexity, which is what the question asked. The context had the answer, but the LLM failed to extract the specific information requested.'
+    },
+    low_utilization: {
+      question: "What is the time complexity of quicksort?",
+      context: "Quicksort is a divide-and-conquer sorting algorithm. Its average time complexity is O(n log n). In the worst case it degrades to O(n²). The space complexity is O(log n) for the recursive call stack. Randomized pivot selection helps avoid worst-case behavior. Dual-pivot quicksort, used in Java's Arrays.sort(), uses two pivots for better cache performance. Three-way partitioning handles duplicate elements efficiently. Introsort combines quicksort with heapsort as a fallback.",
+      answer: "The average time complexity of quicksort is O(n log n).",
+      diagnosis: '<span style="color:var(--accent4);font-weight:700;">Low utilization detected.</span> Chunk Utilization is low because the answer only uses one sentence from the context. While the answer is correct and faithful, the rich context about worst case, space complexity, pivot strategies, and variants is entirely ignored. Consider retrieving fewer chunks or encouraging more detailed answers.'
+    }
+  };
+
+  const select = document.getElementById('failureSelect');
+  const scenarioDiv = document.getElementById('failureScenario');
+
+  function showScenario() {
+    const s = scenarios[select.value];
+    scenarioDiv.innerHTML = `
+      <div class="card" style="margin-bottom:8px;">
+        <h3 style="color:var(--accent);font-size:0.95rem;">Question</h3>
+        <p>${esc(s.question)}</p>
+      </div>
+      <div class="card" style="margin-bottom:8px;">
+        <h3 style="color:var(--accent2);font-size:0.95rem;">Retrieved Context</h3>
+        <p style="font-size:0.88rem;">${esc(s.context)}</p>
+      </div>
+      <div class="card">
+        <h3 style="color:var(--accent4);font-size:0.95rem;">Generated Answer</h3>
+        <p style="font-size:0.88rem;">${esc(s.answer)}</p>
+      </div>`;
+    document.getElementById('failureResults').style.display = 'none';
+  }
+
+  function esc(t) { return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+  select.addEventListener('change', showScenario);
+  showScenario();
+
+  document.getElementById('failureEvalBtn').addEventListener('click', () => {
+    const s = scenarios[select.value];
+    const m = computeMetrics(s.question, s.context, s.answer);
+    document.getElementById('failureResults').style.display = 'block';
+
+    renderMetricCard('fMetricCR', m.contextRelevance, 'var(--accent)');
+    renderMetricCard('fMetricF', m.faithfulness, 'var(--accent2)');
+    renderMetricCard('fMetricAR', m.answerRelevance, 'var(--accent4)');
+    renderMetricCard('fMetricCU', m.chunkUtilization, 'var(--orange)');
+
+    document.getElementById('failureDiagnosis').innerHTML = s.diagnosis;
+  });
+})();
+</script>
+</body>
+</html>

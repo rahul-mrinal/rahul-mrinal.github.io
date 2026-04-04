@@ -1,0 +1,997 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sharding &amp; Replication — Interactive Playground</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body, {
+      delimiters: [
+        {left: '$$', right: '$$', display: true},
+        {left: '\\[', right: '\\]', display: true},
+        {left: '$', right: '$', display: false},
+        {left: '\\(', right: '\\)', display: false}
+      ],
+      throwOnError: false
+    });"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../playground.css" />
+  <style>
+    .shard-viz { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; margin: 20px 0; }
+    .shard-node {
+      background: var(--surface2); border: 2px solid var(--border); border-radius: var(--radius);
+      padding: 16px 20px; min-width: 130px; text-align: center; transition: all 0.4s;
+      position: relative;
+    }
+    .shard-node.active { border-color: var(--accent); box-shadow: 0 0 20px rgba(108,99,255,0.3); }
+    .shard-node.responding { border-color: var(--accent2); box-shadow: 0 0 20px rgba(0,201,167,0.3); }
+    .shard-node.slow { border-color: var(--accent3); box-shadow: 0 0 20px rgba(255,107,107,0.3); }
+    .shard-node .shard-label { font-size: 0.75rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px; }
+    .shard-node .shard-name { font-size: 1.1rem; font-weight: 700; margin: 4px 0; }
+    .shard-node .shard-docs { font-size: 0.8rem; color: var(--text-dim); font-family: 'JetBrains Mono', monospace; }
+    .shard-node .shard-latency {
+      font-size: 0.78rem; font-family: 'JetBrains Mono', monospace;
+      margin-top: 6px; padding: 2px 8px; border-radius: 4px;
+      display: inline-block;
+    }
+    .shard-node .shard-latency.fast { background: rgba(0,201,167,0.15); color: var(--accent2); }
+    .shard-node .shard-latency.medium { background: rgba(255,217,61,0.15); color: var(--accent4); }
+    .shard-node .shard-latency.slow-lat { background: rgba(255,107,107,0.15); color: var(--accent3); }
+
+    .coordinator-box {
+      background: var(--surface); border: 2px solid var(--accent);
+      border-radius: var(--radius); padding: 16px 24px; text-align: center;
+      margin: 16px auto; max-width: 300px; transition: all 0.4s;
+    }
+    .coordinator-box.merging { border-color: var(--accent2); box-shadow: 0 0 24px rgba(0,201,167,0.3); }
+
+    .scatter-lines { display: flex; justify-content: center; margin: 8px 0; }
+    .scatter-lines .fan-line {
+      width: 2px; height: 30px; margin: 0 32px;
+      background: var(--border); transition: background 0.4s;
+    }
+    .scatter-lines .fan-line.active { background: var(--accent); }
+    .scatter-lines .fan-line.responding { background: var(--accent2); }
+
+    .scatter-log {
+      background: var(--code-bg); border: 1px solid var(--border); border-radius: var(--radius-sm);
+      padding: 16px; margin-top: 16px; font-family: 'JetBrains Mono', monospace;
+      font-size: 0.82rem; max-height: 200px; overflow-y: auto; line-height: 1.8;
+    }
+    .scatter-log .log-scatter { color: var(--accent); }
+    .scatter-log .log-gather { color: var(--accent2); }
+    .scatter-log .log-merge { color: var(--accent4); }
+    .scatter-log .log-slow { color: var(--accent3); }
+
+    .calc-results { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-top: 20px; }
+    .calc-card {
+      background: var(--code-bg); border: 1px solid var(--border); border-radius: var(--radius-sm);
+      padding: 16px; text-align: center;
+    }
+    .calc-card .calc-label { font-size: 0.72rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+    .calc-card .calc-value { font-size: 1.4rem; font-weight: 700; font-family: 'JetBrains Mono', monospace; }
+
+    .toggle-row { display: flex; align-items: center; gap: 12px; margin: 12px 0; }
+    .toggle-switch {
+      position: relative; width: 44px; height: 24px; background: var(--surface2);
+      border-radius: 12px; cursor: pointer; transition: background 0.3s; border: 1px solid var(--border);
+    }
+    .toggle-switch.on { background: var(--accent3); border-color: var(--accent3); }
+    .toggle-switch::after {
+      content: ''; position: absolute; top: 2px; left: 2px;
+      width: 18px; height: 18px; background: #fff; border-radius: 50%;
+      transition: transform 0.3s;
+    }
+    .toggle-switch.on::after { transform: translateX(20px); }
+    .toggle-label { font-size: 0.88rem; color: var(--text-dim); }
+
+    .replica-group { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .replica-node {
+      background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius-sm);
+      padding: 8px 14px; font-size: 0.82rem; font-weight: 600; transition: all 0.2s;
+    }
+    .replica-node.primary { border-color: var(--accent); color: var(--accent); }
+    .replica-node.replica { border-color: var(--accent2); color: var(--accent2); }
+    .replica-arrow { color: var(--text-dim); font-size: 0.9rem; }
+  </style>
+</head>
+
+<body>
+<div class="topbar">
+  <a href="/" class="topbar-brand">
+    <div class="topbar-logo">RM</div>
+    <span class="topbar-label">Rahul Mrinal</span>
+  </a>
+  <a href="/blog" class="topbar-back">← Back to Blog</a>
+</div>
+
+<div class="hero">
+  <div class="container">
+    <h1>Sharding &amp; Replication</h1>
+    <p class="subtitle">Split data for throughput, replicate for availability</p>
+    <div class="badges">
+      <span class="badge badge-hnsw">Sharding</span>
+      <span class="badge badge-ivf">Replication</span>
+      <span class="badge badge-pq">Scatter-Gather</span>
+    </div>
+  </div>
+</div>
+
+<nav class="toc">
+  <div class="toc-inner">
+    <a href="#s1">Analogy</a>
+    <a href="#s2">Why Shard?</a>
+    <a href="#s3">Strategies</a>
+    <a href="#s4">Scatter-Gather</a>
+    <a href="#s5">Replicas</a>
+    <a href="#s6">Calculator</a>
+    <a href="#s7">Rebalancing</a>
+    <a href="#s8">Failures</a>
+    <a href="#s9">Takeaway</a>
+  </div>
+</nav>
+
+<div class="container">
+
+  <!-- ===== SECTION 1 ===== -->
+  <section id="s1">
+    <h2><span class="num">01</span> The Pizza Kitchen Analogy</h2>
+    <p class="lead">Think of your data as pizza dough and your servers as ovens.</p>
+
+    <div class="analogy">
+      <div class="icon">🍕</div>
+      <p><strong>Sharding = Multiple ovens.</strong> When one oven can't bake fast enough for all the orders, you split the workload across several ovens. Each oven handles a subset of pizza types. Pepperoni goes to Oven A, Margherita to Oven B, etc. Together they handle more throughput than any single oven could.</p>
+      <p style="margin-top:8px;">Just like in a real kitchen, the challenge isn't splitting the work — it's coordinating the results. When a customer orders a "pizza combo," you need all ovens to contribute their part and assemble it at the serving counter. That coordination cost is the scatter-gather overhead.</p>
+    </div>
+
+    <div class="analogy">
+      <div class="icon">🔄</div>
+      <p><strong>Replication = Backup oven.</strong> What if Oven A breaks down? You keep a second oven running with the same recipes ready to go. That's a replica — it has a copy of the same data and can take over reads (or even writes) if the primary fails. More replicas = higher availability.</p>
+    </div>
+
+    <div class="grid-2">
+      <div class="card card-accent">
+        <h3>Sharding</h3>
+        <ul>
+          <li><strong>Goal:</strong> Horizontal throughput scaling</li>
+          <li><strong>How:</strong> Partition data across nodes</li>
+          <li><strong>Each shard:</strong> Holds a subset of documents</li>
+          <li><strong>Trade-off:</strong> Cross-shard queries are expensive</li>
+          <li><strong>Also known as:</strong> Partitioning, horizontal splitting</li>
+        </ul>
+      </div>
+      <div class="card card-green">
+        <h3>Replication</h3>
+        <ul>
+          <li><strong>Goal:</strong> Fault tolerance and read scaling</li>
+          <li><strong>How:</strong> Copy data to multiple nodes</li>
+          <li><strong>Each replica:</strong> Has the same data as the primary</li>
+          <li><strong>Trade-off:</strong> Write amplification, consistency lag</li>
+          <li><strong>Also known as:</strong> Mirroring, redundancy</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="formula-box compact">
+      $$ \text{Capacity} = \text{Shards} \times \text{QPS per shard} \times (\text{Replicas} + 1) $$
+      <div class="label">Combined formula: sharding multiplies data capacity, replication multiplies read capacity</div>
+    </div>
+  </section>
+
+  <!-- ===== SECTION 2 ===== -->
+  <section id="s2">
+    <h2><span class="num">02</span> Why Shard?</h2>
+    <p class="lead">When your data outgrows a single machine, you have no choice but to split it.</p>
+
+    <div class="card">
+      <h3>Single-Node Limits</h3>
+      <table>
+        <thead><tr><th>Resource</th><th>Typical Limit</th><th>Symptom</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Disk</strong></td><td>2-4 TB SSD</td><td>Can't fit entire index</td></tr>
+          <tr><td><strong>RAM</strong></td><td>128-256 GB</td><td>Swapping kills latency</td></tr>
+          <tr><td><strong>CPU</strong></td><td>64-128 cores</td><td>Can't serve enough QPS</td></tr>
+          <tr><td><strong>Network</strong></td><td>10-25 Gbps</td><td>Bandwidth saturation</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="insight">
+      <div class="insight-title">Key Insight</div>
+      <p>Sharding is the only way to achieve linear scalability. If you need 3× throughput, add 3× shards. If your index grows 5×, add enough shards so each still fits comfortably in RAM.</p>
+    </div>
+
+    <h3>When to Shard</h3>
+    <div class="grid-3">
+      <div class="card card-accent">
+        <h3>Data Volume</h3>
+        <p>Index exceeds single node storage or RAM capacity</p>
+      </div>
+      <div class="card card-green">
+        <h3>Query Throughput</h3>
+        <p>QPS exceeds what one node can handle at acceptable latency</p>
+      </div>
+      <div class="card card-yellow">
+        <h3>Write Throughput</h3>
+        <p>Indexing rate exceeds single node's write capacity</p>
+      </div>
+    </div>
+
+    <h3>Sharding vs Vertical Scaling</h3>
+    <table>
+      <thead><tr><th>Approach</th><th>How</th><th>Cost Curve</th><th>Limit</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Scale Up</strong></td><td>Bigger machine (more RAM, CPU)</td><td>Exponential (diminishing returns)</td><td>Hardware ceiling</td></tr>
+        <tr><td><strong>Scale Out (Shard)</strong></td><td>More machines, data partitioned</td><td>Linear (pay per shard)</td><td>Coordination overhead</td></tr>
+      </tbody>
+    </table>
+
+    <div class="analogy">
+      <div class="icon">💡</div>
+      <p><strong>Think of it like moving apartments.</strong> Scale up = renting a bigger apartment. At some point, the biggest apartment isn't big enough. Scale out = renting multiple apartments and splitting your stuff across them. More flexible, but you need to remember where you put things.</p>
+    </div>
+
+    <h3>Real-World Shard Counts</h3>
+    <div class="grid-3">
+      <div class="card card-accent">
+        <h3>Small (1-10M docs)</h3>
+        <p>1-3 shards, 1 replica each. Single-node or small cluster. Most internal search systems.</p>
+      </div>
+      <div class="card card-green">
+        <h3>Medium (10-100M docs)</h3>
+        <p>5-20 shards, 1-2 replicas. 3-10 node cluster. Mid-size eCommerce or SaaS search.</p>
+      </div>
+      <div class="card card-yellow">
+        <h3>Large (100M+ docs)</h3>
+        <p>20-100+ shards, 2+ replicas. 10-50+ nodes. Major eCommerce, media, or logging platforms.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== SECTION 3 ===== -->
+  <section id="s3">
+    <h2><span class="num">03</span> Shard Strategies</h2>
+    <p class="lead">How you distribute data across shards determines query patterns and performance.</p>
+
+    <div class="card card-accent">
+      <h3>Hash-Based Sharding</h3>
+      <p>Apply a hash function to the document ID (or routing key) and mod by the number of shards:</p>
+      <div class="formula-box compact">
+        $$ \text{shard} = \text{hash}(\text{doc\_id}) \bmod N $$
+      </div>
+      <ul>
+        <li><strong>Pro:</strong> Even data distribution, no hotspots</li>
+        <li><strong>Con:</strong> Range queries must hit all shards</li>
+        <li><strong>Best for:</strong> Uniform access patterns (e.g., user-facing search)</li>
+      </ul>
+    </div>
+
+    <div class="card card-green">
+      <h3>Range-Based Sharding</h3>
+      <p>Partition by value range — e.g., products A-M on shard 0, N-Z on shard 1:</p>
+      <ul>
+        <li><strong>Pro:</strong> Range queries can target a single shard</li>
+        <li><strong>Con:</strong> Uneven distribution → hotspots</li>
+        <li><strong>Best for:</strong> Time-series data, alphabetical lookups</li>
+      </ul>
+    </div>
+
+    <div class="card card-yellow">
+      <h3>Custom Routing</h3>
+      <p>Elasticsearch-style: route by a field value (e.g., <code>category</code> or <code>tenant_id</code>):</p>
+      <ul>
+        <li><strong>Pro:</strong> Co-locate related docs, avoid scatter-gather</li>
+        <li><strong>Con:</strong> Requires domain knowledge, can create skew</li>
+        <li><strong>Best for:</strong> Multi-tenant systems, category-heavy search</li>
+      </ul>
+    </div>
+
+    <h3>Strategy Comparison</h3>
+    <table>
+      <thead><tr><th>Criterion</th><th>Hash-Based</th><th>Range-Based</th><th>Custom Routing</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Data distribution</strong></td><td>Even ✓</td><td>Can be skewed</td><td>Depends on field cardinality</td></tr>
+        <tr><td><strong>Point lookups</strong></td><td>O(1) routing ✓</td><td>O(1) routing ✓</td><td>O(1) routing ✓</td></tr>
+        <tr><td><strong>Range queries</strong></td><td>All shards ✗</td><td>One shard ✓</td><td>Depends ±</td></tr>
+        <tr><td><strong>Rebalancing</strong></td><td>Remaps many keys</td><td>Split at boundary</td><td>Depends on routing key</td></tr>
+        <tr><td><strong>Hotspot risk</strong></td><td>Low</td><td>High</td><td>Medium</td></tr>
+      </tbody>
+    </table>
+
+    <div class="pro-tip">
+      <div class="tip-header">Pro Tip</div>
+      <p>Elasticsearch defaults to hash-based routing on <code>_id</code>. Override with <code>routing</code> parameter if you know queries always filter by a specific field — this turns scatter-gather into single-shard queries.</p>
+    </div>
+  </section>
+
+  <!-- ===== SECTION 4: SCATTER-GATHER PLAYGROUND ===== -->
+  <section id="s4">
+    <h2><span class="num">04</span> Scatter-Gather</h2>
+    <p class="lead">Every distributed search query fans out to all shards, then merges results. Watch it happen in real time.</p>
+
+    <div class="step-flow">
+      <div class="step-pill" style="border-color:var(--accent); color:var(--accent);">Query arrives</div>
+      <div class="step-arrow">→</div>
+      <div class="step-pill">Scatter to all shards</div>
+      <div class="step-arrow">→</div>
+      <div class="step-pill">Each shard searches locally</div>
+      <div class="step-arrow">→</div>
+      <div class="step-pill">Return partial results</div>
+      <div class="step-arrow">→</div>
+      <div class="step-pill" style="border-color:var(--accent2); color:var(--accent2);">Coordinator merges</div>
+    </div>
+
+    <div class="playground">
+      <h4>Interactive Scatter-Gather Simulation</h4>
+
+      <div style="display:flex; gap:12px; align-items:end; flex-wrap:wrap; margin-bottom:16px;">
+        <div style="flex:1; min-width:200px;">
+          <label style="font-size:0.85rem; font-weight:500; display:block; margin-bottom:6px;">Query</label>
+          <input type="text" id="sg-query" class="demo-input" placeholder='e.g. "wireless headphones"' value="wireless headphones" />
+        </div>
+        <button class="demo-btn" id="sg-search-btn" onclick="runScatterGather()">Search</button>
+      </div>
+
+      <div class="toggle-row">
+        <div class="toggle-switch" id="sg-slow-toggle" onclick="toggleSlow()"></div>
+        <span class="toggle-label">Simulate slow shard (straggler)</span>
+      </div>
+
+      <div class="coordinator-box" id="sg-coordinator">
+        <div style="font-size:0.75rem; color:var(--text-dim); text-transform:uppercase; letter-spacing:1px;">Coordinator</div>
+        <div style="font-weight:700; margin-top:4px;" id="sg-coord-status">Idle</div>
+      </div>
+
+      <div class="scatter-lines" id="sg-lines">
+        <div class="fan-line"></div>
+        <div class="fan-line"></div>
+        <div class="fan-line"></div>
+        <div class="fan-line"></div>
+      </div>
+
+      <div class="shard-viz" id="sg-shards">
+        <div class="shard-node" id="shard-0">
+          <div class="shard-label">Shard</div>
+          <div class="shard-name">S0</div>
+          <div class="shard-docs">250K docs</div>
+          <div class="shard-latency" id="shard-0-lat"></div>
+        </div>
+        <div class="shard-node" id="shard-1">
+          <div class="shard-label">Shard</div>
+          <div class="shard-name">S1</div>
+          <div class="shard-docs">250K docs</div>
+          <div class="shard-latency" id="shard-1-lat"></div>
+        </div>
+        <div class="shard-node" id="shard-2">
+          <div class="shard-label">Shard</div>
+          <div class="shard-name">S2</div>
+          <div class="shard-docs">250K docs</div>
+          <div class="shard-latency" id="shard-2-lat"></div>
+        </div>
+        <div class="shard-node" id="shard-3">
+          <div class="shard-label">Shard</div>
+          <div class="shard-name">S3</div>
+          <div class="shard-docs">250K docs</div>
+          <div class="shard-latency" id="shard-3-lat"></div>
+        </div>
+      </div>
+
+      <div class="result-box" id="sg-result" style="display:none;">
+        <div class="result-label">Total Latency</div>
+        <div class="result-value" id="sg-total-latency">—</div>
+        <div style="margin-top:8px; font-size:0.82rem; color:var(--text-dim);" id="sg-formula"></div>
+      </div>
+
+      <div class="scatter-log" id="sg-log"></div>
+    </div>
+
+    <div class="insight">
+      <div class="insight-title">Why Stragglers Matter</div>
+      <p>Total latency = <code>max(shard latencies)</code> + merge time. A single slow shard sets the floor for <em>every</em> query. This is why <strong>tail latency</strong> (p99) is the metric that matters most in distributed search.</p>
+    </div>
+
+    <h3>Scatter-Gather Optimization Strategies</h3>
+    <table>
+      <thead><tr><th>Strategy</th><th>How</th><th>Trade-off</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Adaptive replicas</strong></td><td>Route to the least-loaded replica of each shard</td><td>Requires real-time load tracking</td></tr>
+        <tr><td><strong>Hedged requests</strong></td><td>After a timeout, send duplicate to another replica</td><td>Increases load by ~5%, cuts tail latency significantly</td></tr>
+        <tr><td><strong>Custom routing</strong></td><td>Route queries to a single shard when possible</td><td>Only works for filtered queries</td></tr>
+        <tr><td><strong>Shard pruning</strong></td><td>Skip shards that can't match (e.g., time-range filtering)</td><td>Only works with range-partitioned data</td></tr>
+        <tr><td><strong>Partial results</strong></td><td>Return results from fast shards, skip the slow one</td><td>Incomplete results — use as last resort with timeout</td></tr>
+      </tbody>
+    </table>
+
+    <div class="formula-box compact">
+      $$ P(\text{straggler}) = 1 - (1 - p)^N $$
+      <div class="label">Probability of at least one slow shard: p = per-shard straggler rate, N = number of shards</div>
+    </div>
+
+    <div class="pro-tip">
+      <div class="tip-header">Pro Tip</div>
+      <p>Google's "tail at scale" paper introduced <strong>hedged requests</strong> — send the same request to two replicas and use whichever responds first. This nearly eliminates p99 tail latency at a modest cost of ~5% extra load.</p>
+    </div>
+  </section>
+
+  <!-- ===== SECTION 5 ===== -->
+  <section id="s5">
+    <h2><span class="num">05</span> Replica Types</h2>
+    <p class="lead">Replicas serve two purposes: fault tolerance and read scaling.</p>
+
+    <div class="card">
+      <h3>Primary + Replica Architecture</h3>
+      <div class="arch-diagram">
+        <div class="arch-section-label">Shard 0</div>
+        <div class="arch-row">
+          <div class="replica-group">
+            <div class="replica-node primary">Primary</div>
+            <span class="replica-arrow">→</span>
+            <div class="replica-node replica">Replica 1</div>
+            <span class="replica-arrow">→</span>
+            <div class="replica-node replica">Replica 2</div>
+          </div>
+        </div>
+        <div class="arch-section-label">Shard 1</div>
+        <div class="arch-row">
+          <div class="replica-group">
+            <div class="replica-node primary">Primary</div>
+            <span class="replica-arrow">→</span>
+            <div class="replica-node replica">Replica 1</div>
+            <span class="replica-arrow">→</span>
+            <div class="replica-node replica">Replica 2</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <div class="card card-accent">
+        <h3>Write Path</h3>
+        <ul>
+          <li>Writes go to <strong>primary</strong> shard only</li>
+          <li>Primary replicates to replicas (sync or async)</li>
+          <li>Sync = stronger consistency, higher latency</li>
+          <li>Async = lower latency, risk of stale reads</li>
+        </ul>
+      </div>
+      <div class="card card-green">
+        <h3>Read Path</h3>
+        <ul>
+          <li>Reads can go to <strong>any replica</strong></li>
+          <li>Load balancer distributes across replicas</li>
+          <li>More replicas = more read throughput</li>
+          <li>Prefer <code>preference=_local</code> for latency</li>
+        </ul>
+      </div>
+    </div>
+
+    <h3>Replica Scaling Formula</h3>
+    <div class="formula-box">
+      $$ \text{Read QPS capacity} = \text{QPS per node} \times (\text{replicas} + 1) \times \text{shards} $$
+      <div class="label">Each shard group (primary + replicas) can serve reads from any copy</div>
+    </div>
+
+    <h3>Consistency Models</h3>
+    <table>
+      <thead><tr><th>Model</th><th>Write Latency</th><th>Read Consistency</th><th>Use Case</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Sync replication</strong></td><td>High (wait for all replicas)</td><td>Strong — all replicas identical</td><td>Financial data, inventory counts</td></tr>
+        <tr><td><strong>Async replication</strong></td><td>Low (return after primary write)</td><td>Eventual — replicas lag by ms-seconds</td><td>Search results, product catalog</td></tr>
+        <tr><td><strong>Semi-sync</strong></td><td>Medium (wait for 1 replica)</td><td>Durable — at least one copy confirmed</td><td>Balanced workloads</td></tr>
+      </tbody>
+    </table>
+
+    <div class="insight">
+      <div class="insight-title">Elasticsearch Default</div>
+      <p>Elasticsearch uses <strong>sync replication</strong> by default — a write isn't acknowledged until all in-sync replicas confirm. You can set <code>wait_for_active_shards=1</code> to switch to primary-only acknowledgment for faster writes at the cost of durability.</p>
+    </div>
+
+    <h3>Cross-Zone Replica Placement</h3>
+    <p>For true fault tolerance, replicas must live in different failure domains. Elasticsearch supports <strong>shard allocation awareness</strong> — tag each node with its availability zone, and the cluster ensures no shard and its replica share a zone.</p>
+
+    <div class="arch-diagram">
+      <div class="arch-section-label">Zone A</div>
+      <div class="arch-row">
+        <div class="arch-box accent">S0 Primary</div>
+        <div class="arch-box green">S1 Replica</div>
+        <div class="arch-box yellow">S2 Replica</div>
+      </div>
+      <div class="arch-section-label">Zone B</div>
+      <div class="arch-row">
+        <div class="arch-box green">S0 Replica</div>
+        <div class="arch-box accent">S1 Primary</div>
+        <div class="arch-box yellow">S2 Primary</div>
+      </div>
+      <div class="arch-section-label">Zone C</div>
+      <div class="arch-row">
+        <div class="arch-box green">S0 Replica 2</div>
+        <div class="arch-box accent">S1 Replica 2</div>
+        <div class="arch-box yellow">S2 Replica 2</div>
+      </div>
+    </div>
+
+    <div class="pro-tip">
+      <div class="tip-header">Pro Tip</div>
+      <p>With 3 availability zones and replication factor 3, you can lose an entire zone and still serve all data. This is the standard setup for production search clusters at major e-commerce companies.</p>
+    </div>
+  </section>
+
+  <!-- ===== SECTION 6: SHARD CALCULATOR ===== -->
+  <section id="s6">
+    <h2><span class="num">06</span> Shard Calculator</h2>
+    <p class="lead">Size your cluster based on data volume, document size, and redundancy needs.</p>
+
+    <div class="playground">
+      <h4>Cluster Size Calculator</h4>
+
+      <div class="slider-group">
+        <div class="slider-item">
+          <label>Total Documents <span id="calc-docs-val">100M</span></label>
+          <input type="range" id="calc-docs" min="1" max="1000" value="100" oninput="updateCalc()" />
+        </div>
+        <div class="slider-item">
+          <label>Avg Doc Size <span id="calc-size-val">5 KB</span></label>
+          <input type="range" id="calc-size" min="1" max="10" value="5" oninput="updateCalc()" />
+        </div>
+      </div>
+
+      <div style="display:flex; gap:16px; flex-wrap:wrap; margin-bottom:16px;">
+        <div>
+          <label style="font-size:0.85rem; font-weight:500; display:block; margin-bottom:6px;">Max Shard Size</label>
+          <select id="calc-max-shard" class="demo-input" onchange="updateCalc()" style="width:auto; min-width:120px;">
+            <option value="10">10 GB</option>
+            <option value="30" selected>30 GB</option>
+            <option value="50">50 GB</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size:0.85rem; font-weight:500; display:block; margin-bottom:6px;">Replication Factor</label>
+          <select id="calc-repl" class="demo-input" onchange="updateCalc()" style="width:auto; min-width:120px;">
+            <option value="1">1 (no replicas)</option>
+            <option value="2" selected>2 (1 replica)</option>
+            <option value="3">3 (2 replicas)</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="calc-results" id="calc-results">
+        <div class="calc-card">
+          <div class="calc-label">Total Storage</div>
+          <div class="calc-value" id="calc-storage" style="color:var(--accent);">500 GB</div>
+        </div>
+        <div class="calc-card">
+          <div class="calc-label">Shards Needed</div>
+          <div class="calc-value" id="calc-shards" style="color:var(--accent2);">17</div>
+        </div>
+        <div class="calc-card">
+          <div class="calc-label">Total Copies</div>
+          <div class="calc-value" id="calc-copies" style="color:var(--accent4);">34</div>
+        </div>
+        <div class="calc-card">
+          <div class="calc-label">Cluster Storage</div>
+          <div class="calc-value" id="calc-cluster" style="color:var(--accent3);">1.0 TB</div>
+        </div>
+      </div>
+
+      <div class="result-box" style="margin-top:20px;">
+        <div id="calc-summary" style="font-size:0.88rem; color:var(--text-dim); line-height:1.8;"></div>
+      </div>
+
+      <div class="chart-wrap" style="margin-top:20px;">
+        <canvas id="calc-chart" height="220"></canvas>
+      </div>
+    </div>
+
+    <h3>Shard Sizing Guidelines</h3>
+    <table>
+      <thead><tr><th>Shard Size</th><th>Pros</th><th>Cons</th><th>Recommendation</th></tr></thead>
+      <tbody>
+        <tr><td><strong>&lt; 10 GB</strong></td><td>Fast recovery, easy relocation</td><td>Too many shards → high overhead</td><td>Use for time-series indices</td></tr>
+        <tr><td><strong>10-30 GB</strong></td><td>Good balance of size and manageability</td><td>Still need monitoring</td><td>Default sweet spot for most workloads</td></tr>
+        <tr><td><strong>30-50 GB</strong></td><td>Fewer shards, less coordination</td><td>Slower recovery, harder to rebalance</td><td>Use for stable, rarely-changing indices</td></tr>
+        <tr><td><strong>&gt; 50 GB</strong></td><td>Minimal shard overhead</td><td>Recovery takes minutes, can cause hotspots</td><td>Avoid — split proactively</td></tr>
+      </tbody>
+    </table>
+
+    <div class="insight">
+      <div class="insight-title">Rule of Thumb</div>
+      <p>Aim for <strong>20 shards per node or fewer</strong>. Each shard consumes a thread pool, file handles, and memory. Thousands of tiny shards on a single node causes more overhead than a few well-sized ones.</p>
+    </div>
+  </section>
+
+  <!-- ===== SECTION 7 ===== -->
+  <section id="s7">
+    <h2><span class="num">07</span> Rebalancing</h2>
+    <p class="lead">Adding or removing nodes requires moving data — and that has consequences.</p>
+
+    <div class="card card-accent">
+      <h3>When Rebalancing Happens</h3>
+      <ul>
+        <li><strong>Scale out:</strong> Add nodes → move shards to new nodes to even out load</li>
+        <li><strong>Scale in:</strong> Remove nodes → migrate their shards elsewhere</li>
+        <li><strong>Hot shard:</strong> One shard gets disproportionate traffic → split or relocate</li>
+        <li><strong>Disk full:</strong> Node running low on storage → move shards away</li>
+      </ul>
+    </div>
+
+    <div class="grid-2">
+      <div class="card card-green">
+        <h3>Shard Relocation</h3>
+        <p>Move an entire shard from one node to another. The source streams data to the target while continuing to serve reads. Once synced, traffic switches over.</p>
+        <p style="margin-top:8px;"><span class="badge badge-green">Low Risk</span></p>
+      </div>
+      <div class="card card-red">
+        <h3>Shard Splitting</h3>
+        <p>Split one shard into two when it grows too large. Requires re-indexing the data with a new routing scheme. Elasticsearch supports this via the Split API.</p>
+        <p style="margin-top:8px;"><span class="badge badge-red">Higher Risk</span></p>
+      </div>
+    </div>
+
+    <h3>Consistent Hashing</h3>
+    <p>Traditional modular hashing (<code>hash % N</code>) means adding one node remaps almost all keys. Consistent hashing minimizes the disruption:</p>
+
+    <div class="formula-box compact">
+      $$ \text{Keys remapped} \approx \frac{K}{N} \quad \text{(instead of nearly all K keys)} $$
+      <div class="label">K = total keys, N = number of nodes</div>
+    </div>
+
+    <div class="grid-2">
+      <div class="card card-accent">
+        <h3>Without Consistent Hashing</h3>
+        <ul>
+          <li>Add 1 node to 4-node cluster</li>
+          <li><code>hash % 4</code> → <code>hash % 5</code></li>
+          <li>~80% of keys need to move</li>
+          <li>Massive data shuffle, latency spike</li>
+        </ul>
+      </div>
+      <div class="card card-green">
+        <h3>With Consistent Hashing</h3>
+        <ul>
+          <li>Add 1 node to 4-node cluster</li>
+          <li>Only ~20% of keys remapped</li>
+          <li>Minimal data movement</li>
+          <li>Virtual nodes for even distribution</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="pro-tip">
+      <div class="tip-header">Pro Tip</div>
+      <p>Over-shard from the start. It's much easier to relocate small shards across new nodes than to split large ones. A common rule of thumb: plan for 2-3× your expected growth. With over-sharding, you can rebalance by simply moving shards — no splitting required.</p>
+    </div>
+
+    <h3>Rebalancing Checklist</h3>
+    <div class="card">
+      <table>
+        <thead><tr><th>Step</th><th>Action</th><th>Risk</th></tr></thead>
+        <tbody>
+          <tr><td>1</td><td>Disable shard allocation temporarily</td><td>Low</td></tr>
+          <tr><td>2</td><td>Add new node to cluster</td><td>Low</td></tr>
+          <tr><td>3</td><td>Re-enable allocation</td><td>Low</td></tr>
+          <tr><td>4</td><td>Monitor shard migration progress</td><td>Low</td></tr>
+          <tr><td>5</td><td>Verify cluster health = green</td><td>Low</td></tr>
+          <tr><td>6</td><td>Remove old node (if scaling down)</td><td>Medium</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ===== SECTION 8 ===== -->
+  <section id="s8">
+    <h2><span class="num">08</span> Failure Modes</h2>
+    <p class="lead">Distributed systems fail in distributed ways. Know the failure modes and plan for them.</p>
+
+    <div class="insight">
+      <div class="insight-title">Murphy's Law for Distributed Systems</div>
+      <p>If a node <em>can</em> fail, it <em>will</em> fail — and usually at the worst possible time. Design your system so that any single component failure is invisible to users. Two simultaneous failures should degrade gracefully. Three failures should be survivable.</p>
+    </div>
+
+    <div class="grid-2">
+      <div class="card card-red">
+        <h3>Node Failure</h3>
+        <p>A node crashes or becomes unreachable. The cluster promotes replicas to primary and reroutes traffic. Data is safe as long as at least one copy exists.</p>
+        <h4 style="color:var(--accent2);">Mitigation</h4>
+        <ul>
+          <li>Replication factor ≥ 2</li>
+          <li>Replicas on different racks/zones</li>
+          <li>Automatic failover with health checks</li>
+          <li>Maintain capacity to absorb a failed node's load</li>
+        </ul>
+      </div>
+      <div class="card card-yellow">
+        <h3>Split Brain</h3>
+        <p>Network partition causes two halves of the cluster to each believe they are the master. Both accept writes, leading to divergent state.</p>
+        <h4 style="color:var(--accent2);">Mitigation</h4>
+        <ul>
+          <li>Quorum-based master election</li>
+          <li>Minimum master nodes = <code>⌊N/2⌋ + 1</code></li>
+          <li>Fencing / STONITH for partitioned nodes</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <div class="card card-accent">
+        <h3>Cascading Failure</h3>
+        <p>One node fails → remaining nodes take extra load → they slow down → timeouts cascade → more failures. A classic death spiral.</p>
+        <h4 style="color:var(--accent2);">Mitigation</h4>
+        <ul>
+          <li>Circuit breakers on query paths</li>
+          <li>Backpressure / load shedding</li>
+          <li>Capacity headroom (never run at 100%)</li>
+        </ul>
+      </div>
+      <div class="card card-green">
+        <h3>Data Corruption</h3>
+        <p>Bit rot, bad writes, or bugs corrupt index segments. Queries return wrong results silently — the most dangerous failure mode.</p>
+        <h4 style="color:var(--accent2);">Mitigation</h4>
+        <ul>
+          <li>Checksums on segments (Lucene does this)</li>
+          <li>Periodic full re-indexing from source of truth</li>
+          <li>Monitoring for anomalous result quality</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== SECTION 9 ===== -->
+  <section id="s9">
+    <h2><span class="num">09</span> Key Takeaway</h2>
+
+    <div class="insight">
+      <div class="insight-title">Summary</div>
+      <p><strong>Shard for throughput and capacity.</strong> When data or query volume exceeds one node, split your index across shards using hash, range, or custom routing.</p>
+      <p style="margin-top:12px;"><strong>Replicate for availability.</strong> Copies of each shard on separate nodes ensure no single point of failure and allow read scaling.</p>
+      <p style="margin-top:12px;"><strong>Scatter-gather is the cost.</strong> Every distributed query must fan out to all shards and merge results. Total latency = max(shard latencies). Minimize shard count where possible, and watch tail latency religiously.</p>
+    </div>
+
+    <div class="formula-box">
+      $$ \text{Cluster Nodes} = \frac{\text{Total Data}}{\text{Max Shard Size}} \times \text{Replication Factor} $$
+      <div class="label">The fundamental equation of cluster sizing</div>
+    </div>
+
+    <h3>Quick Reference Cheat Sheet</h3>
+    <div class="card">
+      <table>
+        <thead><tr><th>Concept</th><th>Definition</th><th>Key Metric</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Shard</strong></td><td>A partition of the index holding a subset of documents</td><td>Size: 10-50 GB ideal</td></tr>
+          <tr><td><strong>Primary</strong></td><td>The authoritative copy of a shard that accepts writes</td><td>One per shard</td></tr>
+          <tr><td><strong>Replica</strong></td><td>A copy of a primary shard for reads and fault tolerance</td><td>Usually 1-2 per shard</td></tr>
+          <tr><td><strong>Scatter</strong></td><td>Fan-out of a query to all shards in parallel</td><td>Latency = max(shard latencies)</td></tr>
+          <tr><td><strong>Gather</strong></td><td>Merge partial results from all shards into final answer</td><td>Merge time: 2-10ms</td></tr>
+          <tr><td><strong>Rebalance</strong></td><td>Move shards between nodes to even out load</td><td>Minimize data movement</td></tr>
+          <tr><td><strong>Split brain</strong></td><td>Network partition causes two master nodes</td><td>Quorum: ⌊N/2⌋ + 1</td></tr>
+          <tr><td><strong>Routing</strong></td><td>How documents are assigned to shards</td><td>hash, range, or custom</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="grid-2">
+      <div class="card card-accent">
+        <h3>Elasticsearch Defaults</h3>
+        <ul>
+          <li><strong>Shards per index:</strong> 1 (was 5 before v7)</li>
+          <li><strong>Replicas:</strong> 1 per shard</li>
+          <li><strong>Routing:</strong> hash(_id) % num_shards</li>
+          <li><strong>Max shard size:</strong> ~50 GB recommended</li>
+          <li><strong>Shards per node:</strong> ≤ 20 per GB heap</li>
+        </ul>
+      </div>
+      <div class="card card-green">
+        <h3>Solr Defaults</h3>
+        <ul>
+          <li><strong>Shards:</strong> Manual configuration in SolrCloud</li>
+          <li><strong>Replicas:</strong> Configurable per collection</li>
+          <li><strong>Routing:</strong> compositeId (hash-based)</li>
+          <li><strong>Leader election:</strong> ZooKeeper-based</li>
+          <li><strong>Auto-scaling:</strong> Policy-based triggers</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="pro-tip">
+      <div class="tip-header">Pro Tip</div>
+      <p>In interview settings, always mention <strong>data locality</strong>. If you can route related queries to a single shard (e.g., all products for one category), you convert scatter-gather into a single-shard query — dramatically reducing latency and resource usage.</p>
+    </div>
+  </section>
+
+</div>
+
+<footer>System Design Series — Sharding &amp; Replication Playground</footer>
+
+<script>
+let slowShardEnabled = false;
+
+function toggleSlow() {
+  slowShardEnabled = !slowShardEnabled;
+  document.getElementById('sg-slow-toggle').classList.toggle('on', slowShardEnabled);
+}
+
+function runScatterGather() {
+  const query = document.getElementById('sg-query').value || 'wireless headphones';
+  const btn = document.getElementById('sg-search-btn');
+  btn.disabled = true;
+  btn.textContent = 'Searching…';
+
+  const lines = document.querySelectorAll('#sg-lines .fan-line');
+  const shards = [0,1,2,3];
+  const log = document.getElementById('sg-log');
+  const coordinator = document.getElementById('sg-coordinator');
+  const resultBox = document.getElementById('sg-result');
+
+  log.innerHTML = '';
+  resultBox.style.display = 'none';
+  shards.forEach(i => {
+    const node = document.getElementById('shard-' + i);
+    node.className = 'shard-node';
+    document.getElementById('shard-' + i + '-lat').textContent = '';
+    document.getElementById('shard-' + i + '-lat').className = 'shard-latency';
+  });
+  lines.forEach(l => l.className = 'fan-line');
+  coordinator.className = 'coordinator-box';
+  document.getElementById('sg-coord-status').textContent = 'Scattering…';
+
+  const baseLats = shards.map(() => 10 + Math.floor(Math.random() * 30));
+  if (slowShardEnabled) {
+    const slowIdx = Math.floor(Math.random() * 4);
+    baseLats[slowIdx] = 150 + Math.floor(Math.random() * 100);
+  }
+
+  logLine(log, `<span class="log-scatter">[SCATTER]</span> Query: "${query}" → fanning out to ${shards.length} shards`);
+
+  setTimeout(() => {
+    lines.forEach(l => l.classList.add('active'));
+    shards.forEach(i => document.getElementById('shard-' + i).classList.add('active'));
+    logLine(log, `<span class="log-scatter">[SCATTER]</span> Request sent to S0, S1, S2, S3`);
+  }, 300);
+
+  const sortedByLat = shards.map(i => ({ idx: i, lat: baseLats[i] })).sort((a, b) => a.lat - b.lat);
+  const maxLat = Math.max(...baseLats);
+  const mergeTime = 3 + Math.floor(Math.random() * 5);
+
+  sortedByLat.forEach((s, order) => {
+    const delay = 600 + s.lat * 8;
+    setTimeout(() => {
+      const node = document.getElementById('shard-' + s.idx);
+      const latEl = document.getElementById('shard-' + s.idx + '-lat');
+      node.classList.remove('active');
+      node.classList.add('responding');
+      lines[s.idx].classList.remove('active');
+      lines[s.idx].classList.add('responding');
+      latEl.textContent = s.lat + 'ms';
+
+      if (s.lat > 100) {
+        node.classList.add('slow');
+        latEl.className = 'shard-latency slow-lat';
+        logLine(log, `<span class="log-slow">[SLOW]</span> S${s.idx} responded in ${s.lat}ms — straggler!`);
+      } else if (s.lat > 25) {
+        latEl.className = 'shard-latency medium';
+        logLine(log, `<span class="log-gather">[GATHER]</span> S${s.idx} responded in ${s.lat}ms`);
+      } else {
+        latEl.className = 'shard-latency fast';
+        logLine(log, `<span class="log-gather">[GATHER]</span> S${s.idx} responded in ${s.lat}ms`);
+      }
+    }, delay);
+  });
+
+  const totalDelay = 600 + maxLat * 8 + 400;
+  setTimeout(() => {
+    coordinator.classList.add('merging');
+    document.getElementById('sg-coord-status').textContent = 'Merging results…';
+    logLine(log, `<span class="log-merge">[MERGE]</span> All shards responded. Merging partial results (${mergeTime}ms)`);
+
+    const total = maxLat + mergeTime;
+    setTimeout(() => {
+      document.getElementById('sg-coord-status').textContent = 'Done ✓';
+      resultBox.style.display = 'block';
+      document.getElementById('sg-total-latency').textContent = total + ' ms';
+      document.getElementById('sg-formula').textContent =
+        `max(${baseLats.join(', ')}) + ${mergeTime}ms merge = ${total}ms`;
+      logLine(log, `<span class="log-merge">[DONE]</span> Total: max(${baseLats.join(',')}) + ${mergeTime}ms = ${total}ms`);
+      btn.disabled = false;
+      btn.textContent = 'Search';
+    }, 300);
+  }, totalDelay);
+}
+
+function logLine(el, html) {
+  const ts = new Date().toISOString().slice(11, 23);
+  el.innerHTML += `<div><span style="color:var(--text-muted);">${ts}</span> ${html}</div>`;
+  el.scrollTop = el.scrollHeight;
+}
+
+let calcChart = null;
+
+function initCalcChart() {
+  if (calcChart) calcChart.destroy();
+  const ctx = document.getElementById('calc-chart').getContext('2d');
+  calcChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: ['Raw Data', 'With Index (1.5×)', 'With Replicas'],
+      datasets: [{
+        label: 'Storage (GB)',
+        data: [0, 0, 0],
+        backgroundColor: ['rgba(108,99,255,0.6)', 'rgba(0,201,167,0.6)', 'rgba(255,217,61,0.6)'],
+        borderColor: ['#6c63ff', '#00c9a7', '#ffd93d'],
+        borderWidth: 2,
+        borderRadius: 6,
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { display: false } },
+      scales: {
+        y: { beginAtZero: true, ticks: { color: '#9398ab', callback: v => v >= 1024 ? (v/1024).toFixed(1) + ' TB' : v + ' GB' }, grid: { color: 'rgba(42,45,58,0.5)' } },
+        x: { ticks: { color: '#9398ab' }, grid: { display: false } }
+      }
+    }
+  });
+}
+
+function updateCalc() {
+  const docsM = parseInt(document.getElementById('calc-docs').value);
+  const sizeKB = parseInt(document.getElementById('calc-size').value);
+  const maxShardGB = parseInt(document.getElementById('calc-max-shard').value);
+  const replFactor = parseInt(document.getElementById('calc-repl').value);
+
+  document.getElementById('calc-docs-val').textContent = docsM >= 1000 ? (docsM / 1000).toFixed(1) + 'B' : docsM + 'M';
+  document.getElementById('calc-size-val').textContent = sizeKB + ' KB';
+
+  const totalGB = (docsM * 1e6 * sizeKB * 1024) / (1024 ** 3);
+  const indexGB = totalGB * 1.5;
+  const shardsNeeded = Math.ceil(totalGB / maxShardGB);
+  const totalCopies = shardsNeeded * replFactor;
+  const clusterStorageGB = totalGB * replFactor;
+
+  document.getElementById('calc-storage').textContent = formatBytes(totalGB);
+  document.getElementById('calc-shards').textContent = shardsNeeded;
+  document.getElementById('calc-copies').textContent = totalCopies;
+  document.getElementById('calc-cluster').textContent = formatBytes(clusterStorageGB);
+
+  document.getElementById('calc-summary').innerHTML =
+    `With <strong>${docsM >= 1000 ? (docsM/1000).toFixed(1)+'B' : docsM+'M'}</strong> docs × <strong>${sizeKB} KB</strong> each = <strong>${formatBytes(totalGB)}</strong> raw data.<br>` +
+    `With index overhead (1.5×) = <strong>${formatBytes(indexGB)}</strong>.<br>` +
+    `At <strong>${maxShardGB} GB</strong> max per shard → <strong>${shardsNeeded} shards</strong>.<br>` +
+    `With replication factor <strong>${replFactor}</strong> → <strong>${totalCopies} shard copies</strong> totaling <strong>${formatBytes(clusterStorageGB)}</strong> cluster storage.`;
+
+  if (!calcChart) initCalcChart();
+  calcChart.data.datasets[0].data = [totalGB, indexGB, clusterStorageGB];
+  calcChart.update();
+}
+
+function formatBytes(gb) {
+  if (gb >= 1024) return (gb / 1024).toFixed(1) + ' TB';
+  if (gb >= 1) return gb.toFixed(1) + ' GB';
+  return (gb * 1024).toFixed(0) + ' MB';
+}
+
+updateCalc();
+
+/* --- TOC scroll highlighting --- */
+(function() {
+  const tocLinks = document.querySelectorAll('.toc a');
+  const sections = Array.from(tocLinks).map(a => document.querySelector(a.getAttribute('href')));
+
+  function onScroll() {
+    let current = 0;
+    const offset = 160;
+    sections.forEach((sec, i) => {
+      if (sec && sec.getBoundingClientRect().top <= offset) current = i;
+    });
+    tocLinks.forEach((a, i) => a.classList.toggle('active', i === current));
+  }
+  window.addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+})();
+</script>
+</body>
+</html>

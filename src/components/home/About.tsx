@@ -21,7 +21,7 @@ export default function About() {
           animate={isVisible ? { opacity: 1, y: 0 } : {}}
           transition={{ duration: 0.7 }}
         >
-          <h2 className="text-sm font-semibold uppercase tracking-widest text-[#6c63ff] mb-3">
+          <h2 className="text-sm font-semibold uppercase tracking-widest text-accent mb-3">
             About
           </h2>
           <h3 className="text-3xl sm:text-4xl font-bold text-white mb-8">
@@ -36,11 +36,11 @@ export default function About() {
             animate={isVisible ? { opacity: 1, y: 0 } : {}}
             transition={{ duration: 0.7, delay: 0.15 }}
           >
-            <p className="text-[#9398ab] leading-relaxed text-lg mb-6">{profile.summary}</p>
+            <p className="text-text-secondary leading-relaxed text-lg mb-6">{profile.summary}</p>
             <ul className="space-y-3">
               {profile.highlights.slice(0, 3).map((h, i) => (
-                <li key={i} className="flex items-start gap-3 text-[#9398ab]">
-                  <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-[#6c63ff] flex-shrink-0" />
+                <li key={i} className="flex items-start gap-3 text-text-secondary">
+                  <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-accent flex-shrink-0" />
                   <span>{h}</span>
                 </li>
               ))}
@@ -56,14 +56,14 @@ export default function About() {
             {highlights.map((item, i) => (
               <div
                 key={i}
-                className="glass-card rounded-xl p-5 flex flex-col items-center text-center hover:border-[#6c63ff]/40 transition-colors group"
+                className="glass-card rounded-xl p-5 flex flex-col items-center text-center hover:border-accent/40 transition-colors group"
               >
                 <item.icon
                   size={24}
-                  className="text-[#6c63ff] mb-3 group-hover:scale-110 transition-transform"
+                  className="text-accent mb-3 group-hover:scale-110 transition-transform"
                 />
                 <span className="text-white font-bold text-lg">{item.label}</span>
-                <span className="text-[#9398ab] text-xs mt-1">{item.sub}</span>
+                <span className="text-text-secondary text-xs mt-1">{item.sub}</span>
               </div>
             ))}
           </motion.div>

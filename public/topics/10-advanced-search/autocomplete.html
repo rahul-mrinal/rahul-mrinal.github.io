@@ -1,0 +1,809 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Autocomplete & Typeahead</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js" onload="renderMathInElement(document.body, {
+    delimiters: [
+      {left: '$$', right: '$$', display: true},
+      {left: '\\[', right: '\\]', display: true},
+      {left: '$', right: '$', display: false},
+      {left: '\\(', right: '\\)', display: false}
+    ],
+    throwOnError: false
+  });"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../playground.css" />
+  <style>
+    .trie-tree { padding: 20px; overflow-x: auto; }
+    .trie-node {
+      display: inline-flex; flex-direction: column; align-items: center;
+      margin: 0 2px; vertical-align: top;
+    }
+    .trie-char {
+      width: 36px; height: 36px; border-radius: 50%;
+      background: var(--surface2); border: 2px solid var(--border);
+      display: flex; align-items: center; justify-content: center;
+      font-family: 'JetBrains Mono', monospace; font-weight: 600;
+      font-size: 0.85rem; transition: all 0.3s; cursor: default;
+    }
+    .trie-char.highlight {
+      border-color: var(--accent); color: var(--accent);
+      background: rgba(108,99,255,0.15);
+      box-shadow: 0 0 8px rgba(108,99,255,0.3);
+    }
+    .trie-char.end-word { border-color: var(--accent2); color: var(--accent2); }
+    .trie-char.end-word.highlight {
+      border-color: var(--accent); color: #fff;
+      background: var(--accent);
+    }
+    .trie-children {
+      display: flex; gap: 4px; margin-top: 4px; position: relative;
+    }
+    .trie-edge {
+      width: 1px; height: 12px; background: var(--border); margin: 0 auto;
+    }
+    .trie-edge.highlight { background: var(--accent); width: 2px; }
+    .fuzzy-match {
+      background: rgba(255,107,107,0.15); padding: 1px 3px; border-radius: 3px;
+    }
+  </style>
+</head>
+
+<body>
+<div class="topbar">
+  <a href="/" class="topbar-brand">
+    <div class="topbar-logo">RM</div>
+    <span class="topbar-label">Rahul Mrinal</span>
+  </a>
+  <a href="/blog" class="topbar-back">← Back to Blog</a>
+</div>
+
+<div class="hero">
+  <h1>Autocomplete & Typeahead</h1>
+  <p class="subtitle">Build autocomplete from a trie — prefix search, ranking, and fuzzy matching</p>
+  <div class="badges">
+    <span class="badge badge-hnsw">Trie / Prefix Tree</span>
+    <span class="badge badge-ivf">Fuzzy Matching</span>
+    <span class="badge badge-pq">Sub-50ms Latency</span>
+  </div>
+</div>
+
+<nav class="toc">
+  <div class="toc-inner">
+    <a href="#s1">Why Autocomplete</a>
+    <a href="#s2">Trie Structure</a>
+    <a href="#s3">Trie Visualizer</a>
+    <a href="#s4">Prefix Search</a>
+    <a href="#s5">Live Autocomplete</a>
+    <a href="#s6">Popularity</a>
+    <a href="#s7">Fuzzy Matching</a>
+    <a href="#s8">Performance</a>
+    <a href="#s9">Caching</a>
+    <a href="#s10">Takeaway</a>
+  </div>
+</nav>
+
+<div class="container">
+
+  <!-- ===== SECTION 1 ===== -->
+  <section id="s1">
+    <h2><span class="num">01</span> Why Autocomplete?</h2>
+    <p class="lead">Autocomplete serves three critical purposes: it guides users toward valid queries, reduces typos by suggesting correct completions, and helps discover content users didn't know existed.</p>
+
+    <div class="analogy">
+      <div class="icon">🎯</div>
+      <p><strong>Analogy:</strong> Autocomplete is like a knowledgeable shop assistant who finishes your sentence. You say "I'm looking for a red…" and they immediately suggest "red velvet cake? red wine? red dress?" — saving you time and surfacing options you hadn't considered.</p>
+    </div>
+
+    <p>The numbers are striking: Google autocomplete <strong>saves an estimated 200 years of typing time per day</strong> across all users. For e-commerce sites, autocomplete can reduce search abandonment by 24% and increase conversion by 11%. It's one of the highest-ROI search features you can build.</p>
+
+    <div class="grid-3">
+      <div class="card card-accent">
+        <h3>Guide</h3>
+        <p>Show users what's searchable. Reduce zero-result queries by steering toward known terms. "Did you mean?" before they even finish typing.</p>
+      </div>
+      <div class="card card-green">
+        <h3>Speed</h3>
+        <p>Save keystrokes. Users select from suggestions instead of typing full queries. Average query length drops 25% with good autocomplete.</p>
+      </div>
+      <div class="card card-yellow">
+        <h3>Discover</h3>
+        <p>Surface popular queries users haven't thought of. Typing "python" reveals "python web scraping" — opening new search paths.</p>
+      </div>
+    </div>
+
+    <h3>Autocomplete at Scale</h3>
+    <table>
+      <thead>
+        <tr><th>Platform</th><th>Dictionary Size</th><th>Latency Target</th><th>QPS</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Google Search</td><td style="color:var(--accent2)">Billions</td><td>&lt;30ms</td><td>~100K+</td></tr>
+        <tr><td>Amazon Product</td><td style="color:var(--accent2)">~500M</td><td>&lt;50ms</td><td>~50K</td></tr>
+        <tr><td>VS Code Commands</td><td>~5K</td><td>&lt;10ms</td><td>Local</td></tr>
+        <tr><td>IDE Code Completion</td><td>~100K symbols</td><td>&lt;100ms</td><td>Local</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ===== SECTION 2 ===== -->
+  <section id="s2">
+    <h2><span class="num">02</span> The Trie Data Structure</h2>
+    <p class="lead">A trie (prefix tree) stores strings character by character, sharing common prefixes. Every path from root to a terminal node represents a complete word. The name comes from "re<strong>trie</strong>val."</p>
+
+    <div class="formula-box">
+      $$\text{Lookup time} = O(m) \text{ where } m = \text{length of prefix}$$
+      <div class="label">Independent of how many words are stored — only depends on query length</div>
+    </div>
+
+    <h3>Why Tries?</h3>
+    <ul>
+      <li><strong>Prefix queries are O(m)</strong> — constant time relative to dictionary size. Whether you have 100 or 100 million words, looking up "py" takes the same time</li>
+      <li><strong>Space-efficient</strong> — shared prefixes stored only once. "python", "pytorch", "pypi" share the "py" prefix, saving memory</li>
+      <li><strong>Ordered traversal</strong> — naturally produces alphabetically sorted completions by traversing children in order</li>
+      <li><strong>Dynamic</strong> — words can be added or removed without rebuilding the entire structure</li>
+    </ul>
+
+    <div class="grid-2">
+      <div class="card card-accent">
+        <h3>Trie vs Hash Map</h3>
+        <p>A hash map can check "does this exact word exist?" in O(1), but it can't answer "what words start with 'py'?" without scanning every entry. A trie answers prefix queries natively — that's its superpower.</p>
+      </div>
+      <div class="card card-green">
+        <h3>Trie vs Sorted Array</h3>
+        <p>Binary search on a sorted array can find the first match in O(log n), but collecting all prefix matches requires scanning forward — still O(k). Tries find the prefix node in O(m) and collect k matches in O(k).</p>
+      </div>
+    </div>
+
+    <h3>Complexity Comparison</h3>
+    <table>
+      <thead>
+        <tr><th>Operation</th><th>Trie</th><th>Hash Map</th><th>Sorted Array</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Exact lookup</td><td>O(m)</td><td style="color:var(--accent2)">O(1)*</td><td>O(m log n)</td></tr>
+        <tr><td>Prefix search</td><td style="color:var(--accent2)">O(m + k)</td><td style="color:var(--accent3)">O(n × m)</td><td>O(m log n + k)</td></tr>
+        <tr><td>Insert</td><td>O(m)</td><td style="color:var(--accent2)">O(1)*</td><td style="color:var(--accent3)">O(n)</td></tr>
+        <tr><td>Space</td><td>O(Σ × N)</td><td style="color:var(--accent2)">O(N × m̄)</td><td style="color:var(--accent2)">O(N × m̄)</td></tr>
+      </tbody>
+    </table>
+    <p class="dim" style="font-size:0.82rem;">m = query length, k = number of matches, n = dictionary size, Σ = alphabet size, m̄ = avg word length, * = amortized</p>
+  </section>
+
+  <!-- ===== SECTION 3: Trie Visualizer ===== -->
+  <section id="s3">
+    <h2><span class="num">03</span> Trie Visualizer</h2>
+    <p class="lead">Insert words (comma-separated) to build a trie. Then type a prefix to highlight matching paths in the tree. Terminal nodes (complete words) are shown in green.</p>
+
+    <div class="playground">
+      <h4>Interactive: Build & Search a Trie</h4>
+      <div style="margin-bottom:12px;">
+        <label class="dim" style="font-size:0.85rem;">Words (comma-separated):</label>
+        <input type="text" class="demo-input" id="trieWords" value="python, pytorch, pandas, parse, pip, java, javascript, json, julia, jupyter, node, numpy, nest, next" style="margin-top:4px;">
+      </div>
+      <button class="demo-btn" onclick="buildTrieViz()">Build Trie</button>
+
+      <div style="margin-top:20px;">
+        <label class="dim" style="font-size:0.85rem;">Search prefix:</label>
+        <input type="text" class="demo-input" id="triePrefix" oninput="highlightTriePrefix()" placeholder="Try 'py', 'ja', or 'n'" style="max-width:300px;margin-top:4px;">
+      </div>
+
+      <div class="card" style="margin-top:16px;overflow-x:auto;min-height:120px;" id="trieVizContainer">
+        <div class="dim" style="text-align:center;padding:40px;">Click "Build Trie" to visualize</div>
+      </div>
+
+      <div class="grid-2" style="margin-top:12px;">
+        <div class="result-box" id="trieMatches">
+          <span class="result-label">Matching words</span>
+          <div id="trieMatchList" style="margin-top:8px;">—</div>
+        </div>
+        <div class="result-box">
+          <span class="result-label">Trie Stats</span>
+          <div id="trieStats" style="margin-top:8px;">—</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== SECTION 4 ===== -->
+  <section id="s4">
+    <h2><span class="num">04</span> Prefix Search</h2>
+    <p class="lead">Given a prefix, traverse the trie to the node representing the last character of the prefix. Then collect all terminal nodes reachable from there — those are your completions.</p>
+
+    <pre><code><span class="kw">function</span> <span class="fn">findCompletions</span>(root, prefix) {
+  <span class="cm">// 1. Walk down to the prefix node</span>
+  <span class="kw">let</span> curr = root;
+  <span class="kw">for</span> (<span class="kw">const</span> ch <span class="kw">of</span> prefix) {
+    <span class="kw">if</span> (!curr.children[ch]) <span class="kw">return</span> [];
+    curr = curr.children[ch];
+  }
+  <span class="cm">// 2. DFS to collect all words below this node</span>
+  <span class="kw">const</span> results = [];
+  <span class="fn">dfs</span>(curr, prefix, results);
+  <span class="kw">return</span> results;
+}
+
+<span class="kw">function</span> <span class="fn">dfs</span>(node, path, results) {
+  <span class="kw">if</span> (node.isEnd) results.<span class="fn">push</span>(path);
+  <span class="kw">for</span> (<span class="kw">const</span> [ch, child] <span class="kw">of</span> Object.<span class="fn">entries</span>(node.children)) {
+    <span class="fn">dfs</span>(child, path + ch, results);
+  }
+}</code></pre>
+
+    <div class="insight">
+      <div class="insight-title">Complexity</div>
+      <p>Walking to the prefix node is O(m) where m is the prefix length. Collecting k completions is O(k × avg_remaining_length). With millions of dictionary entries, the prefix walk remains instant — only the number of matches matters.</p>
+    </div>
+
+    <h3>Optimization: Top-K per Node</h3>
+    <p>In production, you don't want to collect <em>all</em> completions (could be millions for prefix "a"). Instead, precompute the <strong>top-k most popular completions</strong> at each trie node during build time. This turns the DFS into a simple array lookup — O(1) after reaching the prefix node.</p>
+
+    <div class="card card-green">
+      <h3>Pre-computed Top-K</h3>
+      <p>Each node stores a sorted list of its top 10 completions by popularity. When a prefix query arrives, you walk to the node and return its pre-computed list. No DFS needed at query time. Trade-off: more memory, but O(m) total query time.</p>
+    </div>
+  </section>
+
+  <!-- ===== SECTION 5: Live Autocomplete ===== -->
+  <section id="s5">
+    <h2><span class="num">05</span> Live Autocomplete</h2>
+    <p class="lead">Type below to see real-time autocomplete with popularity-ranked suggestions. The matched prefix is highlighted in each suggestion. Results are ordered by popularity score.</p>
+
+    <div class="playground">
+      <h4>Interactive: Type to Search</h4>
+      <p class="dim" style="margin-bottom:12px;">Try typing "py", "java", "re", "doc", or "da" — suggestions update in real time, ranked by popularity.</p>
+
+      <div class="autocomplete-wrap" id="acWrap">
+        <input type="text" class="autocomplete-input" id="acInput" placeholder="Start typing a search term…" autocomplete="off">
+        <div class="autocomplete-dropdown" id="acDropdown"></div>
+      </div>
+
+      <div class="result-box" style="margin-top:16px;">
+        <span class="result-label">Dictionary (30 terms with popularity scores)</span>
+        <div id="acDictDisplay" style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;"></div>
+      </div>
+
+      <div class="chart-wrap" style="margin-top:20px;">
+        <canvas id="acPopChart"></canvas>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== SECTION 6 ===== -->
+  <section id="s6">
+    <h2><span class="num">06</span> Popularity Ranking</h2>
+    <p class="lead">Not all completions are equally useful. Ranking by query popularity ensures frequently searched terms appear first. But popularity alone isn't enough — recency and query length also matter.</p>
+
+    <div class="formula-box">
+      $$\text{rank}(c) = w_{\text{pop}} \cdot \text{popularity}(c) + w_{\text{rec}} \cdot \text{recency}(c) + w_{\text{len}} \cdot \frac{1}{\text{len}(c)}$$
+      <div class="label">Multi-signal ranking for autocomplete suggestions</div>
+    </div>
+
+    <div class="grid-2">
+      <div class="card card-accent">
+        <h3>Popularity Signal</h3>
+        <p>How many users searched for this term in the last 30 days? "python" (10M searches) ranks above "pythagoras" (50K searches). Usually the dominant factor.</p>
+      </div>
+      <div class="card card-green">
+        <h3>Recency Signal</h3>
+        <p>Trending terms get a boost. During a product launch, "iPhone 17" should rank above "iPhone 12" even if historical volume is lower. Implemented via exponential time decay.</p>
+      </div>
+    </div>
+
+    <h3>Ranking Example</h3>
+    <table>
+      <thead>
+        <tr><th>Suggestion</th><th>Monthly Searches</th><th>Trend</th><th>Length Bonus</th><th>Final Score</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>python</code></td><td style="color:var(--accent2)">10,000,000</td><td>→ stable</td><td>1.00</td><td style="font-weight:700;color:var(--accent2)">0.98</td></tr>
+        <tr><td><code>python tutorial</code></td><td style="color:var(--accent2)">2,400,000</td><td>→ stable</td><td>0.80</td><td style="font-weight:700">0.85</td></tr>
+        <tr><td><code>python 3.13</code></td><td>180,000</td><td style="color:var(--accent2)">↑ trending</td><td>0.85</td><td style="font-weight:700">0.72</td></tr>
+        <tr><td><code>pythagoras theorem</code></td><td style="color:var(--text-dim)">50,000</td><td>→ stable</td><td>0.70</td><td style="font-weight:700">0.31</td></tr>
+      </tbody>
+    </table>
+
+    <div class="pro-tip">
+      <div class="tip-header">Personalized Autocomplete</div>
+      <p>Advanced systems also factor in the user's own search history. If you frequently search for "python pandas," typing "py" shows "python pandas" higher than it would for a generic user. This combines autocomplete with personalization.</p>
+    </div>
+  </section>
+
+  <!-- ===== SECTION 7: Fuzzy Matching ===== -->
+  <section id="s7">
+    <h2><span class="num">07</span> Fuzzy Matching</h2>
+    <p class="lead">Users make typos. Fuzzy matching finds suggestions even when the prefix is misspelled, using edit distance to allow substitutions, insertions, and deletions within a tolerance.</p>
+
+    <div class="formula-box">
+      $$\text{edit\_distance}(a, b) = \text{min insertions + deletions + substitutions to transform } a \to b$$
+      <div class="label">Levenshtein distance — the standard fuzzy matching metric</div>
+    </div>
+
+    <h3>Common Typo Patterns</h3>
+    <table>
+      <thead>
+        <tr><th>Typo Type</th><th>Example</th><th>Edit Distance</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Substitution</td><td>pythn → python</td><td>1 (insert 'o')</td></tr>
+        <tr><td>Transposition</td><td>pytohn → python</td><td>2 (or 1 with Damerau)</td></tr>
+        <tr><td>Deletion</td><td>pyhton → python</td><td>2</td></tr>
+        <tr><td>Insertion</td><td>pythoon → python</td><td>1 (delete extra 'o')</td></tr>
+        <tr><td>Fat-finger</td><td>oython → python</td><td>1 (substitute 'o'→'p')</td></tr>
+      </tbody>
+    </table>
+
+    <div class="playground">
+      <h4>Interactive: Exact vs Fuzzy Search</h4>
+      <p class="dim" style="margin-bottom:12px;">Type a misspelled prefix like "pythn", "javscript", or "reakt". Enable fuzzy matching to see how results are recovered despite typos.</p>
+
+      <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin-bottom:16px;">
+        <div style="flex:1;min-width:200px;">
+          <label class="dim" style="font-size:0.85rem;">Type a (possibly misspelled) prefix:</label>
+          <input type="text" class="demo-input" id="fuzzyInput" value="pythn" oninput="renderFuzzy()" style="margin-top:4px;">
+        </div>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:20px;">
+          <input type="checkbox" id="fuzzyToggle" checked onchange="renderFuzzy()" style="accent-color:var(--accent);">
+          <span style="font-size:0.9rem;">Enable fuzzy matching (distance ≤ 1)</span>
+        </label>
+      </div>
+
+      <div class="grid-2" id="fuzzyResults">
+        <div class="card" id="fuzzyExact"><h3>Exact Matches</h3></div>
+        <div class="card" id="fuzzyFuzzyCol"><h3>Fuzzy Matches (distance ≤ 1)</h3></div>
+      </div>
+
+      <div class="result-box" style="margin-top:16px;" id="fuzzyExplanation">
+        <span class="result-label">How fuzzy matching works</span>
+        <div style="margin-top:6px;">For each dictionary term, we compare the typed prefix against the term's prefix of similar length. If the edit distance is ≤ 1, it's considered a fuzzy match. This catches single-character typos without being too permissive.</div>
+      </div>
+    </div>
+
+    <h3>Fuzzy Matching Implementations</h3>
+    <div class="grid-2">
+      <div class="card card-accent">
+        <h3>Levenshtein Automaton</h3>
+        <p>Build an NFA that accepts all strings within edit distance k of the query. Intersect with the trie for efficient fuzzy prefix search. O(m × |Σ|^k) — fast for k ≤ 2.</p>
+      </div>
+      <div class="card card-green">
+        <h3>BK-Tree</h3>
+        <p>Organize the dictionary in a tree where edges represent edit distances. Prune branches that can't be within the target distance. Good for fuzzy exact match, less natural for prefix search.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== SECTION 8 ===== -->
+  <section id="s8">
+    <h2><span class="num">08</span> Real-Time Performance</h2>
+    <p class="lead">Autocomplete must return results in under 50ms — users expect instant feedback on every keystroke. This single constraint drives every architectural decision.</p>
+
+    <div class="grid-2">
+      <div class="card card-green">
+        <h3>Speed Targets</h3>
+        <ul>
+          <li><strong>&lt;10ms</strong> — feels instant, gold standard</li>
+          <li><strong>10-50ms</strong> — acceptable, user doesn't notice</li>
+          <li><strong>50-100ms</strong> — noticeable lag, frustrating</li>
+          <li><strong>&gt;100ms</strong> — users lose trust, start ignoring suggestions</li>
+        </ul>
+      </div>
+      <div class="card card-accent">
+        <h3>Optimization Techniques</h3>
+        <ul>
+          <li><strong>Debounce</strong> keystrokes (50-100ms gap)</li>
+          <li><strong>Pre-compute</strong> top-k per trie node</li>
+          <li><strong>Edge-side caching</strong> (CDN for popular prefixes)</li>
+          <li><strong>Limit</strong> results to 8-10 suggestions</li>
+          <li><strong>Cancel</strong> in-flight requests when new keystroke arrives</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="pro-tip">
+      <div class="tip-header">Debouncing</div>
+      <p>Don't fire a query on every keystroke. Wait 50-100ms after the user stops typing. If they type "pyt" in 80ms, you only query once for "pyt" instead of three times for "p", "py", "pyt". This reduces server load by 60-70% with no perceived latency increase.</p>
+    </div>
+
+    <h3>Latency Budget Breakdown</h3>
+    <table>
+      <thead>
+        <tr><th>Phase</th><th>Budget</th><th>What Happens</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Debounce wait</td><td style="color:var(--text-dim)">50-100ms</td><td>Wait for user to stop typing (client-side)</td></tr>
+        <tr><td>Network round-trip</td><td style="color:var(--accent4)">5-20ms</td><td>HTTP request to edge/server</td></tr>
+        <tr><td>Trie lookup</td><td style="color:var(--accent2)">&lt;1ms</td><td>Walk prefix tree, return top-k</td></tr>
+        <tr><td>Serialization</td><td style="color:var(--accent2)">&lt;1ms</td><td>JSON encode response</td></tr>
+        <tr><td>Network return</td><td style="color:var(--accent4)">5-20ms</td><td>Response back to client</td></tr>
+        <tr><td>DOM render</td><td style="color:var(--accent2)">&lt;5ms</td><td>Update dropdown UI</td></tr>
+      </tbody>
+    </table>
+
+    <div class="formula-box compact">
+      $$\text{Total perceived latency} = \text{debounce} + \text{RTT} + \text{server} + \text{render} \leq 50\text{ms (post-debounce)}$$
+      <div class="label">The trie lookup itself is negligible — network and rendering dominate</div>
+    </div>
+  </section>
+
+  <!-- ===== SECTION 9 ===== -->
+  <section id="s9">
+    <h2><span class="num">09</span> Caching Strategies</h2>
+    <p class="lead">The top 1,000 prefixes (1-3 characters) cover 90%+ of autocomplete traffic. Cache them aggressively across multiple layers for maximum hit rate.</p>
+
+    <div class="arch-diagram">
+      <div class="arch-section-label">Autocomplete Cache Layers</div>
+      <div class="arch-row">
+        <div class="arch-box accent">Browser Cache<div class="arch-label">localStorage / memory</div></div>
+        <div class="arch-arrow">→</div>
+        <div class="arch-box green">CDN / Edge<div class="arch-label">popular prefixes</div></div>
+        <div class="arch-arrow">→</div>
+        <div class="arch-box yellow">App Server<div class="arch-label">in-memory trie</div></div>
+        <div class="arch-arrow">→</div>
+        <div class="arch-box red">Database<div class="arch-label">full dictionary</div></div>
+      </div>
+    </div>
+
+    <table>
+      <thead>
+        <tr><th>Layer</th><th>Latency</th><th>Hit Rate</th><th>What's Cached</th><th>TTL</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><strong>Browser</strong></td><td style="color:var(--accent2)">&lt;1ms</td><td>15-20%</td><td>Recent user queries, last session</td><td>Session / 1hr</td></tr>
+        <tr><td><strong>CDN / Edge</strong></td><td style="color:var(--accent2)">5-15ms</td><td>60-70%</td><td>Top 1K prefixes with pre-rendered results</td><td>5-15 min</td></tr>
+        <tr><td><strong>App Server</strong></td><td style="color:var(--accent4)">10-30ms</td><td>95%+</td><td>Full trie in memory (Redis or in-process)</td><td>1-6 hrs</td></tr>
+        <tr><td><strong>Database</strong></td><td style="color:var(--accent3)">50-200ms</td><td>100%</td><td>All terms with metadata (fallback only)</td><td>Persistent</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Prefix Popularity Distribution</h3>
+    <p>Autocomplete traffic follows a <strong>Zipfian distribution</strong>: a tiny fraction of prefixes accounts for the vast majority of queries. The prefix "a" alone might represent 4% of all autocomplete traffic. Caching the top 1,000 prefixes covers most of the load.</p>
+
+    <div class="grid-2">
+      <div class="card card-accent">
+        <h3>Cache Warming</h3>
+        <p>Pre-populate edge caches with known popular prefixes before users request them. Run a warm-up job after each dictionary update to ensure zero cold-cache misses for top terms.</p>
+      </div>
+      <div class="card card-green">
+        <h3>Stale-While-Revalidate</h3>
+        <p>Serve slightly stale suggestions while refreshing the cache in the background. Users get instant responses while the cache stays fresh. Autocomplete tolerates staleness well — suggestions don't change minute-to-minute.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== SECTION 10 ===== -->
+  <section id="s10">
+    <h2><span class="num">10</span> Key Takeaway</h2>
+
+    <div class="card card-green">
+      <h3>Autocomplete is a search engine in miniature</h3>
+      <p>It combines data structures (tries), ranking (popularity + recency), fault tolerance (fuzzy matching), and systems engineering (caching, debouncing, latency budgets) — all under a <strong>50ms deadline</strong>. Building great autocomplete teaches you every fundamental of search infrastructure at a compressed scale.</p>
+    </div>
+
+    <h3>Architecture Summary</h3>
+    <div class="pipeline">
+      <div class="pipeline-node accent">Keystroke</div>
+      <div class="pipeline-arrow">→</div>
+      <div class="pipeline-node">Debounce</div>
+      <div class="pipeline-arrow">→</div>
+      <div class="pipeline-node green">Cache Check</div>
+      <div class="pipeline-arrow">→</div>
+      <div class="pipeline-node">Trie Lookup</div>
+      <div class="pipeline-arrow">→</div>
+      <div class="pipeline-node yellow">Rank + Fuzzy</div>
+      <div class="pipeline-arrow">→</div>
+      <div class="pipeline-node accent">Render</div>
+    </div>
+
+    <div class="insight">
+      <div class="insight-title">Final Thought</div>
+      <p>The best autocomplete systems feel like mind-reading — predicting what you want before you finish typing. Behind the magic is a carefully engineered pipeline of tries, caches, and ranking algorithms, all optimized to respond faster than human perception can detect.</p>
+    </div>
+  </section>
+
+</div>
+
+<footer>Advanced Search Series — Autocomplete Playground</footer>
+
+<script>
+(function() {
+
+// ===== Trie Implementation =====
+class TrieNode {
+  constructor(char) {
+    this.char = char;
+    this.children = {};
+    this.isEnd = false;
+    this.word = null;
+  }
+}
+
+class Trie {
+  constructor() {
+    this.root = new TrieNode('');
+    this.wordCount = 0;
+    this.nodeCount = 1;
+  }
+
+  insert(word) {
+    let node = this.root;
+    for (const ch of word) {
+      if (!node.children[ch]) {
+        node.children[ch] = new TrieNode(ch);
+        this.nodeCount++;
+      }
+      node = node.children[ch];
+    }
+    if (!node.isEnd) this.wordCount++;
+    node.isEnd = true;
+    node.word = word;
+  }
+
+  findNode(prefix) {
+    let node = this.root;
+    for (const ch of prefix) {
+      if (!node.children[ch]) return null;
+      node = node.children[ch];
+    }
+    return node;
+  }
+
+  collectWords(node, results) {
+    if (!node) return;
+    if (node.isEnd) results.push(node.word);
+    for (const ch of Object.keys(node.children).sort()) {
+      this.collectWords(node.children[ch], results);
+    }
+  }
+
+  search(prefix) {
+    const node = this.findNode(prefix);
+    const results = [];
+    this.collectWords(node, results);
+    return results;
+  }
+
+  getDepth(node, d) {
+    if (!node) return d;
+    let max = d;
+    for (const ch in node.children) {
+      const childDepth = this.getDepth(node.children[ch], d + 1);
+      if (childDepth > max) max = childDepth;
+    }
+    return max;
+  }
+}
+
+let vizTrie = new Trie();
+
+// ===== Trie Visualizer =====
+function renderTrieNode(node, depth, highlightPath) {
+  const childKeys = Object.keys(node.children).sort();
+  if (childKeys.length === 0 && depth > 0) return '';
+
+  let html = '';
+  for (const ch of childKeys) {
+    const child = node.children[ch];
+    const isHighlighted = highlightPath && highlightPath.length > 0 && highlightPath[0] === ch;
+    const nextHighlight = isHighlighted ? highlightPath.slice(1) : null;
+    const hlClass = isHighlighted ? ' highlight' : '';
+    const endClass = child.isEnd ? ' end-word' : '';
+
+    html += `<div class="trie-node">
+      <div class="trie-edge${hlClass}"></div>
+      <div class="trie-char${endClass}${hlClass}" title="${child.word || ch}">${ch}</div>`;
+
+    const subChildKeys = Object.keys(child.children).sort();
+    if (subChildKeys.length > 0) {
+      html += `<div class="trie-children">${renderTrieNode(child, depth + 1, nextHighlight)}</div>`;
+    }
+    html += '</div>';
+  }
+  return html;
+}
+
+window.buildTrieViz = function() {
+  const words = document.getElementById('trieWords').value
+    .split(',').map(w => w.trim().toLowerCase()).filter(w => w.length > 0);
+  vizTrie = new Trie();
+  words.forEach(w => vizTrie.insert(w));
+  highlightTriePrefix();
+};
+
+window.highlightTriePrefix = function() {
+  const prefix = document.getElementById('triePrefix').value.toLowerCase().trim();
+  const path = prefix ? prefix.split('') : null;
+
+  const container = document.getElementById('trieVizContainer');
+  const rootKeys = Object.keys(vizTrie.root.children).sort();
+  if (rootKeys.length === 0) {
+    container.innerHTML = '<div class="dim" style="text-align:center;padding:40px;">Click "Build Trie" to visualize</div>';
+    return;
+  }
+
+  container.innerHTML = `<div class="trie-tree"><div style="text-align:center;margin-bottom:8px;">
+    <div class="trie-char" style="margin:0 auto;background:var(--accent);color:#fff;border-color:var(--accent);font-size:0.7rem;">root</div>
+  </div><div class="trie-children" style="justify-content:center;">${renderTrieNode(vizTrie.root, 0, path)}</div></div>`;
+
+  const matches = prefix ? vizTrie.search(prefix) : [];
+  document.getElementById('trieMatchList').innerHTML = matches.length > 0
+    ? matches.map(m => `<span class="badge badge-green" style="padding:4px 12px;border-radius:16px;margin:2px;">${m}</span>`).join('')
+    : (prefix ? '<span class="dim">No matches found</span>' : '—');
+
+  const maxDepth = vizTrie.getDepth(vizTrie.root, 0);
+  const sharedPrefixes = vizTrie.nodeCount - vizTrie.wordCount;
+  document.getElementById('trieStats').innerHTML =
+    `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+      <div><span class="dim">Words:</span> <strong>${vizTrie.wordCount}</strong></div>
+      <div><span class="dim">Nodes:</span> <strong>${vizTrie.nodeCount}</strong></div>
+      <div><span class="dim">Max depth:</span> <strong>${maxDepth}</strong></div>
+      <div><span class="dim">Shared nodes:</span> <strong>${sharedPrefixes}</strong></div>
+    </div>`;
+};
+
+buildTrieViz();
+
+// ===== Live Autocomplete =====
+const DICTIONARY = [
+  { term: 'python', pop: 9800 }, { term: 'python tutorial', pop: 8200 },
+  { term: 'python 3', pop: 7500 }, { term: 'python list', pop: 6800 },
+  { term: 'python dictionary', pop: 6200 }, { term: 'python pandas', pop: 5900 },
+  { term: 'python flask', pop: 4800 }, { term: 'python django', pop: 4500 },
+  { term: 'python machine learning', pop: 4200 }, { term: 'pytorch', pop: 5500 },
+  { term: 'pytorch tutorial', pop: 3900 }, { term: 'pandas', pop: 7000 },
+  { term: 'pandas dataframe', pop: 5800 }, { term: 'pandas groupby', pop: 4100 },
+  { term: 'javascript', pop: 9500 }, { term: 'javascript array', pop: 6500 },
+  { term: 'java', pop: 8800 }, { term: 'java spring', pop: 5200 },
+  { term: 'jupyter notebook', pop: 5000 }, { term: 'json parse', pop: 4700 },
+  { term: 'react', pop: 8200 }, { term: 'react hooks', pop: 6100 },
+  { term: 'node.js', pop: 7800 }, { term: 'numpy', pop: 6600 },
+  { term: 'numpy array', pop: 4900 }, { term: 'next.js', pop: 5400 },
+  { term: 'nest.js', pop: 3200 }, { term: 'docker', pop: 7200 },
+  { term: 'docker compose', pop: 5100 }, { term: 'data structures', pop: 4400 }
+];
+
+const acInput = document.getElementById('acInput');
+const acDropdown = document.getElementById('acDropdown');
+
+const sortedDict = [...DICTIONARY].sort((a, b) => b.pop - a.pop);
+document.getElementById('acDictDisplay').innerHTML = sortedDict
+  .map(d => `<span style="background:var(--surface2);border:1px solid var(--border);padding:3px 10px;border-radius:14px;font-size:0.78rem;">${d.term} <span style="color:var(--text-dim)">(${(d.pop / 1000).toFixed(1)}k)</span></span>`)
+  .join('');
+
+// Popularity chart
+const popCtx = document.getElementById('acPopChart').getContext('2d');
+new Chart(popCtx, {
+  type: 'bar',
+  data: {
+    labels: sortedDict.slice(0, 15).map(d => d.term),
+    datasets: [{
+      label: 'Popularity Score',
+      data: sortedDict.slice(0, 15).map(d => d.pop),
+      backgroundColor: sortedDict.slice(0, 15).map((_, i) => `rgba(108, 99, 255, ${0.9 - i * 0.05})`),
+      borderRadius: 4
+    }]
+  },
+  options: {
+    indexAxis: 'y',
+    responsive: true,
+    plugins: {
+      legend: { display: false },
+      title: { display: true, text: 'Top 15 Terms by Popularity', color: '#9398ab' }
+    },
+    scales: {
+      x: { ticks: { color: '#9398ab' }, grid: { color: 'rgba(42,45,58,0.5)' }, title: { display: true, text: 'Popularity', color: '#9398ab' } },
+      y: { ticks: { color: '#9398ab', font: { size: 10 } }, grid: { display: false } }
+    }
+  }
+});
+
+function acSearch(prefix) {
+  if (!prefix) return [];
+  const p = prefix.toLowerCase();
+  return DICTIONARY
+    .filter(d => d.term.startsWith(p))
+    .sort((a, b) => b.pop - a.pop)
+    .slice(0, 8);
+}
+
+function renderAcDropdown() {
+  const val = acInput.value.trim();
+  const matches = acSearch(val);
+  if (matches.length === 0 || val.length === 0) {
+    acDropdown.classList.remove('show');
+    return;
+  }
+  acDropdown.innerHTML = matches.map(m => {
+    const highlighted = `<mark>${m.term.slice(0, val.length)}</mark>${m.term.slice(val.length)}`;
+    return `<div class="autocomplete-item" onmousedown="document.getElementById('acInput').value='${m.term}';document.getElementById('acDropdown').classList.remove('show');">
+      <span>${highlighted}</span>
+      <span class="pop">${(m.pop / 1000).toFixed(1)}k</span>
+    </div>`;
+  }).join('');
+  acDropdown.classList.add('show');
+}
+
+acInput.addEventListener('input', renderAcDropdown);
+acInput.addEventListener('focus', renderAcDropdown);
+acInput.addEventListener('blur', () => setTimeout(() => acDropdown.classList.remove('show'), 150));
+
+// ===== Fuzzy Matching =====
+function editDistance(a, b) {
+  const m = a.length, n = b.length;
+  const dp = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
+  for (let i = 0; i <= m; i++) dp[i][0] = i;
+  for (let j = 0; j <= n; j++) dp[0][j] = j;
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      dp[i][j] = a[i - 1] === b[j - 1]
+        ? dp[i - 1][j - 1]
+        : 1 + Math.min(dp[i - 1][j - 1], dp[i - 1][j], dp[i][j - 1]);
+    }
+  }
+  return dp[m][n];
+}
+
+const ALL_TERMS = DICTIONARY.map(d => d.term);
+
+window.renderFuzzy = function() {
+  const input = document.getElementById('fuzzyInput').value.toLowerCase().trim();
+  const fuzzyEnabled = document.getElementById('fuzzyToggle').checked;
+
+  const exactMatches = ALL_TERMS.filter(t => t.startsWith(input));
+  let fuzzyMatches = [];
+  if (fuzzyEnabled && input.length > 0) {
+    fuzzyMatches = ALL_TERMS.filter(t => {
+      if (t.startsWith(input)) return false;
+      const prefixLen = Math.min(input.length + 1, t.length);
+      const prefix = t.slice(0, prefixLen);
+      return editDistance(input, prefix) <= 1;
+    });
+  }
+
+  document.getElementById('fuzzyExact').innerHTML = `<h3 style="color:var(--accent2)">Exact Prefix Matches (${exactMatches.length})</h3>` +
+    (exactMatches.length > 0
+      ? exactMatches.map(m => `<div style="padding:6px 0;border-bottom:1px solid var(--border);font-size:0.9rem;"><mark>${m.slice(0, input.length)}</mark>${m.slice(input.length)}</div>`).join('')
+      : '<p class="dim">No exact prefix matches</p>');
+
+  document.getElementById('fuzzyFuzzyCol').innerHTML = `<h3 style="color:var(--accent3)">Fuzzy Matches (${fuzzyMatches.length})</h3>` +
+    (fuzzyEnabled
+      ? (fuzzyMatches.length > 0
+        ? fuzzyMatches.map(m => {
+            const prefixLen = Math.min(input.length + 1, m.length);
+            const dist = editDistance(input, m.slice(0, prefixLen));
+            return `<div style="padding:6px 0;border-bottom:1px solid var(--border);font-size:0.9rem;">
+              <span class="fuzzy-match">${m}</span>
+              <span class="dim" style="font-size:0.78rem;margin-left:8px;">edit dist: ${dist}</span>
+            </div>`;
+          }).join('')
+        : '<p class="dim">No fuzzy matches within distance 1</p>')
+      : '<p class="dim">Fuzzy matching disabled — enable the toggle above</p>');
+};
+renderFuzzy();
+
+// ===== TOC scroll highlighting =====
+const tocLinks = document.querySelectorAll('.toc a');
+const sections = Array.from(tocLinks).map(a => document.querySelector(a.getAttribute('href')));
+
+function onScroll() {
+  let current = 0;
+  const offset = 160;
+  sections.forEach((sec, i) => {
+    if (sec && sec.getBoundingClientRect().top <= offset) current = i;
+  });
+  tocLinks.forEach((a, i) => a.classList.toggle('active', i === current));
+}
+window.addEventListener('scroll', onScroll, { passive: true });
+onScroll();
+
+})();
+</script>
+</body>
+</html>

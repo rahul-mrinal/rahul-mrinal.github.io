@@ -1,0 +1,885 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Data Quality: Garbage In, Garbage Out</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js" onload="renderMathInElement(document.body, {
+    delimiters: [
+      {left: '$$', right: '$$', display: true},
+      {left: '\\[', right: '\\]', display: true},
+      {left: '$', right: '$', display: false},
+      {left: '\\(', right: '\\)', display: false}
+    ],
+    throwOnError: false
+  });"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../playground.css" />
+  <style>
+    .quality-doc {
+      background: var(--code-bg); border: 1px solid var(--border); border-radius: var(--radius-sm);
+      padding: 14px 18px; margin: 8px 0; font-family: 'JetBrains Mono', monospace;
+      font-size: 0.82rem; line-height: 1.7; transition: all 0.3s; position: relative;
+    }
+    .quality-doc.pass { border-color: var(--accent2); }
+    .quality-doc.fail { border-color: var(--accent3); }
+    .quality-doc .doc-badge {
+      position: absolute; top: 8px; right: 12px; font-size: 0.72rem; font-weight: 700;
+      padding: 2px 10px; border-radius: 10px; text-transform: uppercase; letter-spacing: 0.3px;
+    }
+    .quality-doc .doc-badge.pass-badge { background: rgba(0,201,167,0.15); color: var(--accent2); }
+    .quality-doc .doc-badge.fail-badge { background: rgba(255,107,107,0.15); color: var(--accent3); }
+    .issue-flag {
+      display: inline-block; font-size: 0.72rem; padding: 1px 8px; border-radius: 4px;
+      margin: 2px 4px 2px 0; font-weight: 600; font-family: 'Inter', sans-serif;
+    }
+    .issue-flag.schema { background: rgba(108,99,255,0.15); color: var(--accent); }
+    .issue-flag.completeness { background: rgba(255,107,107,0.15); color: var(--accent3); }
+    .issue-flag.freshness { background: rgba(255,217,61,0.15); color: var(--accent4); }
+    .issue-flag.consistency { background: rgba(255,159,67,0.15); color: var(--orange); }
+    .issue-flag.uniqueness { background: rgba(243,104,224,0.15); color: var(--pink); }
+    .score-ring {
+      width: 120px; height: 120px; border-radius: 50%; position: relative;
+      display: flex; align-items: center; justify-content: center; margin: 0 auto;
+    }
+    .score-ring .score-text { font-size: 1.6rem; font-weight: 800; font-family: 'JetBrains Mono', monospace; }
+    .score-ring svg { position: absolute; top: 0; left: 0; transform: rotate(-90deg); }
+    .freshness-source {
+      display: flex; align-items: center; justify-content: space-between;
+      background: var(--code-bg); border: 1px solid var(--border); border-radius: var(--radius-sm);
+      padding: 12px 16px; margin: 6px 0; transition: border-color 0.3s;
+    }
+    .freshness-source .source-name { font-weight: 600; font-size: 0.9rem; }
+    .freshness-source .source-time { font-family: 'JetBrains Mono', monospace; font-size: 0.82rem; color: var(--text-dim); }
+    .freshness-source .source-status {
+      width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0;
+    }
+    .freshness-source.fresh { border-color: var(--accent2); }
+    .freshness-source.stale { border-color: var(--accent4); }
+    .freshness-source.expired { border-color: var(--accent3); }
+    .dup-group {
+      background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 16px; margin: 10px 0;
+    }
+    .dup-group .dup-header {
+      font-size: 0.82rem; font-weight: 700; color: var(--pink); margin-bottom: 8px;
+      text-transform: uppercase; letter-spacing: 0.5px;
+    }
+    .dup-record {
+      background: var(--code-bg); border: 1px solid var(--border); border-radius: var(--radius-sm);
+      padding: 10px 14px; margin: 4px 0; font-family: 'JetBrains Mono', monospace; font-size: 0.8rem;
+    }
+    .dup-sim {
+      font-size: 0.78rem; color: var(--accent4); font-family: 'JetBrains Mono', monospace;
+      margin: 4px 0; padding-left: 12px;
+    }
+    .dimension-cards { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
+    .dim-card {
+      background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 14px; text-align: center; transition: all 0.2s;
+    }
+    .dim-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+    .dim-card .dim-icon { font-size: 1.4rem; margin-bottom: 6px; }
+    .dim-card .dim-name { font-weight: 700; font-size: 0.85rem; margin-bottom: 4px; }
+    .dim-card .dim-desc { font-size: 0.75rem; color: var(--text-dim); }
+    .score-breakdown { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-top: 16px; }
+    .score-item {
+      background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm);
+      padding: 10px; text-align: center;
+    }
+    .score-item .score-dim { font-size: 0.72rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.3px; margin-bottom: 2px; }
+    .score-item .score-val { font-size: 1.1rem; font-weight: 700; font-family: 'JetBrains Mono', monospace; }
+    @media (max-width: 700px) {
+      .dimension-cards { grid-template-columns: 1fr 1fr; }
+      .score-breakdown { grid-template-columns: 1fr 1fr; }
+    }
+    @media (max-width: 480px) {
+      .dimension-cards { grid-template-columns: 1fr; }
+      .score-breakdown { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+
+<body>
+<div class="topbar">
+  <a href="/" class="topbar-brand">
+    <div class="topbar-logo">RM</div>
+    <span class="topbar-label">Rahul Mrinal</span>
+  </a>
+  <a href="/blog" class="topbar-back">← Back to Blog</a>
+</div>
+
+<div class="hero">
+  <div class="container">
+    <h1>Data Quality: Garbage In, Garbage Out</h1>
+    <p class="subtitle">Schema validation, completeness, freshness, and deduplication</p>
+    <div class="badges">
+      <span class="badge badge-hnsw">Validate</span>
+      <span class="badge badge-ivf">Monitor</span>
+      <span class="badge badge-pq">Deduplicate</span>
+    </div>
+  </div>
+</div>
+
+<nav class="toc">
+  <div class="toc-inner">
+    <a href="#s1">Why Quality</a>
+    <a href="#s2">5 Dimensions</a>
+    <a href="#s3">Inspector</a>
+    <a href="#s4">Schema</a>
+    <a href="#s5">Freshness</a>
+    <a href="#s6">Deduplication</a>
+    <a href="#s7">Quality Gates</a>
+    <a href="#s8">Takeaway</a>
+  </div>
+</nav>
+
+<div class="container">
+
+  <!-- ===== SECTION 1 ===== -->
+  <section id="s1">
+    <h2><span class="num">01</span> Why Quality Matters</h2>
+    <p>Bad data in your search index is worse than missing data. A missing product just doesn't appear. A product with the wrong price gets purchased at the wrong cost. A misspelled title never matches the right query.</p>
+
+    <div class="analogy">
+      <div class="icon">🍳</div>
+      <p><strong>Kitchen analogy:</strong> The best chef in the world can't make a great meal from rotten ingredients. No amount of ranking algorithm sophistication, query processing magic, or UI polish can compensate for bad data. Data quality is the foundation everything else builds on.</p>
+    </div>
+
+    <div class="grid-2">
+      <div class="card card-red">
+        <h3>Costs of Bad Data</h3>
+        <ul>
+          <li>Users see irrelevant or wrong results</li>
+          <li>Search ranking is polluted by noise</li>
+          <li>Analytics and metrics become unreliable</li>
+          <li>Trust erodes — users stop using search</li>
+        </ul>
+      </div>
+      <div class="card card-green">
+        <h3>Benefits of Clean Data</h3>
+        <ul>
+          <li>Ranking algorithms work as designed</li>
+          <li>Facets and filters are accurate</li>
+          <li>Embeddings capture real meaning</li>
+          <li>Users trust and rely on search</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="insight">
+      <div class="insight-title">The 1-10-100 Rule</div>
+      <p>Preventing a data quality issue costs <strong>$1</strong>. Detecting it costs <strong>$10</strong>. Correcting it after it's in production costs <strong>$100</strong>. Invest in upstream validation.</p>
+    </div>
+  </section>
+
+  <!-- ===== SECTION 2 ===== -->
+  <section id="s2">
+    <h2><span class="num">02</span> Five Quality Dimensions</h2>
+    <p>Data quality isn't one thing — it's a spectrum across multiple dimensions. Each matters for different reasons.</p>
+
+    <div class="dimension-cards">
+      <div class="dim-card">
+        <div class="dim-icon">📋</div>
+        <div class="dim-name">Schema</div>
+        <div class="dim-desc">Right types, required fields, valid values</div>
+      </div>
+      <div class="dim-card">
+        <div class="dim-icon">📊</div>
+        <div class="dim-name">Completeness</div>
+        <div class="dim-desc">No missing fields or empty values</div>
+      </div>
+      <div class="dim-card">
+        <div class="dim-icon">⏱️</div>
+        <div class="dim-name">Freshness</div>
+        <div class="dim-desc">Data is recent and up-to-date</div>
+      </div>
+      <div class="dim-card">
+        <div class="dim-icon">🔗</div>
+        <div class="dim-name">Consistency</div>
+        <div class="dim-desc">Values align across sources</div>
+      </div>
+      <div class="dim-card">
+        <div class="dim-icon">🔍</div>
+        <div class="dim-name">Uniqueness</div>
+        <div class="dim-desc">No duplicates or near-dupes</div>
+      </div>
+    </div>
+
+    <table>
+      <thead><tr><th>Dimension</th><th>Check</th><th>Example Failure</th></tr></thead>
+      <tbody>
+        <tr><td>Schema</td><td>Field types, value ranges</td><td>Price is a string: "twenty dollars"</td></tr>
+        <tr><td>Completeness</td><td>Required fields present</td><td>Product with no title</td></tr>
+        <tr><td>Freshness</td><td>Last updated within SLA</td><td>Stock count from 3 months ago</td></tr>
+        <tr><td>Consistency</td><td>Cross-field logic holds</td><td>Category "Electronics" but sub-cat "Shoes"</td></tr>
+        <tr><td>Uniqueness</td><td>No duplicates by key</td><td>Same product listed twice with different IDs</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ===== SECTION 3: QUALITY INSPECTOR ===== -->
+  <section id="s3">
+    <h2><span class="num">03</span> Quality Inspector</h2>
+    <p>Inspect these 8 sample documents. Some have quality issues — can you spot them before running the check?</p>
+
+    <div class="playground">
+      <h4>Interactive Quality Inspector</h4>
+
+      <div id="inspector-docs"></div>
+
+      <div style="display: flex; gap: 12px; align-items: center; margin-top: 16px;">
+        <button class="demo-btn" onclick="runQualityCheck()">🔍 Run Quality Check</button>
+        <button class="btn" onclick="resetInspector()">↻ Reset</button>
+      </div>
+
+      <div id="inspector-summary" style="display: none; margin-top: 24px;">
+        <div style="display: flex; align-items: center; gap: 32px; flex-wrap: wrap;">
+          <div class="score-ring" id="quality-ring">
+            <svg width="120" height="120" viewBox="0 0 120 120">
+              <circle cx="60" cy="60" r="52" fill="none" stroke="var(--surface2)" stroke-width="8"/>
+              <circle cx="60" cy="60" r="52" fill="none" stroke="var(--accent2)" stroke-width="8"
+                stroke-dasharray="326.7" stroke-dashoffset="326.7" stroke-linecap="round" id="score-circle"/>
+            </svg>
+            <span class="score-text" id="quality-score">0%</span>
+          </div>
+          <div style="flex: 1;">
+            <h4 style="color: var(--text); margin-bottom: 8px;">Overall Quality Score</h4>
+            <p style="color: var(--text-dim); font-size: 0.9rem;" id="quality-verdict"></p>
+          </div>
+        </div>
+        <div class="score-breakdown" id="dimension-scores"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== SECTION 4 ===== -->
+  <section id="s4">
+    <h2><span class="num">04</span> Schema Validation</h2>
+    <p>Schema validation is your first line of defense. Reject documents that don't conform before they pollute the index. Think of it as a bouncer at the door — no ID, no entry.</p>
+
+    <h3>What to Validate</h3>
+    <div class="grid-2">
+      <div class="card card-accent">
+        <h3>Required Fields</h3>
+        <p>Every document must have: <code>id</code>, <code>title</code>, <code>body</code>, <code>category</code>. Missing any of these? Reject immediately.</p>
+      </div>
+      <div class="card card-green">
+        <h3>Type Checking</h3>
+        <p><code>price</code> must be a number. <code>tags</code> must be an array. <code>published_at</code> must be ISO 8601. No exceptions.</p>
+      </div>
+      <div class="card card-yellow">
+        <h3>Value Constraints</h3>
+        <p><code>price &gt; 0</code>. <code>rating</code> between 0-5. <code>category</code> in allowed set. Enum fields match known values.</p>
+      </div>
+      <div class="card card-red">
+        <h3>Cross-field Rules</h3>
+        <p>If <code>status = "published"</code>, then <code>published_at</code> must not be null. If <code>type = "bundle"</code>, then <code>components</code> must be non-empty.</p>
+      </div>
+    </div>
+
+    <pre><code><span class="cm"># Schema validation with JSON Schema</span>
+schema = {
+    <span class="str">"type"</span>: <span class="str">"object"</span>,
+    <span class="str">"required"</span>: [<span class="str">"id"</span>, <span class="str">"title"</span>, <span class="str">"body"</span>, <span class="str">"category"</span>],
+    <span class="str">"properties"</span>: {
+        <span class="str">"id"</span>:       { <span class="str">"type"</span>: <span class="str">"string"</span>, <span class="str">"minLength"</span>: <span class="op">1</span> },
+        <span class="str">"title"</span>:    { <span class="str">"type"</span>: <span class="str">"string"</span>, <span class="str">"minLength"</span>: <span class="op">1</span> },
+        <span class="str">"price"</span>:    { <span class="str">"type"</span>: <span class="str">"number"</span>, <span class="str">"minimum"</span>: <span class="op">0</span> },
+        <span class="str">"category"</span>: { <span class="str">"enum"</span>: [<span class="str">"electronics"</span>, <span class="str">"books"</span>, <span class="str">"clothing"</span>] }
+    }
+}</code></pre>
+
+    <h3>Validation in Practice</h3>
+    <pre><code><span class="cm"># Schema validation with structured error reporting</span>
+<span class="kw">from</span> dataclasses <span class="kw">import</span> dataclass
+<span class="kw">from</span> typing <span class="kw">import</span> List
+
+@dataclass
+<span class="kw">class</span> <span class="fn">ValidationResult</span>:
+    passed: bool
+    doc_id: str
+    errors: List[str]
+
+<span class="kw">def</span> <span class="fn">validate_document</span>(doc, schema):
+    errors = []
+
+    <span class="cm"># Check required fields</span>
+    <span class="kw">for</span> field <span class="kw">in</span> schema[<span class="str">"required"</span>]:
+        <span class="kw">if</span> field <span class="kw">not in</span> doc <span class="kw">or</span> doc[field] <span class="kw">is</span> <span class="op">None</span>:
+            errors.<span class="fn">append</span>(<span class="str">f"Missing required field: {field}"</span>)
+        <span class="kw">elif</span> <span class="fn">isinstance</span>(doc[field], str) <span class="kw">and</span> <span class="fn">len</span>(doc[field].<span class="fn">strip</span>()) == <span class="op">0</span>:
+            errors.<span class="fn">append</span>(<span class="str">f"Empty required field: {field}"</span>)
+
+    <span class="cm"># Check field types</span>
+    <span class="kw">for</span> field, rules <span class="kw">in</span> schema[<span class="str">"properties"</span>].<span class="fn">items</span>():
+        <span class="kw">if</span> field <span class="kw">in</span> doc <span class="kw">and</span> doc[field] <span class="kw">is not</span> <span class="op">None</span>:
+            expected_type = rules.<span class="fn">get</span>(<span class="str">"type"</span>)
+            <span class="kw">if not</span> <span class="fn">type_matches</span>(doc[field], expected_type):
+                errors.<span class="fn">append</span>(<span class="str">f"Type mismatch: {field} should be {expected_type}"</span>)
+
+    <span class="kw">return</span> <span class="fn">ValidationResult</span>(
+        passed=<span class="fn">len</span>(errors) == <span class="op">0</span>,
+        doc_id=doc.<span class="fn">get</span>(<span class="str">"id"</span>, <span class="str">"unknown"</span>),
+        errors=errors
+    )</code></pre>
+
+    <div class="analogy">
+      <div class="icon">🛂</div>
+      <p><strong>Airport security analogy:</strong> Schema validation is like airport security screening. Every passenger (document) must pass through the same checks: valid boarding pass (required fields), no prohibited items (type constraints), and matching identity (value ranges). Some checks are instant rejections; others just flag for review.</p>
+    </div>
+
+    <div class="card card-green">
+      <h3>Validation Best Practices</h3>
+      <ul>
+        <li>Validate as early as possible — ideally at ingestion time</li>
+        <li>Separate hard failures (missing ID) from soft warnings (missing optional field)</li>
+        <li>Log validation failures with the full document for debugging</li>
+        <li>Version your schemas — they evolve as your data model grows</li>
+        <li>Test with production data samples, not just synthetic data</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ===== SECTION 5: FRESHNESS MONITOR ===== -->
+  <section id="s5">
+    <h2><span class="num">05</span> Freshness Monitor</h2>
+    <p>Stale data is invisible poison — everything looks fine until a user discovers a product that's been discontinued for months. Monitor freshness continuously.</p>
+
+    <div class="playground">
+      <h4>Real-time Freshness Monitor</h4>
+      <p style="color: var(--text-dim); font-size: 0.88rem; margin-bottom: 16px;">
+        Current time: <span id="current-time" style="font-family: 'JetBrains Mono', monospace; color: var(--accent);">--</span>
+      </p>
+
+      <div id="freshness-sources"></div>
+
+      <div class="result-box" style="margin-top: 20px;">
+        <div class="result-label">Overall Freshness Score</div>
+        <div class="result-value" id="freshness-score">--</div>
+      </div>
+
+      <div style="margin-top: 12px; font-size: 0.82rem; color: var(--text-dim);">
+        <span style="color: var(--accent2);">●</span> Fresh (&lt;1hr) &nbsp;
+        <span style="color: var(--accent4);">●</span> Stale (1-24hr) &nbsp;
+        <span style="color: var(--accent3);">●</span> Expired (&gt;24hr)
+      </div>
+    </div>
+
+    <h3>Freshness SLA Definition</h3>
+    <table>
+      <thead><tr><th>Data Source</th><th>Expected Freshness</th><th>Check Interval</th><th>Alert Threshold</th></tr></thead>
+      <tbody>
+        <tr><td>Product catalog</td><td>&lt;1 hour</td><td>Every 5 min</td><td>&gt;2 hours stale</td></tr>
+        <tr><td>Pricing feed</td><td>&lt;15 minutes</td><td>Every 1 min</td><td>&gt;30 min stale</td></tr>
+        <tr><td>User reviews</td><td>&lt;6 hours</td><td>Every 30 min</td><td>&gt;12 hours stale</td></tr>
+        <tr><td>Blog / editorial</td><td>&lt;24 hours</td><td>Every 1 hour</td><td>&gt;48 hours stale</td></tr>
+        <tr><td>Inventory / stock</td><td>&lt;5 minutes</td><td>Every 30 sec</td><td>&gt;10 min stale</td></tr>
+      </tbody>
+    </table>
+
+    <pre><code><span class="cm"># Freshness monitoring with alerting</span>
+<span class="kw">def</span> <span class="fn">check_freshness</span>(source, max_age_minutes):
+    last_update = source.<span class="fn">get_last_updated</span>()
+    age_minutes = (<span class="fn">now</span>() - last_update).total_seconds() / <span class="op">60</span>
+
+    <span class="kw">if</span> age_minutes > max_age_minutes * <span class="op">2</span>:
+        <span class="fn">alert_critical</span>(<span class="str">f"{source.name} is {age_minutes:.0f}m stale"</span>)
+        <span class="kw">return</span> <span class="str">"expired"</span>
+    <span class="kw">elif</span> age_minutes > max_age_minutes:
+        <span class="fn">alert_warning</span>(<span class="str">f"{source.name} is {age_minutes:.0f}m stale"</span>)
+        <span class="kw">return</span> <span class="str">"stale"</span>
+    <span class="kw">return</span> <span class="str">"fresh"</span></code></pre>
+
+    <div class="insight">
+      <div class="insight-title">Why Freshness Matters</div>
+      <p>Stale inventory data causes overselling. Stale pricing causes revenue loss. Stale product descriptions cause customer frustration. Each data source has a different freshness SLA — define them explicitly and monitor against them.</p>
+    </div>
+  </section>
+
+  <!-- ===== SECTION 6: DEDUPLICATION ===== -->
+  <section id="s6">
+    <h2><span class="num">06</span> Deduplication</h2>
+    <p>Duplicate records pollute search results, waste storage, and confuse ranking. Near-duplicates are the hardest — slight variations in spelling, formatting, or casing that represent the same entity.</p>
+
+    <div class="playground">
+      <h4>Duplicate Finder</h4>
+      <p style="color: var(--text-dim); font-size: 0.88rem; margin-bottom: 16px;">
+        These 10 records contain some near-duplicates. Click to find and group them.
+      </p>
+
+      <div id="dedup-records"></div>
+
+      <div style="display: flex; gap: 12px; margin-top: 16px;">
+        <button class="demo-btn" onclick="findDuplicates()">🔍 Find Duplicates</button>
+        <button class="btn" onclick="resetDuplicates()">↻ Reset</button>
+      </div>
+
+      <div id="dedup-results" style="margin-top: 20px;"></div>
+    </div>
+
+    <h3>Similarity Scoring</h3>
+    <p>Near-duplicate detection relies on computing a similarity score between pairs of records. Different fields contribute differently to the overall score:</p>
+
+    <pre><code><span class="cm"># Weighted similarity scoring</span>
+<span class="kw">def</span> <span class="fn">record_similarity</span>(r1, r2):
+    name_sim  = <span class="fn">levenshtein_similarity</span>(r1[<span class="str">"name"</span>], r2[<span class="str">"name"</span>])
+    email_sim = <span class="fn">levenshtein_similarity</span>(r1[<span class="str">"email"</span>], r2[<span class="str">"email"</span>])
+    phone_sim = <span class="op">1.0</span> <span class="kw">if</span> r1[<span class="str">"phone"</span>] == r2[<span class="str">"phone"</span>] <span class="kw">else</span> <span class="op">0.0</span>
+
+    <span class="cm"># Weighted average — email is most reliable</span>
+    <span class="kw">return</span> (name_sim * <span class="op">0.3</span>) + (email_sim * <span class="op">0.5</span>) + (phone_sim * <span class="op">0.2</span>)
+
+<span class="cm"># Similarity > 0.75 → likely duplicate</span>
+<span class="cm"># Similarity > 0.90 → almost certain duplicate</span></code></pre>
+
+    <h3>Deduplication Techniques</h3>
+    <div class="grid-2">
+      <div class="card card-accent">
+        <h3>Exact Match</h3>
+        <p>Hash the document or key fields. If hash matches, it's a duplicate. Fast, but misses near-duplicates.</p>
+      </div>
+      <div class="card card-green">
+        <h3>Fuzzy Matching</h3>
+        <p>Compare strings using Levenshtein distance, Jaccard similarity, or phonetic algorithms (Soundex). Catches typos and variations.</p>
+      </div>
+      <div class="card card-yellow">
+        <h3>MinHash / LSH</h3>
+        <p>Approximate similarity using locality-sensitive hashing. Scales to millions of records where pairwise comparison is infeasible.</p>
+      </div>
+      <div class="card card-red">
+        <h3>Embedding Similarity</h3>
+        <p>Generate vector embeddings and cluster by cosine similarity. Catches semantic duplicates even with very different wording.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== SECTION 7 ===== -->
+  <section id="s7">
+    <h2><span class="num">07</span> Automated Quality Gates</h2>
+    <p>Don't rely on humans to catch quality issues. Build automated checks directly into your pipeline that block bad data from reaching the index.</p>
+
+    <div class="arch-diagram">
+      <div class="arch-section-label">Quality Gate Pipeline</div>
+      <div class="arch-row">
+        <div class="arch-box accent">Extract</div>
+        <div class="arch-arrow">→</div>
+        <div class="arch-box red">Schema Gate</div>
+        <div class="arch-arrow">→</div>
+        <div class="arch-box yellow">Completeness Gate</div>
+        <div class="arch-arrow">→</div>
+        <div class="arch-box green">Freshness Gate</div>
+        <div class="arch-arrow">→</div>
+        <div class="arch-box" style="border-color: var(--pink); color: var(--pink);">Dedup Gate</div>
+        <div class="arch-arrow">→</div>
+        <div class="arch-box accent">Load</div>
+      </div>
+    </div>
+
+    <h3>Gate Strategies</h3>
+    <table>
+      <thead><tr><th>Strategy</th><th>Behavior</th><th>Best For</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Hard gate</strong></td><td>Reject the document entirely</td><td>Missing ID, invalid schema</td></tr>
+        <tr><td><strong>Soft gate</strong></td><td>Flag but allow through with warning</td><td>Missing optional fields</td></tr>
+        <tr><td><strong>Threshold gate</strong></td><td>Block if quality score &lt; threshold</td><td>Overall batch quality</td></tr>
+        <tr><td><strong>Circuit breaker</strong></td><td>Halt pipeline if error rate spikes</td><td>Source system outage</td></tr>
+      </tbody>
+    </table>
+
+    <div class="grid-2">
+      <div class="card card-accent">
+        <h3>Per-Document Checks</h3>
+        <ul>
+          <li>Schema conforms to definition</li>
+          <li>Required fields are non-empty</li>
+          <li>Data types match expectations</li>
+          <li>Values within valid ranges</li>
+        </ul>
+      </div>
+      <div class="card card-green">
+        <h3>Per-Batch Checks</h3>
+        <ul>
+          <li>Batch size within expected range</li>
+          <li>No more than 5% failures in batch</li>
+          <li>Field distributions look normal</li>
+          <li>No sudden drops in record count</li>
+        </ul>
+      </div>
+    </div>
+
+    <pre><code><span class="cm"># Quality gate — block batch if too many failures</span>
+<span class="kw">def</span> <span class="fn">quality_gate</span>(batch, threshold=<span class="op">0.95</span>):
+    results = [<span class="fn">validate</span>(doc) <span class="kw">for</span> doc <span class="kw">in</span> batch]
+    pass_rate = <span class="fn">sum</span>(r.passed <span class="kw">for</span> r <span class="kw">in</span> results) / <span class="fn">len</span>(results)
+
+    <span class="kw">if</span> pass_rate < threshold:
+        <span class="fn">alert</span>(<span class="str">f"Quality below threshold: {pass_rate:.1%}"</span>)
+        <span class="kw">raise</span> QualityGateError(pass_rate)
+
+    good = [doc <span class="kw">for</span> doc, r <span class="kw">in</span> <span class="fn">zip</span>(batch, results) <span class="kw">if</span> r.passed]
+    bad  = [doc <span class="kw">for</span> doc, r <span class="kw">in</span> <span class="fn">zip</span>(batch, results) <span class="kw">if not</span> r.passed]
+    <span class="fn">send_to_dlq</span>(bad)
+    <span class="kw">return</span> good</code></pre>
+
+    <div class="pro-tip">
+      <div class="tip-header">Pro Tip</div>
+      <p>Track quality metrics over time. A sudden drop in completeness often means a source system changed its schema without telling you. Set up alerts on quality score derivatives, not just absolute values.</p>
+    </div>
+
+    <h3>Monitoring Quality Over Time</h3>
+    <p>Quality isn't a one-time check — it's a continuous signal. Track these metrics as time series and set up dashboards and alerts.</p>
+
+    <div class="grid-2">
+      <div class="card card-yellow">
+        <h3>Leading Indicators</h3>
+        <ul>
+          <li>Schema validation failure rate per source</li>
+          <li>Null rate per required field</li>
+          <li>Freshness lag per data source</li>
+          <li>New duplicate clusters per day</li>
+        </ul>
+      </div>
+      <div class="card card-red">
+        <h3>Lagging Indicators</h3>
+        <ul>
+          <li>User-reported wrong results</li>
+          <li>Zero-result query rate increasing</li>
+          <li>Click-through rate dropping</li>
+          <li>Support tickets about stale data</li>
+        </ul>
+      </div>
+    </div>
+
+    <pre><code><span class="cm"># Quality score time-series tracking</span>
+<span class="kw">def</span> <span class="fn">record_quality_metrics</span>(batch_results, metrics_store):
+    scores = {
+        <span class="str">"timestamp"</span>:     <span class="fn">now</span>(),
+        <span class="str">"schema_score"</span>:  batch_results.schema_pass_rate,
+        <span class="str">"completeness"</span>:  batch_results.completeness_rate,
+        <span class="str">"freshness"</span>:     batch_results.freshness_score,
+        <span class="str">"uniqueness"</span>:    batch_results.uniqueness_rate,
+        <span class="str">"overall"</span>:       batch_results.overall_score,
+    }
+    metrics_store.<span class="fn">push</span>(scores)
+
+    <span class="cm"># Alert on sudden drops</span>
+    prev = metrics_store.<span class="fn">get_previous</span>()
+    <span class="kw">if</span> prev <span class="kw">and</span> scores[<span class="str">"overall"</span>] < prev[<span class="str">"overall"</span>] - <span class="op">0.1</span>:
+        <span class="fn">alert</span>(<span class="str">f"Quality dropped {(prev['overall'] - scores['overall'])*100:.1f}%"</span>)</code></pre>
+  </section>
+
+  <!-- ===== SECTION 8 ===== -->
+  <section id="s8">
+    <h2><span class="num">08</span> Key Takeaway</h2>
+
+    <div class="insight">
+      <div class="insight-title">Remember This</div>
+      <p>Data quality is not a feature you add at the end — it's a practice you embed throughout the pipeline. Validate at ingestion (schema gates), monitor continuously (freshness checks), and deduplicate proactively. The goal isn't perfection — it's <strong>measurable, improving quality</strong> with clear thresholds and alerts.</p>
+    </div>
+
+    <div class="card card-accent">
+      <h3>Quality Checklist</h3>
+      <ul>
+        <li>Schema validation rejects structurally invalid documents</li>
+        <li>Required fields are enforced with hard gates</li>
+        <li>Freshness is monitored with SLA thresholds per source</li>
+        <li>Near-duplicate detection runs before indexing</li>
+        <li>Quality scores are tracked as time-series metrics</li>
+        <li>Circuit breakers halt the pipeline when quality degrades</li>
+      </ul>
+    </div>
+  </section>
+
+</div>
+
+<footer>Data Quality: Garbage In, Garbage Out — Interactive Playground</footer>
+
+<script>
+/* ===== QUALITY INSPECTOR ===== */
+const inspectorDocs = [
+  {
+    id: 'doc-001', data: { id: 'doc-001', title: 'Wireless Mouse Pro', category: 'electronics', price: 29.99, body: 'Ergonomic wireless mouse with 4000 DPI sensor.', updated_at: '2024-03-14T10:00:00Z' },
+    issues: []
+  },
+  {
+    id: 'doc-002', data: { id: 'doc-002', title: '', category: 'electronics', price: 49.99, body: 'Mechanical keyboard with cherry switches.', updated_at: '2024-03-14T09:00:00Z' },
+    issues: [{ type: 'completeness', msg: 'Empty required field: title' }]
+  },
+  {
+    id: 'doc-003', data: { id: 'doc-003', title: 'USB-C Hub', category: 'electronics', price: 'thirty-five', body: 'Multi-port USB hub with HDMI output.', updated_at: '2024-03-13T14:00:00Z' },
+    issues: [{ type: 'schema', msg: 'Invalid type: price should be number' }]
+  },
+  {
+    id: 'doc-004', data: { id: 'doc-004', title: 'Laptop Stand', category: 'furniture', price: 45.0, body: 'Adjustable aluminum laptop stand.', updated_at: '2023-08-01T00:00:00Z' },
+    issues: [{ type: 'freshness', msg: 'Stale: last updated > 6 months ago' }]
+  },
+  {
+    id: 'doc-005', data: { id: 'doc-005', title: 'Bluetooth Speaker', category: 'electronics', price: 79.99, body: 'Portable speaker with 360-degree sound.', updated_at: '2024-03-14T08:30:00Z' },
+    issues: []
+  },
+  {
+    id: 'doc-006', data: { id: 'doc-001', title: 'Wireless Mouse Pro Max', category: 'electronics', price: 34.99, body: 'Updated wireless mouse.', updated_at: '2024-03-14T11:00:00Z' },
+    issues: [{ type: 'uniqueness', msg: 'Duplicate ID: doc-001 already exists' }]
+  },
+  {
+    id: 'doc-007', data: { id: 'doc-007', title: 'Monitor Arm', category: 'Furnishings', price: 89.99, body: 'Gas spring monitor mount.', updated_at: '2024-03-12T16:00:00Z' },
+    issues: [{ type: 'consistency', msg: 'Unknown category: "Furnishings" (expected: furniture)' }]
+  },
+  {
+    id: 'doc-008', data: { id: 'doc-008', title: 'Webcam HD', category: 'electronics', price: 59.99, body: '1080p webcam with autofocus.', updated_at: '2024-03-14T07:00:00Z' },
+    issues: []
+  }
+];
+
+function renderInspectorDocs() {
+  const container = document.getElementById('inspector-docs');
+  container.innerHTML = inspectorDocs.map(doc => {
+    const json = JSON.stringify(doc.data, null, 2)
+      .replace(/"(\w+)":/g, '<span style="color:var(--accent);">"$1"</span>:')
+      .replace(/: "(.*?)"/g, ': <span style="color:#c3e88d;">"$1"</span>')
+      .replace(/: (\d+\.?\d*)/g, ': <span style="color:#f78c6c;">$1</span>');
+    return `<div class="quality-doc" id="qdoc-${doc.id}"><pre style="margin:0; background:none; border:none; padding:0;">${json}</pre></div>`;
+  }).join('');
+}
+
+function runQualityCheck() {
+  let passCount = 0;
+  const dimScores = { schema: 0, completeness: 0, freshness: 0, consistency: 0, uniqueness: 0 };
+  const dimTotals = { schema: 0, completeness: 0, freshness: 0, consistency: 0, uniqueness: 0 };
+  const total = inspectorDocs.length;
+
+  inspectorDocs.forEach(doc => {
+    const el = document.getElementById('qdoc-' + doc.id);
+    const dims = Object.keys(dimScores);
+    dims.forEach(d => dimTotals[d]++);
+
+    if (doc.issues.length === 0) {
+      el.classList.add('pass');
+      el.innerHTML += '<span class="doc-badge pass-badge">Pass</span>';
+      passCount++;
+      dims.forEach(d => dimScores[d]++);
+    } else {
+      el.classList.add('fail');
+      const flags = doc.issues.map(i => `<span class="issue-flag ${i.type}">${i.msg}</span>`).join('');
+      el.innerHTML += `<span class="doc-badge fail-badge">Fail</span><div style="margin-top:8px;">${flags}</div>`;
+      doc.issues.forEach(i => { /* mark failing dimension */ });
+      const failDims = doc.issues.map(i => i.type);
+      dims.forEach(d => { if (!failDims.includes(d)) dimScores[d]++; });
+    }
+  });
+
+  const pct = Math.round(passCount / total * 100);
+  const summary = document.getElementById('inspector-summary');
+  summary.style.display = 'block';
+  document.getElementById('quality-score').textContent = pct + '%';
+
+  const circle = document.getElementById('score-circle');
+  const circumference = 2 * Math.PI * 52;
+  circle.style.transition = 'stroke-dashoffset 1s ease';
+  circle.style.strokeDashoffset = String(circumference - (circumference * pct / 100));
+  circle.style.stroke = pct >= 80 ? 'var(--accent2)' : pct >= 50 ? 'var(--accent4)' : 'var(--accent3)';
+
+  document.getElementById('quality-verdict').textContent =
+    pct >= 80 ? 'Good quality — most documents pass validation.' :
+    pct >= 50 ? 'Fair quality — several documents have issues that need attention.' :
+    'Poor quality — significant issues detected. Review before indexing.';
+
+  const dimContainer = document.getElementById('dimension-scores');
+  const dimNames = ['Schema', 'Completeness', 'Freshness', 'Consistency', 'Uniqueness'];
+  const dimKeys = ['schema', 'completeness', 'freshness', 'consistency', 'uniqueness'];
+  dimContainer.innerHTML = dimKeys.map((k, i) => {
+    const s = Math.round(dimScores[k] / dimTotals[k] * 100);
+    const col = s >= 80 ? 'var(--accent2)' : s >= 50 ? 'var(--accent4)' : 'var(--accent3)';
+    return `<div class="score-item"><div class="score-dim">${dimNames[i]}</div><div class="score-val" style="color:${col};">${s}%</div></div>`;
+  }).join('');
+}
+
+function resetInspector() {
+  document.getElementById('inspector-summary').style.display = 'none';
+  renderInspectorDocs();
+}
+
+renderInspectorDocs();
+
+/* ===== FRESHNESS MONITOR ===== */
+const freshnessData = [
+  { name: 'Product Catalog', offsetMinutes: 15 },
+  { name: 'User Reviews', offsetMinutes: 180 },
+  { name: 'Inventory Feed', offsetMinutes: 2 },
+  { name: 'Price Updates', offsetMinutes: 1500 },
+  { name: 'Blog Content', offsetMinutes: 4200 }
+];
+
+function updateFreshness() {
+  const now = new Date();
+  document.getElementById('current-time').textContent = now.toISOString().replace('T', ' ').slice(0, 19) + 'Z';
+
+  const container = document.getElementById('freshness-sources');
+  let freshCount = 0;
+
+  container.innerHTML = freshnessData.map(src => {
+    const updated = new Date(now.getTime() - src.offsetMinutes * 60 * 1000);
+    const agoMin = src.offsetMinutes;
+    let status, statusColor, agoText;
+
+    if (agoMin < 60) {
+      status = 'fresh'; statusColor = 'var(--accent2)'; agoText = `${agoMin}m ago`; freshCount++;
+    } else if (agoMin < 1440) {
+      const hrs = (agoMin / 60).toFixed(1);
+      status = 'stale'; statusColor = 'var(--accent4)'; agoText = `${hrs}h ago`;
+    } else {
+      const hrs = (agoMin / 60).toFixed(0);
+      status = 'expired'; statusColor = 'var(--accent3)'; agoText = `${hrs}h ago`;
+    }
+
+    return `<div class="freshness-source ${status}">
+      <div style="display:flex; align-items:center; gap:10px;">
+        <div class="source-status" style="background:${statusColor};"></div>
+        <span class="source-name">${src.name}</span>
+      </div>
+      <span class="source-time">${agoText}</span>
+    </div>`;
+  }).join('');
+
+  const score = Math.round(freshCount / freshnessData.length * 100);
+  const scoreEl = document.getElementById('freshness-score');
+  scoreEl.textContent = score + '%';
+  scoreEl.style.color = score >= 80 ? 'var(--accent2)' : score >= 40 ? 'var(--accent4)' : 'var(--accent3)';
+}
+
+updateFreshness();
+setInterval(() => {
+  freshnessData.forEach(src => { src.offsetMinutes += 1; });
+  updateFreshness();
+}, 60000);
+
+/* ===== DEDUPLICATION ===== */
+const dedupRecords = [
+  { id: 'R001', name: 'John Smith', email: 'john.smith@example.com', phone: '555-0101' },
+  { id: 'R002', name: 'Jane Doe', email: 'jane.doe@example.com', phone: '555-0102' },
+  { id: 'R003', name: 'Jon Smith', email: 'john.smith@example.com', phone: '555-0101' },
+  { id: 'R004', name: 'Alice Johnson', email: 'alice.j@example.com', phone: '555-0103' },
+  { id: 'R005', name: 'Bob Williams', email: 'bob.w@example.com', phone: '555-0104' },
+  { id: 'R006', name: 'Jane M. Doe', email: 'jane.doe@example.com', phone: '555-0102' },
+  { id: 'R007', name: 'Charlie Brown', email: 'charlie.b@example.com', phone: '555-0105' },
+  { id: 'R008', name: 'Alice Johnson', email: 'alicej@example.com', phone: '555-0103' },
+  { id: 'R009', name: 'David Lee', email: 'david.l@example.com', phone: '555-0106' },
+  { id: 'R010', name: 'Charley Brown', email: 'charlie.b@example.com', phone: '555-0105' }
+];
+
+function renderDedupRecords() {
+  const container = document.getElementById('dedup-records');
+  container.innerHTML = dedupRecords.map(r =>
+    `<div class="dup-record">${r.id} | ${r.name} | ${r.email} | ${r.phone}</div>`
+  ).join('');
+}
+
+function levenshtein(a, b) {
+  const m = a.length, n = b.length;
+  const dp = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
+  for (let i = 0; i <= m; i++) dp[i][0] = i;
+  for (let j = 0; j <= n; j++) dp[0][j] = j;
+  for (let i = 1; i <= m; i++)
+    for (let j = 1; j <= n; j++)
+      dp[i][j] = a[i-1] === b[j-1] ? dp[i-1][j-1] : 1 + Math.min(dp[i-1][j], dp[i][j-1], dp[i-1][j-1]);
+  return dp[m][n];
+}
+
+function similarity(a, b) {
+  const maxLen = Math.max(a.length, b.length);
+  if (maxLen === 0) return 1;
+  return 1 - levenshtein(a.toLowerCase(), b.toLowerCase()) / maxLen;
+}
+
+function recordSimilarity(r1, r2) {
+  const nameSim = similarity(r1.name, r2.name);
+  const emailSim = similarity(r1.email, r2.email);
+  const phoneSim = r1.phone === r2.phone ? 1 : 0;
+  return (nameSim * 0.4 + emailSim * 0.4 + phoneSim * 0.2);
+}
+
+function findDuplicates() {
+  const threshold = 0.75;
+  const groups = [];
+  const assigned = new Set();
+
+  for (let i = 0; i < dedupRecords.length; i++) {
+    if (assigned.has(i)) continue;
+    const group = [i];
+    for (let j = i + 1; j < dedupRecords.length; j++) {
+      if (assigned.has(j)) continue;
+      const sim = recordSimilarity(dedupRecords[i], dedupRecords[j]);
+      if (sim >= threshold) {
+        group.push(j);
+        assigned.add(j);
+      }
+    }
+    if (group.length > 1) {
+      assigned.add(i);
+      groups.push(group);
+    }
+  }
+
+  const results = document.getElementById('dedup-results');
+  if (groups.length === 0) {
+    results.innerHTML = '<p style="color:var(--accent2);">No duplicates found.</p>';
+    return;
+  }
+
+  results.innerHTML = groups.map((group, gi) => {
+    const records = group.map(idx => dedupRecords[idx]);
+    const recordsHtml = records.map(r =>
+      `<div class="dup-record">${r.id} | ${r.name} | ${r.email} | ${r.phone}</div>`
+    ).join('');
+
+    const pairs = [];
+    for (let a = 0; a < group.length; a++)
+      for (let b = a + 1; b < group.length; b++) {
+        const sim = recordSimilarity(dedupRecords[group[a]], dedupRecords[group[b]]);
+        pairs.push(`<div class="dup-sim">${dedupRecords[group[a]].id} ↔ ${dedupRecords[group[b]].id}: similarity = ${(sim * 100).toFixed(1)}%</div>`);
+      }
+
+    return `<div class="dup-group">
+      <div class="dup-header">Duplicate Group ${gi + 1} (${records.length} records)</div>
+      ${recordsHtml}
+      ${pairs.join('')}
+    </div>`;
+  }).join('') + `<div class="result-box" style="margin-top:12px;">
+    <div class="result-label">Duplicates Found</div>
+    <div class="result-value" style="color:var(--accent3);">${groups.reduce((s,g)=>s+g.length,0)} records in ${groups.length} groups</div>
+  </div>`;
+}
+
+function resetDuplicates() {
+  document.getElementById('dedup-results').innerHTML = '';
+  renderDedupRecords();
+}
+
+renderDedupRecords();
+
+/* ===== TOC SCROLL HIGHLIGHTING ===== */
+(function() {
+  const sections = document.querySelectorAll('section[id]');
+  const tocLinks = document.querySelectorAll('.toc a');
+  function onScroll() {
+    let current = '';
+    sections.forEach(s => {
+      if (window.scrollY >= s.offsetTop - 120) current = s.id;
+    });
+    tocLinks.forEach(a => {
+      a.classList.toggle('active', a.getAttribute('href') === '#' + current);
+    });
+  }
+  window.addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+})();
+</script>
+</body>
+</html>

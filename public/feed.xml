@@ -1,0 +1,263 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>Rahul Mrinal - Search Engineering Blog</title>
+    <link>https://rahulmrinal.github.io/blog</link>
+    <description>Deep-dive technical writing on search engineering, AI systems, and more.</description>
+    <language>en-us</language>
+    <lastBuildDate>Sat, 03 Apr 2026 00:00:00 GMT</lastBuildDate>
+    <atom:link href="https://rahulmrinal.github.io/feed.xml" rel="self" type="application/rss+xml" />
+    <item>
+      <title>What Is Search</title>
+      <link>https://rahulmrinal.github.io/blog/search-fundamentals/what-is-search</link>
+      <guid isPermaLink="true">https://rahulmrinal.github.io/blog/search-fundamentals/what-is-search</guid>
+      <pubDate>Sat, 03 Apr 2026 00:00:00 GMT</pubDate>
+      <category>Search Fundamentals</category>
+    </item>
+    <item>
+      <title>Bm25 From Scratch</title>
+      <link>https://rahulmrinal.github.io/blog/search-fundamentals/bm25-from-scratch</link>
+      <guid isPermaLink="true">https://rahulmrinal.github.io/blog/search-fundamentals/bm25-from-scratch</guid>
+      <pubDate>Sat, 03 Apr 2026 00:00:00 GMT</pubDate>
+      <category>Search Fundamentals</category>
+    </item>
+    <item>
+      <title>Tf Idf Vs Bm25</title>
+      <link>https://rahulmrinal.github.io/blog/search-fundamentals/tf-idf-vs-bm25</link>
+      <guid isPermaLink="true">https://rahulmrinal.github.io/blog/search-fundamentals/tf-idf-vs-bm25</guid>
+      <pubDate>Sat, 03 Apr 2026 00:00:00 GMT</pubDate>
+      <category>Search Fundamentals</category>
+    </item>
+    <item>
+      <title>Vector Search</title>
+      <link>https://rahulmrinal.github.io/blog/search-fundamentals/vector-search</link>
+      <guid isPermaLink="true">https://rahulmrinal.github.io/blog/search-fundamentals/vector-search</guid>
+      <pubDate>Sat, 03 Apr 2026 00:00:00 GMT</pubDate>
+      <category>Search Fundamentals</category>
+    </item>
+    <item>
+      <title>Hybrid Search</title>
+      <link>https://rahulmrinal.github.io/blog/search-fundamentals/hybrid-search</link>
+      <guid isPermaLink="true">https://rahulmrinal.github.io/blog/search-fundamentals/hybrid-search</guid>
+      <pubDate>Sat, 03 Apr 2026 00:00:00 GMT</pubDate>
+      <category>Search Fundamentals</category>
+    </item>
+    <item>
+      <title>Evaluation Metrics</title>
+      <link>https://rahulmrinal.github.io/blog/search-fundamentals/evaluation-metrics</link>
+      <guid isPermaLink="true">https://rahulmrinal.github.io/blog/search-fundamentals/evaluation-metrics</guid>
+      <pubDate>Sat, 03 Apr 2026 00:00:00 GMT</pubDate>
+      <category>Search Fundamentals</category>
+    </item>
+    <item>
+      <title>Inverted Index</title>
+      <link>https://rahulmrinal.github.io/blog/indexing/inverted-index</link>
+      <guid isPermaLink="true">https://rahulmrinal.github.io/blog/indexing/inverted-index</guid>
+      <pubDate>Sat, 03 Apr 2026 00:00:00 GMT</pubDate>
+      <category>Indexing</category>
+    </item>
+    <item>
+      <title>Document Chunking</title>
+      <link>https://rahulmrinal.github.io/blog/indexing/document-chunking</link>
+      <guid isPermaLink="true">https://rahulmrinal.github.io/blog/indexing/document-chunking</guid>
+      <pubDate>Sat, 03 Apr 2026 00:00:00 GMT</pubDate>
+      <category>Indexing</category>
+    </item>
+    <item>
+      <title>Metadata And Fields</title>
+      <link>https://rahulmrinal.github.io/blog/indexing/metadata-and-fields</link>
+      <guid isPermaLink="true">https://rahulmrinal.github.io/blog/indexing/metadata-and-fields</guid>
+      <pubDate>Sat, 03 Apr 2026 00:00:00 GMT</pubDate>
+      <category>Indexing</category>
+    </item>
+    <item>
+      <title>Index Operations</title>
+      <link>https://rahulmrinal.github.io/blog/indexing/index-operations</link>
+      <guid isPermaLink="true">https://rahulmrinal.github.io/blog/indexing/index-operations</guid>
+      <pubDate>Sat, 03 Apr 2026 00:00:00 GMT</pubDate>
+      <category>Indexing</category>
+    </item>
+    <item>
+      <title>Query Preprocessing</title>
+      <link>https://rahulmrinal.github.io/blog/query-processing/query-preprocessing</link>
+      <guid isPermaLink="true">https://rahulmrinal.github.io/blog/query-processing/query-preprocessing</guid>
+      <pubDate>Sat, 03 Apr 2026 00:00:00 GMT</pubDate>
+      <category>Query Processing</category>
+    </item>
+    <item>
+      <title>Retrieval Flow</title>
+      <link>https://rahulmrinal.github.io/blog/query-processing/retrieval-flow</link>
+      <guid isPermaLink="true">https://rahulmrinal.github.io/blog/query-processing/retrieval-flow</guid>
+      <pubDate>Sat, 03 Apr 2026 00:00:00 GMT</pubDate>
+      <category>Query Processing</category>
+    </item>
+    <item>
+      <title>Filtering</title>
+      <link>https://rahulmrinal.github.io/blog/query-processing/filtering</link>
+      <guid isPermaLink="true">https://rahulmrinal.github.io/blog/query-processing/filtering</guid>
+      <pubDate>Sat, 03 Apr 2026 00:00:00 GMT</pubDate>
+      <category>Query Processing</category>
+    </item>
+    <item>
+      <title>Spell Correction</title>
+      <link>https://rahulmrinal.github.io/blog/query-processing/spell-correction</link>
+      <guid isPermaLink="true">https://rahulmrinal.github.io/blog/query-processing/spell-correction</guid>
+      <pubDate>Sat, 03 Apr 2026 00:00:00 GMT</pubDate>
+      <category>Query Processing</category>
+    </item>
+    <item>
+      <title>Multi Stage Ranking</title>
+      <link>https://rahulmrinal.github.io/blog/ranking-relevance/multi-stage-ranking</link>
+      <guid isPermaLink="true">https://rahulmrinal.github.io/blog/ranking-relevance/multi-stage-ranking</guid>
+      <pubDate>Sat, 03 Apr 2026 00:00:00 GMT</pubDate>
+      <category>Ranking &amp; Relevance</category>
+    </item>
+    <item>
+      <title>Hybrid Scoring</title>
+      <link>https://rahulmrinal.github.io/blog/ranking-relevance/hybrid-scoring</link>
+      <guid isPermaLink="true">https://rahulmrinal.github.io/blog/ranking-relevance/hybrid-scoring</guid>
+      <pubDate>Sat, 03 Apr 2026 00:00:00 GMT</pubDate>
+      <category>Ranking &amp; Relevance</category>
+    </item>
+    <item>
+      <title>Relevance Tuning</title>
+      <link>https://rahulmrinal.github.io/blog/ranking-relevance/relevance-tuning</link>
+      <guid isPermaLink="true">https://rahulmrinal.github.io/blog/ranking-relevance/relevance-tuning</guid>
+      <pubDate>Sat, 03 Apr 2026 00:00:00 GMT</pubDate>
+      <category>Ranking &amp; Relevance</category>
+    </item>
+    <item>
+      <title>Ranking Signals</title>
+      <link>https://rahulmrinal.github.io/blog/ranking-relevance/ranking-signals</link>
+      <guid isPermaLink="true">https://rahulmrinal.github.io/blog/ranking-relevance/ranking-signals</guid>
+      <pubDate>Sat, 03 Apr 2026 00:00:00 GMT</pubDate>
+      <category>Ranking &amp; Relevance</category>
+    </item>
+    <item>
+      <title>Capacity Estimation</title>
+      <link>https://rahulmrinal.github.io/blog/system-design/capacity-estimation</link>
+      <guid isPermaLink="true">https://rahulmrinal.github.io/blog/system-design/capacity-estimation</guid>
+      <pubDate>Sat, 03 Apr 2026 00:00:00 GMT</pubDate>
+      <category>System Design</category>
+    </item>
+    <item>
+      <title>Sharding And Replication</title>
+      <link>https://rahulmrinal.github.io/blog/system-design/sharding-and-replication</link>
+      <guid isPermaLink="true">https://rahulmrinal.github.io/blog/system-design/sharding-and-replication</guid>
+      <pubDate>Sat, 03 Apr 2026 00:00:00 GMT</pubDate>
+      <category>System Design</category>
+    </item>
+    <item>
+      <title>Caching</title>
+      <link>https://rahulmrinal.github.io/blog/system-design/caching</link>
+      <guid isPermaLink="true">https://rahulmrinal.github.io/blog/system-design/caching</guid>
+      <pubDate>Sat, 03 Apr 2026 00:00:00 GMT</pubDate>
+      <category>System Design</category>
+    </item>
+    <item>
+      <title>Architecture Walkthrough</title>
+      <link>https://rahulmrinal.github.io/blog/system-design/architecture-walkthrough</link>
+      <guid isPermaLink="true">https://rahulmrinal.github.io/blog/system-design/architecture-walkthrough</guid>
+      <pubDate>Sat, 03 Apr 2026 00:00:00 GMT</pubDate>
+      <category>System Design</category>
+    </item>
+    <item>
+      <title>Batch Vs Realtime</title>
+      <link>https://rahulmrinal.github.io/blog/data-pipelines/batch-vs-realtime</link>
+      <guid isPermaLink="true">https://rahulmrinal.github.io/blog/data-pipelines/batch-vs-realtime</guid>
+      <pubDate>Sat, 03 Apr 2026 00:00:00 GMT</pubDate>
+      <category>Data Pipelines</category>
+    </item>
+    <item>
+      <title>Etl Pipeline</title>
+      <link>https://rahulmrinal.github.io/blog/data-pipelines/etl-pipeline</link>
+      <guid isPermaLink="true">https://rahulmrinal.github.io/blog/data-pipelines/etl-pipeline</guid>
+      <pubDate>Sat, 03 Apr 2026 00:00:00 GMT</pubDate>
+      <category>Data Pipelines</category>
+    </item>
+    <item>
+      <title>Index Update Strategies</title>
+      <link>https://rahulmrinal.github.io/blog/data-pipelines/index-update-strategies</link>
+      <guid isPermaLink="true">https://rahulmrinal.github.io/blog/data-pipelines/index-update-strategies</guid>
+      <pubDate>Sat, 03 Apr 2026 00:00:00 GMT</pubDate>
+      <category>Data Pipelines</category>
+    </item>
+    <item>
+      <title>Data Quality</title>
+      <link>https://rahulmrinal.github.io/blog/data-pipelines/data-quality</link>
+      <guid isPermaLink="true">https://rahulmrinal.github.io/blog/data-pipelines/data-quality</guid>
+      <pubDate>Sat, 03 Apr 2026 00:00:00 GMT</pubDate>
+      <category>Data Pipelines</category>
+    </item>
+    <item>
+      <title>What Is Rag</title>
+      <link>https://rahulmrinal.github.io/blog/rag-systems/what-is-rag</link>
+      <guid isPermaLink="true">https://rahulmrinal.github.io/blog/rag-systems/what-is-rag</guid>
+      <pubDate>Sat, 03 Apr 2026 00:00:00 GMT</pubDate>
+      <category>RAG Systems</category>
+    </item>
+    <item>
+      <title>Chunking For Rag</title>
+      <link>https://rahulmrinal.github.io/blog/rag-systems/chunking-for-rag</link>
+      <guid isPermaLink="true">https://rahulmrinal.github.io/blog/rag-systems/chunking-for-rag</guid>
+      <pubDate>Sat, 03 Apr 2026 00:00:00 GMT</pubDate>
+      <category>RAG Systems</category>
+    </item>
+    <item>
+      <title>Retrieval Pipeline</title>
+      <link>https://rahulmrinal.github.io/blog/rag-systems/retrieval-pipeline</link>
+      <guid isPermaLink="true">https://rahulmrinal.github.io/blog/rag-systems/retrieval-pipeline</guid>
+      <pubDate>Sat, 03 Apr 2026 00:00:00 GMT</pubDate>
+      <category>RAG Systems</category>
+    </item>
+    <item>
+      <title>Rag Evaluation</title>
+      <link>https://rahulmrinal.github.io/blog/rag-systems/rag-evaluation</link>
+      <guid isPermaLink="true">https://rahulmrinal.github.io/blog/rag-systems/rag-evaluation</guid>
+      <pubDate>Sat, 03 Apr 2026 00:00:00 GMT</pubDate>
+      <category>RAG Systems</category>
+    </item>
+    <item>
+      <title>Advanced Rag</title>
+      <link>https://rahulmrinal.github.io/blog/rag-systems/advanced-rag</link>
+      <guid isPermaLink="true">https://rahulmrinal.github.io/blog/rag-systems/advanced-rag</guid>
+      <pubDate>Sat, 03 Apr 2026 00:00:00 GMT</pubDate>
+      <category>RAG Systems</category>
+    </item>
+    <item>
+      <title>Learning To Rank</title>
+      <link>https://rahulmrinal.github.io/blog/advanced-search/learning-to-rank</link>
+      <guid isPermaLink="true">https://rahulmrinal.github.io/blog/advanced-search/learning-to-rank</guid>
+      <pubDate>Sat, 03 Apr 2026 00:00:00 GMT</pubDate>
+      <category>Advanced Search</category>
+    </item>
+    <item>
+      <title>Click Models</title>
+      <link>https://rahulmrinal.github.io/blog/advanced-search/click-models</link>
+      <guid isPermaLink="true">https://rahulmrinal.github.io/blog/advanced-search/click-models</guid>
+      <pubDate>Sat, 03 Apr 2026 00:00:00 GMT</pubDate>
+      <category>Advanced Search</category>
+    </item>
+    <item>
+      <title>Personalization</title>
+      <link>https://rahulmrinal.github.io/blog/advanced-search/personalization</link>
+      <guid isPermaLink="true">https://rahulmrinal.github.io/blog/advanced-search/personalization</guid>
+      <pubDate>Sat, 03 Apr 2026 00:00:00 GMT</pubDate>
+      <category>Advanced Search</category>
+    </item>
+    <item>
+      <title>Autocomplete</title>
+      <link>https://rahulmrinal.github.io/blog/advanced-search/autocomplete</link>
+      <guid isPermaLink="true">https://rahulmrinal.github.io/blog/advanced-search/autocomplete</guid>
+      <pubDate>Sat, 03 Apr 2026 00:00:00 GMT</pubDate>
+      <category>Advanced Search</category>
+    </item>
+    <item>
+      <title>Search Diversity</title>
+      <link>https://rahulmrinal.github.io/blog/advanced-search/search-diversity</link>
+      <guid isPermaLink="true">https://rahulmrinal.github.io/blog/advanced-search/search-diversity</guid>
+      <pubDate>Sat, 03 Apr 2026 00:00:00 GMT</pubDate>
+      <category>Advanced Search</category>
+    </item>
+  </channel>
+</rss>

@@ -14,10 +14,10 @@ export default function SeriesNav({ current, prev, next, totalInSeries }: Series
   const series = getSeriesById(current.series);
 
   return (
-    <div className="mt-16 pt-8 border-t border-[#2a2d3a]">
+    <div className="mt-16 pt-8 border-t border-border">
       {series && (
         <div className="text-center mb-6">
-          <span className="text-xs font-semibold uppercase tracking-widest text-[#9398ab]">
+          <span className="text-xs font-semibold uppercase tracking-widest text-text-secondary">
             Part {current.seriesOrder} of {totalInSeries} in{" "}
             <span style={{ color: series.color }}>{series.title}</span>
           </span>
@@ -43,11 +43,11 @@ export default function SeriesNav({ current, prev, next, totalInSeries }: Series
             to={`/blog/${prev.series}/${prev.slug}`}
             className="glass-card rounded-xl p-5 hover:border-white/20 transition-all group"
           >
-            <div className="flex items-center gap-2 text-xs text-[#9398ab] mb-2">
+            <div className="flex items-center gap-2 text-xs text-text-secondary mb-2">
               <FiArrowLeft size={12} />
               Previous
             </div>
-            <span className="text-white text-sm font-medium group-hover:text-[#6c63ff] transition-colors">
+            <span className="text-white text-sm font-medium group-hover:text-accent transition-colors">
               {prev.title}
             </span>
           </Link>
@@ -59,11 +59,11 @@ export default function SeriesNav({ current, prev, next, totalInSeries }: Series
             to={`/blog/${next.series}/${next.slug}`}
             className="glass-card rounded-xl p-5 hover:border-white/20 transition-all group text-right"
           >
-            <div className="flex items-center justify-end gap-2 text-xs text-[#9398ab] mb-2">
+            <div className="flex items-center justify-end gap-2 text-xs text-text-secondary mb-2">
               Next
               <FiArrowRight size={12} />
             </div>
-            <span className="text-white text-sm font-medium group-hover:text-[#6c63ff] transition-colors">
+            <span className="text-white text-sm font-medium group-hover:text-accent transition-colors">
               {next.title}
             </span>
           </Link>

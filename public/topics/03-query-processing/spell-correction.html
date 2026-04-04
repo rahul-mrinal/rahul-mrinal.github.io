@@ -1,0 +1,886 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Spell Correction &amp; Query Expansion — Interactive Playground</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body, {
+    delimiters: [
+      {left: '$$', right: '$$', display: true},
+      {left: '\\[', right: '\\]', display: true},
+      {left: '$', right: '$', display: false},
+      {left: '\\(', right: '\\)', display: false}
+    ],
+    throwOnError: false
+  });"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../playground.css" />
+<style>
+  .dp-matrix {
+    display: inline-block; border-collapse: collapse; margin: 16px 0;
+    font-family: 'JetBrains Mono', monospace; font-size: 0.82rem;
+  }
+  .dp-matrix td {
+    width: 40px; height: 40px; text-align: center; vertical-align: middle;
+    border: 1px solid var(--border); padding: 0; transition: all 0.3s;
+  }
+  .dp-matrix td.header {
+    background: var(--surface2); color: var(--accent); font-weight: 700; border: 1px solid var(--border);
+  }
+  .dp-matrix td.on-path {
+    background: rgba(108,99,255,0.25); color: #fff; font-weight: 700;
+    box-shadow: inset 0 0 0 2px var(--accent);
+  }
+  .dp-matrix td.current {
+    background: var(--accent); color: #fff; font-weight: 700;
+  }
+  .edit-inputs {
+    display: flex; gap: 16px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 16px;
+  }
+  .edit-inputs .input-group { flex: 1; min-width: 140px; }
+  .edit-inputs label {
+    display: block; font-size: 0.82rem; font-weight: 600; color: var(--text-dim);
+    text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;
+  }
+  .candidate-list { margin-top: 16px; }
+  .candidate-item {
+    background: var(--code-bg); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); padding: 12px 16px; margin: 6px 0;
+    display: flex; justify-content: space-between; align-items: center;
+    transition: border-color 0.2s;
+  }
+  .candidate-item:hover { border-color: rgba(108,99,255,0.3); }
+  .candidate-item:first-child { border-color: var(--accent2); background: rgba(0,201,167,0.06); }
+  .candidate-item .c-word { font-weight: 600; font-size: 0.95rem; }
+  .candidate-item .c-meta {
+    display: flex; gap: 14px; align-items: center; font-family: 'JetBrains Mono', monospace; font-size: 0.82rem;
+  }
+  .candidate-item .c-dist { color: var(--accent); }
+  .candidate-item .c-freq { color: var(--accent2); }
+  .synonym-tag {
+    display: inline-block; background: rgba(108,99,255,0.12); color: var(--accent);
+    padding: 4px 12px; border-radius: 16px; font-size: 0.82rem; font-weight: 500;
+    margin: 3px 4px; border: 1px solid rgba(108,99,255,0.2);
+  }
+  .synonym-tag.original {
+    background: rgba(0,201,167,0.12); color: var(--accent2);
+    border-color: rgba(0,201,167,0.2);
+  }
+  .synonym-tag.expanded {
+    background: rgba(255,217,61,0.12); color: var(--accent4);
+    border-color: rgba(255,217,61,0.2);
+  }
+  .expansion-row {
+    background: var(--code-bg); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); padding: 14px 18px; margin: 8px 0;
+  }
+  .expansion-row .er-term { font-weight: 700; color: var(--accent2); margin-bottom: 6px; }
+  .expansion-row .er-arrow { color: var(--text-dim); margin: 0 6px; }
+  .expanded-results {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px;
+  }
+  @media (max-width: 600px) { .expanded-results { grid-template-columns: 1fr; } }
+  .exp-col-header {
+    font-size: 0.88rem; font-weight: 700; margin-bottom: 8px; padding-bottom: 6px;
+    border-bottom: 2px solid var(--border);
+  }
+  .exp-result {
+    background: var(--code-bg); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); padding: 10px 14px; margin: 5px 0; font-size: 0.88rem;
+  }
+  .exp-result.new { border-color: var(--accent4); background: rgba(255,217,61,0.05); }
+  .matrix-wrap { overflow-x: auto; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <a href="/" class="topbar-brand">
+    <div class="topbar-logo">RM</div>
+    <span class="topbar-label">Rahul Mrinal</span>
+  </a>
+  <a href="/blog" class="topbar-back">← Back to Blog</a>
+</div>
+
+<div class="hero">
+  <div class="container">
+    <h1>Spell Correction &amp; Query Expansion</h1>
+    <p class="subtitle">From typos to "Did you mean?" and synonym expansion</p>
+    <div class="badges">
+      <span class="badge badge-hnsw">Edit Distance</span>
+      <span class="badge badge-ivf">Correction</span>
+      <span class="badge badge-pq">Expansion</span>
+    </div>
+  </div>
+</div>
+
+<nav class="toc">
+  <div class="toc-inner">
+    <a href="#s1">Typo Problem</a>
+    <a href="#s2">Edit Distance</a>
+    <a href="#s3">Candidates</a>
+    <a href="#s4">Frequency Ranking</a>
+    <a href="#s5">Did You Mean?</a>
+    <a href="#s6">Synonym Expansion</a>
+    <a href="#s7">Query Rewriting</a>
+    <a href="#s8">Takeaway</a>
+  </div>
+</nav>
+
+<div class="container">
+
+  <!-- SECTION 1 -->
+  <section id="s1">
+    <h2><span class="num">01</span> The Typo Problem</h2>
+    <p>Studies show that <strong>10–15% of search queries</strong> contain spelling errors. On mobile, the rate jumps to 20%+ due to smaller keyboards and auto-correct failures. Without spell correction, these queries return zero or irrelevant results.</p>
+
+    <div class="grid-2">
+      <div class="card card-accent">
+        <h3>Common Typo Types</h3>
+        <ul>
+          <li><strong>Insertion:</strong> "thhe" → "the"</li>
+          <li><strong>Deletion:</strong> "th" → "the"</li>
+          <li><strong>Substitution:</strong> "tge" → "the"</li>
+          <li><strong>Transposition:</strong> "hte" → "the"</li>
+        </ul>
+      </div>
+      <div class="card card-green">
+        <h3>Impact on Search</h3>
+        <ul>
+          <li>Zero results → user abandons</li>
+          <li>Wrong results → user loses trust</li>
+          <li>Missed revenue (e-commerce: $$$)</li>
+          <li>Higher bounce rate &amp; lower engagement</li>
+        </ul>
+      </div>
+    </div>
+
+    <h3>Typo Statistics</h3>
+    <table>
+      <thead><tr><th>Platform</th><th>Typo Rate</th><th>Most Common Error</th></tr></thead>
+      <tbody>
+        <tr><td>Desktop browser</td><td>~10%</td><td>Adjacent key substitution</td></tr>
+        <tr><td>Mobile (phone)</td><td>~20%</td><td>Missing letter (fat-finger)</td></tr>
+        <tr><td>Voice-to-text</td><td>~25%</td><td>Phonetic confusion</td></tr>
+        <tr><td>Non-native speakers</td><td>~30%</td><td>Phonetic spelling</td></tr>
+      </tbody>
+    </table>
+
+    <div class="analogy">
+      <div class="icon">🧠</div>
+      <p><strong>Analogy:</strong> Your brain does spell correction automatically — you read "restuarant" and understand "restaurant" without thinking. Search engines need to replicate this human ability, and edit distance is the mathematical foundation that makes it possible.</p>
+    </div>
+
+    <div class="pro-tip">
+      <div class="tip-header">Why Not Just Use Fuzzy Matching?</div>
+      <p class="dim">Fuzzy matching in the index (like Elasticsearch's <code>fuzziness: AUTO</code>) handles some typos but is expensive — it expands the query to all terms within edit distance 1-2, blowing up the posting list lookups. Dedicated spell correction before retrieval is more efficient and gives you control over the correction strategy.</p>
+    </div>
+  </section>
+
+  <!-- SECTION 2: EDIT DISTANCE PLAYGROUND -->
+  <section id="s2">
+    <h2><span class="num">02</span> Edit Distance</h2>
+    <p>The <strong>Levenshtein distance</strong> between two strings is the minimum number of single-character edits (insertions, deletions, substitutions) needed to transform one into the other.</p>
+
+    <div class="formula-box">
+      $$d(i, j) = \begin{cases} j & \text{if } i = 0 \\ i & \text{if } j = 0 \\ d(i{-}1, j{-}1) & \text{if } a_i = b_j \\ 1 + \min\begin{cases} d(i{-}1, j) & \text{(delete)} \\ d(i, j{-}1) & \text{(insert)} \\ d(i{-}1, j{-}1) & \text{(replace)} \end{cases} & \text{otherwise} \end{cases}$$
+      <div class="label">Dynamic programming fills an (m+1)×(n+1) matrix bottom-up</div>
+    </div>
+
+    <div class="playground" id="edit-playground">
+      <h4>Edit Distance Visualizer</h4>
+      <div class="edit-inputs">
+        <div class="input-group">
+          <label>Word A</label>
+          <input type="text" class="demo-input" id="ed-word-a" value="kitten" maxlength="12" />
+        </div>
+        <div class="input-group">
+          <label>Word B</label>
+          <input type="text" class="demo-input" id="ed-word-b" value="sitting" maxlength="12" />
+        </div>
+        <button class="demo-btn" id="ed-compute">Compute Distance</button>
+      </div>
+      <div class="result-box" id="ed-result" style="margin-bottom:16px"></div>
+      <div class="matrix-wrap" id="ed-matrix"></div>
+    </div>
+  </section>
+
+  <!-- SECTION 3 -->
+  <section id="s3">
+    <h2><span class="num">03</span> Correction Candidates</h2>
+    <p>Given a potentially misspelled word, we generate all dictionary words within edit distance 1 or 2. Edit distance 1 covers ~80% of typos; distance 2 covers ~95%.</p>
+
+    <h3>Generation Strategy</h3>
+    <div class="card">
+      <table>
+        <thead><tr><th>Operation</th><th>Edit Dist 1 for "cat"</th><th>Count Formula</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Deletions</strong></td><td>at, ct, ca</td><td>n</td></tr>
+          <tr><td><strong>Transpositions</strong></td><td>act, cta</td><td>n − 1</td></tr>
+          <tr><td><strong>Replacements</strong></td><td>aat, bat, … , zat, cbt, …</td><td>26 × n</td></tr>
+          <tr><td><strong>Insertions</strong></td><td>acat, bcat, … , caat, …</td><td>26 × (n + 1)</td></tr>
+        </tbody>
+      </table>
+      <p class="dim" style="margin-top:12px">For a 5-letter word, edit distance 1 generates ~280 candidates. Edit distance 2 generates ~78,000 — but only a tiny fraction will be real dictionary words.</p>
+    </div>
+
+    <h3>Scaling the Candidate Search</h3>
+    <table>
+      <thead><tr><th>Word Length</th><th>Edit Dist 1</th><th>Edit Dist 2</th><th>Dict Hits (typical)</th></tr></thead>
+      <tbody>
+        <tr><td>3 letters</td><td>~160</td><td>~25,600</td><td>~20</td></tr>
+        <tr><td>5 letters</td><td>~280</td><td>~78,400</td><td>~15</td></tr>
+        <tr><td>8 letters</td><td>~440</td><td>~193,600</td><td>~8</td></tr>
+        <tr><td>12 letters</td><td>~650</td><td>~422,500</td><td>~3</td></tr>
+      </tbody>
+    </table>
+
+    <div class="grid-2">
+      <div class="card card-accent">
+        <h3>Brute Force Approach</h3>
+        <p class="dim">Generate all edit-1 and edit-2 variants, look each up in a hash set of dictionary words. Simple but expensive for edit distance 2 — generating 78K+ candidates per word.</p>
+      </div>
+      <div class="card card-green">
+        <h3>Symmetric Delete (SymSpell)</h3>
+        <p class="dim">Precompute all delete-1 and delete-2 forms of every dictionary word at index time. At query time, compute only delete forms of the input. If any overlap, the words are within edit distance 2. ~1000× faster than brute force.</p>
+      </div>
+    </div>
+
+    <div class="insight">
+      <div class="insight-title">Performance Trick</div>
+      <p>Rather than generating all candidates and checking the dictionary, production systems use <strong>symmetric delete distance</strong>: precompute all delete-1 forms of dictionary words. At query time, compute delete-1 of the query and look up. This reduces the search space dramatically — SymSpell processes 1M corrections/sec on a single CPU core.</p>
+    </div>
+
+    <div class="arch-diagram">
+      <div class="arch-section-label">SymSpell: Precompute vs Query Time</div>
+      <div class="arch-row">
+        <div class="arch-box accent">Dictionary<br><span class="arch-label">150K words</span></div>
+        <div class="arch-arrow">→</div>
+        <div class="arch-box green">Delete Variants<br><span class="arch-label">~2M entries</span></div>
+        <div class="arch-arrow">→</div>
+        <div class="arch-box yellow">Hash Map<br><span class="arch-label">variant → [words]</span></div>
+      </div>
+      <div class="arch-arrow down" style="margin:8px 0">↓ query time</div>
+      <div class="arch-row">
+        <div class="arch-box">Input: "wireles"</div>
+        <div class="arch-arrow">→</div>
+        <div class="arch-box">Deletes: ireles, wreles, …</div>
+        <div class="arch-arrow">→</div>
+        <div class="arch-box red">Lookup → "wireless"</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SECTION 4: FREQUENCY RANKING PLAYGROUND -->
+  <section id="s4">
+    <h2><span class="num">04</span> Frequency-Based Ranking</h2>
+    <p>Multiple dictionary words may be within the same edit distance. We break ties using <strong>word frequency</strong> — a common word is more likely to be the intended target than a rare one.</p>
+
+    <div class="formula-box compact">
+      $$\text{correction}(w) = \arg\max_{c \in \text{candidates}} P(c) \cdot \mathbb{1}[\text{edit\_dist}(w, c) \leq 2]$$
+      <div class="label">P(c) is the prior probability of word c, estimated from corpus frequency</div>
+    </div>
+
+    <h3>Noisy Channel Model</h3>
+    <p>The probabilistic foundation for spell correction. We want: given a typo <em>w</em>, what was the intended word <em>c</em>?</p>
+    <div class="card">
+      <p class="dim">By Bayes' theorem: $P(c|w) \propto P(w|c) \cdot P(c)$</p>
+      <ul>
+        <li class="dim"><strong>P(c)</strong> — language model prior: how common is "wireless" vs "wisely"?</li>
+        <li class="dim"><strong>P(w|c)</strong> — error model: how likely is the typo "wireles" given intended "wireless"?</li>
+      </ul>
+      <p class="dim" style="margin-top:8px">In practice, a simple frequency-based P(c) with edit distance as a proxy for P(w|c) works surprisingly well.</p>
+    </div>
+
+    <div class="playground" id="freq-playground">
+      <h4>Spell Correction with Frequency Ranking</h4>
+      <div class="edit-inputs">
+        <div class="input-group" style="flex:2">
+          <label>Misspelled Word</label>
+          <input type="text" class="demo-input" id="freq-input" value="wireles" placeholder="Try: wireles, recieve, acess, headphnes" />
+        </div>
+        <button class="demo-btn" id="freq-run">Find Corrections</button>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;margin-bottom:8px">
+        <button class="btn" onclick="document.getElementById('freq-input').value='recieve';document.getElementById('freq-run').click()">recieve</button>
+        <button class="btn" onclick="document.getElementById('freq-input').value='acess';document.getElementById('freq-run').click()">acess</button>
+        <button class="btn" onclick="document.getElementById('freq-input').value='compter';document.getElementById('freq-run').click()">compter</button>
+        <button class="btn" onclick="document.getElementById('freq-input').value='headphnes';document.getElementById('freq-run').click()">headphnes</button>
+        <button class="btn" onclick="document.getElementById('freq-input').value='netwerk';document.getElementById('freq-run').click()">netwerk</button>
+        <button class="btn" onclick="document.getElementById('freq-input').value='internl';document.getElementById('freq-run').click()">internl</button>
+      </div>
+      <div class="candidate-list" id="freq-results"></div>
+    </div>
+  </section>
+
+  <!-- SECTION 5 -->
+  <section id="s5">
+    <h2><span class="num">05</span> "Did You Mean?"</h2>
+    <p>The decision of <em>when</em> to correct is as important as <em>how</em>. Getting this wrong frustrates users.</p>
+
+    <div class="grid-2">
+      <div class="card card-accent">
+        <h3>Auto-Correct</h3>
+        <p class="dim">Silently fix the query and show results for the corrected version. Use when confidence is very high (&gt;95%) and the original query returns zero/near-zero results.</p>
+        <p class="dim"><strong>Example:</strong> "iphoen" → automatically shows results for "iphone"</p>
+      </div>
+      <div class="card card-green">
+        <h3>Suggest ("Did you mean?")</h3>
+        <p class="dim">Show results for the original query but offer the correction as a link. Use when the original query has some results or when confidence is moderate.</p>
+        <p class="dim"><strong>Example:</strong> "python flak" → shows results, suggests "Did you mean: python flask?"</p>
+      </div>
+    </div>
+
+    <h3>Decision Logic</h3>
+    <div class="arch-diagram">
+      <div class="arch-row">
+        <div class="arch-box accent">Query Input</div>
+        <div class="arch-arrow">→</div>
+        <div class="arch-box yellow">In Dictionary?</div>
+      </div>
+      <div class="arch-arrow down">↓ No</div>
+      <div class="arch-row">
+        <div class="arch-box">Find Best<br>Correction</div>
+        <div class="arch-arrow">→</div>
+        <div class="arch-box yellow">Original Results<br>&gt; threshold?</div>
+      </div>
+      <div style="display:flex;justify-content:center;gap:60px;margin-top:8px">
+        <div style="text-align:center">
+          <div style="color:var(--text-dim);font-size:0.85rem">↓ Yes</div>
+          <div class="arch-box green" style="margin-top:4px">Suggest<br><span class="arch-label">"Did you mean…?"</span></div>
+        </div>
+        <div style="text-align:center">
+          <div style="color:var(--text-dim);font-size:0.85rem">↓ No</div>
+          <div class="arch-box red" style="margin-top:4px">Auto-Correct<br><span class="arch-label">Replace silently</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="pro-tip">
+      <div class="tip-header">Google's Approach</div>
+      <p class="dim">Google auto-corrects and shows "Showing results for X. Search instead for Y" — correcting by default but giving an escape hatch. This works at Google scale because their correction model is extremely accurate. For smaller systems, "Did you mean?" is safer.</p>
+    </div>
+
+    <h3>Confidence Scoring</h3>
+    <table>
+      <thead><tr><th>Signal</th><th>High Confidence (Auto-correct)</th><th>Low Confidence (Suggest)</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>Edit distance</strong></td>
+          <td>Distance 1 (one typo)</td>
+          <td>Distance 2+ (multiple changes)</td>
+        </tr>
+        <tr>
+          <td><strong>Frequency ratio</strong></td>
+          <td>Correction 100× more common</td>
+          <td>Similar frequency</td>
+        </tr>
+        <tr>
+          <td><strong>Original results</strong></td>
+          <td>0 results for original</td>
+          <td>Some results for original</td>
+        </tr>
+        <tr>
+          <td><strong>Query context</strong></td>
+          <td>Other words disambiguate</td>
+          <td>Ambiguous correction</td>
+        </tr>
+        <tr>
+          <td><strong>Keyboard layout</strong></td>
+          <td>Adjacent key on QWERTY</td>
+          <td>Non-adjacent substitution</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="insight">
+      <div class="insight-title">Context-Aware Correction</div>
+      <p>The word "there" might be a typo for "three" or "their" or "these" — edit distance alone can't decide. Modern systems use <strong>n-gram context</strong>: "over there" → keep as-is, "there apples" → suggest "three apples". This requires a language model trained on query logs.</p>
+    </div>
+  </section>
+
+  <!-- SECTION 6: SYNONYM EXPANSION PLAYGROUND -->
+  <section id="s6">
+    <h2><span class="num">06</span> Synonym Expansion</h2>
+    <p>Even correctly spelled queries miss relevant documents when users and authors use different vocabulary. Synonym expansion bridges this vocabulary gap — the same concept expressed with different words.</p>
+
+    <h3>The Vocabulary Problem</h3>
+    <div class="grid-2">
+      <div class="card card-accent">
+        <h3>User Says</h3>
+        <p class="dim">"cheap laptop"</p>
+        <p class="dim">"fast car"</p>
+        <p class="dim">"fix bug"</p>
+        <p class="dim">"small phone"</p>
+      </div>
+      <div class="card card-green">
+        <h3>Document Says</h3>
+        <p class="dim">"affordable notebook", "budget ultrabook"</p>
+        <p class="dim">"high-performance vehicle", "speedy sedan"</p>
+        <p class="dim">"resolve issue", "troubleshoot defect"</p>
+        <p class="dim">"compact smartphone", "mini handset"</p>
+      </div>
+    </div>
+
+    <div class="playground" id="synonym-playground">
+      <h4>Query Expansion Demo</h4>
+      <div class="edit-inputs">
+        <div class="input-group" style="flex:2">
+          <label>Search Query</label>
+          <input type="text" class="demo-input" id="syn-input" value="cheap laptop" placeholder="Try: cheap laptop, fast car, big house" />
+        </div>
+        <button class="demo-btn" id="syn-run">Expand Query</button>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;margin-bottom:8px">
+        <button class="btn" onclick="document.getElementById('syn-input').value='cheap laptop';document.getElementById('syn-run').click()">cheap laptop</button>
+        <button class="btn" onclick="document.getElementById('syn-input').value='best new headphones';document.getElementById('syn-run').click()">best new headphones</button>
+        <button class="btn" onclick="document.getElementById('syn-input').value='small wireless phone';document.getElementById('syn-run').click()">small wireless phone</button>
+        <button class="btn" onclick="document.getElementById('syn-input').value='easy fix';document.getElementById('syn-run').click()">easy fix</button>
+      </div>
+
+      <div id="syn-expansion" style="margin-top:16px"></div>
+      <div class="expanded-results" id="syn-results"></div>
+    </div>
+
+    <div class="pro-tip">
+      <div class="tip-header">Measuring Expansion Quality</div>
+      <p class="dim">Always A/B test synonym expansion. Track: (1) <strong>recall improvement</strong> — do users find more relevant docs? (2) <strong>precision impact</strong> — do irrelevant results creep in? (3) <strong>click-through rate</strong> — do users actually click the new results? Expansion that increases impressions but not clicks is adding noise.</p>
+    </div>
+  </section>
+
+  <!-- SECTION 7 -->
+  <section id="s7">
+    <h2><span class="num">07</span> Query Rewriting</h2>
+    <p>Synonym expansion is one form of a broader technique: <strong>query rewriting</strong>. Modern systems rewrite queries in several ways to bridge the vocabulary gap between users and documents.</p>
+
+    <table>
+      <thead><tr><th>Technique</th><th>Example</th><th>Use Case</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Synonym Expansion</strong></td><td>"cheap" → "affordable, budget, inexpensive"</td><td>Vocabulary mismatch</td></tr>
+        <tr><td><strong>Acronym Expansion</strong></td><td>"ML" → "machine learning"</td><td>Domain-specific abbreviations</td></tr>
+        <tr><td><strong>Stemming/Lemma</strong></td><td>"running shoes" → "run shoe"</td><td>Morphological variants</td></tr>
+        <tr><td><strong>Entity Resolution</strong></td><td>"NYC" → "New York City"</td><td>Named entity variants</td></tr>
+        <tr><td><strong>Concept Expansion</strong></td><td>"headache remedy" → "pain relief, aspirin, ibuprofen"</td><td>Conceptual bridges</td></tr>
+        <tr><td><strong>LLM Rewriting</strong></td><td>"why is my code slow" → "performance optimization debugging"</td><td>Intent reformulation</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Synonym Sources</h3>
+    <div class="grid-2">
+      <div class="card card-yellow">
+        <h3>Curated Synonym Lists</h3>
+        <p class="dim">Hand-built by domain experts. Highest precision, lowest recall. Used in regulated industries (medical, legal) where incorrect expansion has consequences.</p>
+        <p class="dim"><strong>Maintenance cost:</strong> High — must be updated as language evolves</p>
+      </div>
+      <div class="card card-accent">
+        <h3>Learned Embeddings</h3>
+        <p class="dim">Extract synonyms from embedding space: find words with cosine similarity &gt; 0.8 to each query term. High recall but noisy — "dog" and "cat" are similar in embedding space but not synonyms.</p>
+        <p class="dim"><strong>Maintenance cost:</strong> Low — retrain periodically</p>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <div class="card card-accent">
+        <h3>Risks of Over-Expansion</h3>
+        <ul>
+          <li><strong>Query drift:</strong> "Java" (programming) → "coffee" (synonym)</li>
+          <li><strong>Noise injection:</strong> Too many terms dilute relevance</li>
+          <li><strong>Latency:</strong> More terms = more retrieval work</li>
+          <li><strong>False matches:</strong> Expanded terms match irrelevant docs</li>
+        </ul>
+      </div>
+      <div class="card card-green">
+        <h3>Mitigation Strategies</h3>
+        <ul>
+          <li><strong>Weighted expansion:</strong> Give original terms 2× weight</li>
+          <li><strong>Context-aware:</strong> Use surrounding terms for disambiguation</li>
+          <li><strong>Limit depth:</strong> Only expand to synonyms, not synonyms of synonyms</li>
+          <li><strong>A/B test:</strong> Measure if expansion improves click-through rate</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="analogy">
+      <div class="icon">📚</div>
+      <p><strong>Analogy:</strong> Query expansion is like a translator who doesn't just translate your words, but also includes culturally equivalent phrases. "I need a restroom" might also be understood as "WC", "loo", "lavatory", or "washroom" depending on the audience. But going too far — adding "toilet paper" or "plumbing" — dilutes the intent.</p>
+    </div>
+  </section>
+
+  <!-- SECTION 8 -->
+  <section id="s8">
+    <h2><span class="num">08</span> Key Takeaway</h2>
+    <div class="card card-green">
+      <h3>Bridge the Vocabulary Gap</h3>
+      <p class="dim">Users are messy — they misspell, abbreviate, and use different words than your content authors. Spell correction and query expansion are your two defences. Use edit distance + frequency for correction, synonym maps + embeddings for expansion, and always measure the impact: a bad expansion (query drift) is worse than no expansion at all.</p>
+    </div>
+
+    <h3>Implementation Checklist</h3>
+    <table>
+      <thead><tr><th>Feature</th><th>Difficulty</th><th>Impact</th><th>When to Add</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Basic spell check</strong> (edit distance 1)</td><td><span class="badge badge-green">Easy</span></td><td><span class="badge badge-green">High</span></td><td>Day 1</td></tr>
+        <tr><td><strong>"Did you mean?"</strong> suggestions</td><td><span class="badge badge-green">Easy</span></td><td><span class="badge badge-green">High</span></td><td>Day 1</td></tr>
+        <tr><td><strong>Curated synonym map</strong></td><td><span class="badge badge-yellow">Medium</span></td><td><span class="badge badge-green">High</span></td><td>Week 1</td></tr>
+        <tr><td><strong>Auto-correct</strong> (high confidence)</td><td><span class="badge badge-yellow">Medium</span></td><td><span class="badge badge-yellow">Medium</span></td><td>After measuring correction accuracy</td></tr>
+        <tr><td><strong>Embedding-based synonyms</strong></td><td><span class="badge badge-red">Hard</span></td><td><span class="badge badge-yellow">Medium</span></td><td>When curated map is insufficient</td></tr>
+        <tr><td><strong>Context-aware correction</strong></td><td><span class="badge badge-red">Hard</span></td><td><span class="badge badge-yellow">Medium</span></td><td>At scale with user data</td></tr>
+        <tr><td><strong>LLM query rewriting</strong></td><td><span class="badge badge-yellow">Medium</span></td><td><span class="badge badge-green">High</span></td><td>When latency budget allows 500ms+</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Production Architecture</h3>
+    <div class="arch-diagram">
+      <div class="arch-section-label">Spell Correction + Expansion Pipeline</div>
+      <div class="arch-row">
+        <div class="arch-box accent">Raw Query</div>
+        <div class="arch-arrow">→</div>
+        <div class="arch-box yellow">Spell Check<br><span class="arch-label">SymSpell / Norvig</span></div>
+        <div class="arch-arrow">→</div>
+        <div class="arch-box green">Expand Synonyms<br><span class="arch-label">Map + embeddings</span></div>
+        <div class="arch-arrow">→</div>
+        <div class="arch-box red">Rewrite (optional)<br><span class="arch-label">LLM / rules</span></div>
+        <div class="arch-arrow">→</div>
+        <div class="arch-box accent">Enhanced Query</div>
+      </div>
+    </div>
+
+    <div class="analogy">
+      <div class="icon">🔤</div>
+      <p><strong>Remember:</strong> The best search engine understands what users <em>meant</em>, not just what they typed. Spell correction fixes the "how they typed it" problem; query expansion fixes the "what words they chose" problem. Together, they dramatically improve recall without sacrificing precision.</p>
+    </div>
+  </section>
+
+</div>
+
+<footer>
+  <p>Spell Correction &amp; Query Expansion — Interactive Playground &copy; Rahul Mrinal</p>
+</footer>
+
+<script>
+(function() {
+  // ==========================================
+  // EDIT DISTANCE VISUALIZER
+  // ==========================================
+  function levenshtein(a, b) {
+    const m = a.length, n = b.length;
+    const dp = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
+    for (let i = 0; i <= m; i++) dp[i][0] = i;
+    for (let j = 0; j <= n; j++) dp[0][j] = j;
+    for (let i = 1; i <= m; i++) {
+      for (let j = 1; j <= n; j++) {
+        if (a[i - 1] === b[j - 1]) {
+          dp[i][j] = dp[i - 1][j - 1];
+        } else {
+          dp[i][j] = 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
+        }
+      }
+    }
+    return dp;
+  }
+
+  function traceback(dp, a, b) {
+    const path = [];
+    let i = a.length, j = b.length;
+    while (i > 0 || j > 0) {
+      path.push([i, j]);
+      if (i > 0 && j > 0 && a[i - 1] === b[j - 1]) {
+        i--; j--;
+      } else if (i > 0 && j > 0 && dp[i][j] === dp[i - 1][j - 1] + 1) {
+        i--; j--;
+      } else if (i > 0 && dp[i][j] === dp[i - 1][j] + 1) {
+        i--;
+      } else {
+        j--;
+      }
+    }
+    path.push([0, 0]);
+    return path;
+  }
+
+  function renderEditDistance() {
+    const a = document.getElementById('ed-word-a').value.toLowerCase();
+    const b = document.getElementById('ed-word-b').value.toLowerCase();
+    if (!a || !b) return;
+
+    const dp = levenshtein(a, b);
+    const path = traceback(dp, a, b);
+    const pathSet = new Set(path.map(p => `${p[0]},${p[1]}`));
+    const dist = dp[a.length][b.length];
+
+    document.getElementById('ed-result').innerHTML = `
+      <div class="result-label">Levenshtein Distance</div>
+      <div class="result-value">${dist}</div>
+      <p class="dim" style="margin-top:8px;font-size:0.85rem">
+        "${a}" → "${b}" requires <strong>${dist}</strong> edit${dist !== 1 ? 's' : ''}.
+        The highlighted path shows the optimal alignment.
+      </p>
+    `;
+
+    let html = '<table class="dp-matrix"><tr><td class="header"></td><td class="header"></td>';
+    for (let j = 0; j < b.length; j++) {
+      html += `<td class="header">${b[j]}</td>`;
+    }
+    html += '</tr>';
+
+    for (let i = 0; i <= a.length; i++) {
+      html += '<tr>';
+      html += `<td class="header">${i === 0 ? '' : a[i - 1]}</td>`;
+      for (let j = 0; j <= b.length; j++) {
+        const onPath = pathSet.has(`${i},${j}`);
+        const isFinal = i === a.length && j === b.length;
+        const cls = isFinal ? 'current' : (onPath ? 'on-path' : '');
+        html += `<td class="${cls}">${dp[i][j]}</td>`;
+      }
+      html += '</tr>';
+    }
+    html += '</table>';
+    document.getElementById('ed-matrix').innerHTML = html;
+  }
+
+  document.getElementById('ed-compute').addEventListener('click', renderEditDistance);
+  renderEditDistance();
+
+  // ==========================================
+  // FREQUENCY-BASED SPELL CORRECTION
+  // ==========================================
+  const DICTIONARY = {
+    'wireless': 95000, 'wire': 45000, 'wires': 32000, 'wired': 28000, 'wisely': 8000,
+    'access': 88000, 'assess': 42000, 'aces': 5000, 'acres': 12000,
+    'receive': 75000, 'recipe': 35000, 'relieve': 18000, 'review': 65000,
+    'headphones': 72000, 'headphone': 45000, 'headlines': 38000, 'headlights': 12000,
+    'search': 92000, 'reach': 55000, 'beach': 48000, 'teach': 42000, 'each': 85000,
+    'computer': 89000, 'commuter': 15000, 'compute': 22000, 'compete': 28000,
+    'python': 78000, 'piton': 2000, 'piston': 9000, 'photon': 15000,
+    'machine': 82000, 'marine': 35000, 'imagine': 55000, 'magazine': 48000,
+    'learning': 76000, 'leaning': 12000, 'earning': 42000, 'yearning': 8000,
+    'algorithm': 58000, 'logarithm': 18000,
+    'database': 65000, 'dataspace': 2000, 'dateable': 1500,
+    'bluetooth': 62000, 'bluethooth': 100,
+    'keyboard': 55000, 'skateboard': 25000,
+    'monitor': 52000, 'mentor': 35000, 'monster': 28000,
+    'network': 78000, 'rework': 12000, 'netwerk': 50,
+    'software': 85000, 'softwar': 100, 'hardware': 72000,
+    'program': 80000, 'diagram': 32000, 'telegram': 15000,
+    'internet': 90000, 'interest': 75000, 'internal': 55000, 'interact': 42000,
+    'application': 72000, 'implication': 25000,
+    'security': 68000, 'obscurity': 8000,
+    'performance': 70000, 'preference': 38000,
+  };
+
+  function editDist(a, b) {
+    const m = a.length, n = b.length;
+    const dp = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
+    for (let i = 0; i <= m; i++) dp[i][0] = i;
+    for (let j = 0; j <= n; j++) dp[0][j] = j;
+    for (let i = 1; i <= m; i++) {
+      for (let j = 1; j <= n; j++) {
+        dp[i][j] = a[i - 1] === b[j - 1]
+          ? dp[i - 1][j - 1]
+          : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
+      }
+    }
+    return dp[m][n];
+  }
+
+  function findCorrections(word) {
+    word = word.toLowerCase().trim();
+    const candidates = [];
+    for (const [dictWord, freq] of Object.entries(DICTIONARY)) {
+      const dist = editDist(word, dictWord);
+      if (dist <= 2 && dist > 0) {
+        candidates.push({ word: dictWord, dist, freq });
+      }
+    }
+    candidates.sort((a, b) => a.dist - b.dist || b.freq - a.freq);
+    return candidates.slice(0, 8);
+  }
+
+  function renderCorrections() {
+    const word = document.getElementById('freq-input').value.trim();
+    if (!word) return;
+    const results = findCorrections(word);
+    const container = document.getElementById('freq-results');
+
+    if (DICTIONARY[word.toLowerCase()]) {
+      container.innerHTML = `
+        <div class="result-box">
+          <div class="result-label">Result</div>
+          <div class="result-value" style="font-size:1.1rem">"${word}" is already a valid dictionary word (freq: ${DICTIONARY[word.toLowerCase()].toLocaleString()})</div>
+        </div>`;
+      return;
+    }
+
+    if (results.length === 0) {
+      container.innerHTML = `
+        <div class="result-box">
+          <div class="result-label">Result</div>
+          <div class="result-value" style="font-size:1.1rem;color:var(--accent3)">No corrections found within edit distance 2</div>
+        </div>`;
+      return;
+    }
+
+    container.innerHTML = `
+      <div style="font-size:0.85rem;color:var(--text-dim);margin-bottom:8px">
+        ${results.length} candidate${results.length > 1 ? 's' : ''} for "<strong style="color:var(--accent3)">${word}</strong>" — sorted by (edit_distance, frequency)
+      </div>
+      ${results.map((c, i) => `
+        <div class="candidate-item">
+          <div class="c-word">${i === 0 ? '✓ ' : ''}${c.word}</div>
+          <div class="c-meta">
+            <span class="c-dist">dist: ${c.dist}</span>
+            <span class="c-freq">freq: ${c.freq.toLocaleString()}</span>
+          </div>
+        </div>
+      `).join('')}
+    `;
+  }
+
+  document.getElementById('freq-run').addEventListener('click', renderCorrections);
+  renderCorrections();
+
+  // ==========================================
+  // SYNONYM EXPANSION
+  // ==========================================
+  const SYNONYMS = {
+    'cheap': ['affordable', 'budget', 'inexpensive', 'low-cost', 'economical'],
+    'fast': ['quick', 'rapid', 'speedy', 'swift', 'high-performance'],
+    'big': ['large', 'spacious', 'oversized', 'huge', 'substantial'],
+    'small': ['compact', 'mini', 'tiny', 'portable', 'lightweight'],
+    'good': ['excellent', 'quality', 'premium', 'top-rated', 'reliable'],
+    'laptop': ['notebook', 'ultrabook', 'portable computer', 'chromebook'],
+    'car': ['vehicle', 'automobile', 'sedan', 'suv'],
+    'house': ['home', 'property', 'residence', 'dwelling'],
+    'phone': ['smartphone', 'mobile', 'cellphone', 'handset'],
+    'buy': ['purchase', 'order', 'get', 'shop'],
+    'fix': ['repair', 'solve', 'troubleshoot', 'resolve', 'debug'],
+    'easy': ['simple', 'straightforward', 'beginner-friendly', 'intuitive'],
+    'best': ['top', 'leading', 'highest-rated', 'recommended', 'premier'],
+    'new': ['latest', 'recent', 'newest', 'current', '2024'],
+    'old': ['vintage', 'classic', 'legacy', 'previous', 'outdated'],
+    'headphones': ['earphones', 'earbuds', 'headset', 'audio'],
+    'wireless': ['bluetooth', 'cordless', 'wifi'],
+    'running': ['jogging', 'athletic', 'marathon', 'trail'],
+    'shoes': ['footwear', 'sneakers', 'trainers', 'kicks'],
+  };
+
+  const SAMPLE_DOCS = [
+    'Budget-friendly ultrabook for students',
+    'Affordable notebook with long battery life',
+    'Premium gaming laptop with RTX graphics',
+    'Compact chromebook for everyday use',
+    'Inexpensive portable computer for browsing',
+    'Low-cost laptop deals under $500',
+    'Economical notebook options for home office',
+    'High-end laptop for creative professionals',
+    'Top-rated budget laptops of 2024',
+    'Lightweight ultrabook for travel',
+    'Cheap laptop accessories and bags',
+    'Best affordable laptops reviewed',
+    'Quick performance laptop comparison',
+    'Speedy ultrabook with SSD storage',
+    'Large screen laptop for presentations',
+  ];
+
+  function expandQuery(query) {
+    const tokens = query.toLowerCase().split(/\s+/).filter(t => t.length > 0);
+    const expansions = {};
+    tokens.forEach(t => {
+      expansions[t] = { original: true, synonyms: SYNONYMS[t] || [] };
+    });
+    return { tokens, expansions };
+  }
+
+  function scoreDoc(doc, terms) {
+    const docLower = doc.toLowerCase();
+    let score = 0;
+    terms.forEach(t => {
+      if (docLower.includes(t)) score += 1;
+    });
+    return score;
+  }
+
+  function renderSynonymExpansion() {
+    const query = document.getElementById('syn-input').value.trim();
+    if (!query) return;
+
+    const { tokens, expansions } = expandQuery(query);
+    const allExpandedTerms = [];
+    tokens.forEach(t => {
+      allExpandedTerms.push(t);
+      if (expansions[t].synonyms.length > 0) {
+        expansions[t].synonyms.forEach(s => allExpandedTerms.push(s));
+      }
+    });
+
+    // Render expansion mapping
+    let expHtml = '<div style="margin-bottom:20px">';
+    expHtml += '<div style="font-size:0.85rem;color:var(--text-dim);margin-bottom:12px">Query terms and their expansions:</div>';
+    for (const [term, data] of Object.entries(expansions)) {
+      expHtml += '<div class="expansion-row">';
+      expHtml += `<span class="synonym-tag original">${term}</span>`;
+      if (data.synonyms.length > 0) {
+        expHtml += '<span class="er-arrow">→</span>';
+        data.synonyms.forEach(s => {
+          expHtml += `<span class="synonym-tag expanded">${s}</span>`;
+        });
+      } else {
+        expHtml += '<span style="color:var(--text-dim);font-size:0.82rem;margin-left:8px">(no synonyms in map)</span>';
+      }
+      expHtml += '</div>';
+    }
+    expHtml += '</div>';
+    document.getElementById('syn-expansion').innerHTML = expHtml;
+
+    // Score documents with original vs expanded queries
+    const origResults = SAMPLE_DOCS.map(d => ({ doc: d, score: scoreDoc(d, tokens) }))
+      .filter(d => d.score > 0).sort((a, b) => b.score - a.score);
+    const expResults = SAMPLE_DOCS.map(d => ({ doc: d, score: scoreDoc(d, allExpandedTerms) }))
+      .filter(d => d.score > 0).sort((a, b) => b.score - a.score);
+
+    const origDocSet = new Set(origResults.map(r => r.doc));
+
+    const resultsContainer = document.getElementById('syn-results');
+    resultsContainer.innerHTML = `
+      <div>
+        <div class="exp-col-header" style="color:var(--accent)">Original Query (${origResults.length} results)</div>
+        ${origResults.map(r => `<div class="exp-result">${r.doc}</div>`).join('')}
+        ${origResults.length === 0 ? '<p class="dim" style="padding:16px">No matches</p>' : ''}
+      </div>
+      <div>
+        <div class="exp-col-header" style="color:var(--accent2)">Expanded Query (${expResults.length} results)</div>
+        ${expResults.map(r => {
+          const isNew = !origDocSet.has(r.doc);
+          return `<div class="exp-result ${isNew ? 'new' : ''}">${r.doc}${isNew ? ' <span style="color:var(--accent4);font-size:0.78rem;font-weight:600">NEW</span>' : ''}</div>`;
+        }).join('')}
+        ${expResults.length === 0 ? '<p class="dim" style="padding:16px">No matches</p>' : ''}
+      </div>
+    `;
+  }
+
+  document.getElementById('syn-run').addEventListener('click', renderSynonymExpansion);
+  renderSynonymExpansion();
+
+  // ==========================================
+  // TOC SCROLL HIGHLIGHTING
+  // ==========================================
+  const sections = document.querySelectorAll('section[id]');
+  const navLinks = document.querySelectorAll('.toc a');
+  window.addEventListener('scroll', () => {
+    let current = '';
+    sections.forEach(s => {
+      if (window.scrollY >= s.offsetTop - 140) current = s.id;
+    });
+    navLinks.forEach(a => {
+      a.classList.toggle('active', a.getAttribute('href') === '#' + current);
+    });
+  });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,1003 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Caching for Search Systems — Interactive Playground</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body, {
+      delimiters: [
+        {left: '$$', right: '$$', display: true},
+        {left: '\\[', right: '\\]', display: true},
+        {left: '$', right: '$', display: false},
+        {left: '\\(', right: '\\)', display: false}
+      ],
+      throwOnError: false
+    });"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../playground.css" />
+  <style>
+    .cache-slots { display: flex; gap: 8px; flex-wrap: wrap; margin: 16px 0; }
+    .cache-slot {
+      background: var(--surface2); border: 2px solid var(--border); border-radius: var(--radius-sm);
+      padding: 10px 16px; min-width: 80px; text-align: center; transition: all 0.3s;
+      position: relative;
+    }
+    .cache-slot.empty { border-style: dashed; opacity: 0.5; }
+    .cache-slot.hit { border-color: var(--accent2); background: rgba(0,201,167,0.1); box-shadow: 0 0 12px rgba(0,201,167,0.3); }
+    .cache-slot.miss { border-color: var(--accent3); background: rgba(255,107,107,0.08); }
+    .cache-slot.evicting { border-color: var(--accent4); background: rgba(255,217,61,0.1); animation: evictPulse 0.5s; }
+    .cache-slot .slot-key { font-family: 'JetBrains Mono', monospace; font-size: 0.85rem; font-weight: 600; }
+    .cache-slot .slot-meta { font-size: 0.7rem; color: var(--text-dim); margin-top: 2px; font-family: 'JetBrains Mono', monospace; }
+    .cache-slot .slot-idx { position: absolute; top: -8px; left: -8px; background: var(--accent); color: #fff; width: 18px; height: 18px; border-radius: 50%; font-size: 0.65rem; display: flex; align-items: center; justify-content: center; font-weight: 700; }
+
+    @keyframes evictPulse {
+      0% { transform: scale(1); }
+      50% { transform: scale(1.08); }
+      100% { transform: scale(1); }
+    }
+
+    .hit-miss-badge {
+      display: inline-block; padding: 4px 14px; border-radius: 20px;
+      font-size: 0.82rem; font-weight: 700; font-family: 'JetBrains Mono', monospace;
+      margin: 8px 0;
+    }
+    .hit-miss-badge.hit { background: rgba(0,201,167,0.15); color: var(--accent2); }
+    .hit-miss-badge.miss { background: rgba(255,107,107,0.15); color: var(--accent3); }
+
+    .cache-stats { display: flex; gap: 16px; flex-wrap: wrap; margin: 12px 0; }
+    .cache-stat {
+      background: var(--code-bg); border: 1px solid var(--border); border-radius: var(--radius-sm);
+      padding: 10px 16px; text-align: center; min-width: 100px;
+    }
+    .cache-stat .stat-label { font-size: 0.7rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; }
+    .cache-stat .stat-value { font-size: 1.2rem; font-weight: 700; font-family: 'JetBrains Mono', monospace; }
+
+    .side-by-side { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    .side-panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; }
+    .side-panel h4 { color: var(--accent); margin-bottom: 12px; }
+
+    .query-log {
+      background: var(--code-bg); border: 1px solid var(--border); border-radius: var(--radius-sm);
+      padding: 12px; margin-top: 12px; font-family: 'JetBrains Mono', monospace;
+      font-size: 0.78rem; max-height: 180px; overflow-y: auto; line-height: 1.7;
+    }
+    .query-log .log-hit { color: var(--accent2); }
+    .query-log .log-miss { color: var(--accent3); }
+    .query-log .log-evict { color: var(--accent4); }
+
+    .warming-bar {
+      height: 8px; background: var(--surface2); border-radius: 4px; overflow: hidden; margin: 8px 0;
+    }
+    .warming-bar .fill {
+      height: 100%; border-radius: 4px; transition: width 0.3s;
+      background: linear-gradient(90deg, var(--accent), var(--accent2));
+    }
+
+    @media (max-width: 700px) {
+      .side-by-side { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+
+<body>
+<div class="topbar">
+  <a href="/" class="topbar-brand">
+    <div class="topbar-logo">RM</div>
+    <span class="topbar-label">Rahul Mrinal</span>
+  </a>
+  <a href="/blog" class="topbar-back">← Back to Blog</a>
+</div>
+
+<div class="hero">
+  <div class="container">
+    <h1>Caching for Search Systems</h1>
+    <p class="subtitle">LRU, LFU, and TTL strategies to speed up search</p>
+    <div class="badges">
+      <span class="badge badge-hnsw">LRU</span>
+      <span class="badge badge-ivf">LFU</span>
+      <span class="badge badge-pq">TTL</span>
+    </div>
+  </div>
+</div>
+
+<nav class="toc">
+  <div class="toc-inner">
+    <a href="#s1">Analogy</a>
+    <a href="#s2">What to Cache</a>
+    <a href="#s3">Cache Layers</a>
+    <a href="#s4">LRU Simulator</a>
+    <a href="#s5">LFU vs LRU</a>
+    <a href="#s6">TTL</a>
+    <a href="#s7">Cache Warming</a>
+    <a href="#s8">Zipf's Law</a>
+    <a href="#s9">Takeaway</a>
+  </div>
+</nav>
+
+<div class="container">
+
+  <!-- ===== SECTION 1 ===== -->
+  <section id="s1">
+    <h2><span class="num">01</span> The Librarian's Desk Analogy</h2>
+    <p class="lead">Caching is the oldest optimization in computing — keep frequently needed data close.</p>
+
+    <div class="analogy">
+      <div class="icon">📚</div>
+      <p><strong>Imagine a librarian</strong> who keeps the most requested books on their desk instead of walking to the stacks every time. When someone asks for "Harry Potter," it's right there — instant. When someone asks for an obscure book, the librarian has to walk to the shelves (slow). The desk has limited space, so when it's full, the librarian removes the book that hasn't been asked for the longest time. That's <strong>LRU caching</strong>.</p>
+    </div>
+
+    <div class="grid-2">
+      <div class="card card-accent">
+        <h3>Cache Hit</h3>
+        <p>Requested data is in the cache. Response is near-instant (microseconds vs milliseconds).</p>
+        <p style="margin-top:8px;"><span class="badge badge-green">~0.1ms</span></p>
+      </div>
+      <div class="card card-red">
+        <h3>Cache Miss</h3>
+        <p>Data not in cache. Must compute the full query, then store result for next time.</p>
+        <p style="margin-top:8px;"><span class="badge badge-red">~50-200ms</span></p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== SECTION 2 ===== -->
+  <section id="s2">
+    <h2><span class="num">02</span> What to Cache</h2>
+    <p class="lead">Not all data is equal. Cache the expensive-to-compute, frequently-accessed layers.</p>
+
+    <div class="grid-3">
+      <div class="card card-accent">
+        <h3>Query Results</h3>
+        <ul>
+          <li>Full search results for exact query strings</li>
+          <li>Highest hit rate for popular queries</li>
+          <li>Key = normalized query + filters</li>
+          <li>Invalidate on index update</li>
+        </ul>
+      </div>
+      <div class="card card-green">
+        <h3>Filter Bitsets</h3>
+        <ul>
+          <li>Precomputed bitmaps for common filters</li>
+          <li>e.g., "in_stock=true" → bitset of doc IDs</li>
+          <li>Reusable across different queries</li>
+          <li>Elasticsearch caches these automatically</li>
+        </ul>
+      </div>
+      <div class="card card-yellow">
+        <h3>Field Data</h3>
+        <ul>
+          <li>Uninverted index for sorting/aggregations</li>
+          <li>Loaded into heap on first access</li>
+          <li>Very expensive to build, persists across queries</li>
+          <li>Use <code>doc_values</code> for columnar storage</li>
+        </ul>
+      </div>
+    </div>
+
+    <h3>Elasticsearch Internal Caches</h3>
+    <table>
+      <thead><tr><th>Cache</th><th>What it Stores</th><th>Size</th><th>Eviction</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Node Query Cache</strong></td><td>Filter clause results (bitsets)</td><td>10% of heap (default)</td><td>LRU</td></tr>
+        <tr><td><strong>Shard Request Cache</strong></td><td>Full aggregation / count results per shard</td><td>1% of heap</td><td>Invalidated on refresh</td></tr>
+        <tr><td><strong>Field Data Cache</strong></td><td>Uninverted field data for sorting</td><td>Unbounded (dangerous)</td><td>LRU when circuit breaker trips</td></tr>
+        <tr><td><strong>OS Page Cache</strong></td><td>Lucene segment files in OS memory</td><td>Available RAM minus heap</td><td>OS-managed LRU</td></tr>
+      </tbody>
+    </table>
+
+    <div class="pro-tip">
+      <div class="tip-header">Pro Tip</div>
+      <p>The OS page cache is the most underrated cache in search. Lucene relies heavily on <code>mmap</code> to memory-map segment files. Leave at least 50% of node RAM for the OS page cache — don't give it all to the JVM heap.</p>
+    </div>
+  </section>
+
+  <!-- ===== SECTION 3 ===== -->
+  <section id="s3">
+    <h2><span class="num">03</span> Cache Layers</h2>
+    <p class="lead">Multiple caching layers, each with different latency and capacity trade-offs. Each layer catches a different class of repeated work.</p>
+
+    <div class="arch-diagram">
+      <div class="arch-row">
+        <div class="arch-box accent">Client Cache<div class="arch-label">Browser / App</div></div>
+        <div class="arch-arrow">→</div>
+        <div class="arch-box yellow">CDN Cache<div class="arch-label">Edge Network</div></div>
+        <div class="arch-arrow">→</div>
+        <div class="arch-box green">App Cache<div class="arch-label">Redis / Memcached</div></div>
+        <div class="arch-arrow">→</div>
+        <div class="arch-box red">Engine Cache<div class="arch-label">ES / Solr Internal</div></div>
+      </div>
+    </div>
+
+    <div class="analogy">
+      <div class="icon">🏗️</div>
+      <p><strong>Think of it like a warehouse.</strong> The browser cache is your pocket — tiny but instant. CDN is the shelf next to your desk — fast and pretty big. Redis is the storage room — a short walk. The search engine is the warehouse — comprehensive but the slowest to reach. You want to satisfy most requests from your pocket or desk.</p>
+    </div>
+
+    <table>
+      <thead><tr><th>Layer</th><th>Latency</th><th>Capacity</th><th>Invalidation</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Client</strong></td><td>0ms (local)</td><td>Small (MB)</td><td>TTL / manual</td></tr>
+        <tr><td><strong>CDN</strong></td><td>1-10ms</td><td>Large (TB)</td><td>TTL / purge API</td></tr>
+        <tr><td><strong>Application</strong></td><td>0.5-2ms</td><td>Medium (GB)</td><td>Event-driven</td></tr>
+        <tr><td><strong>Search Engine</strong></td><td>Built-in</td><td>Configurable</td><td>On index refresh</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ===== SECTION 4: LRU CACHE SIMULATOR ===== -->
+  <section id="s4">
+    <h2><span class="num">04</span> LRU Cache Simulator</h2>
+    <p class="lead">Type queries and watch the Least Recently Used eviction policy in action.</p>
+
+    <div class="playground">
+      <h4>Interactive LRU Cache</h4>
+
+      <div class="slider-group" style="grid-template-columns: 1fr;">
+        <div class="slider-item">
+          <label>Cache Size <span id="lru-size-val">5 slots</span></label>
+          <input type="range" id="lru-size" min="3" max="10" value="5" oninput="resetLRU()" />
+        </div>
+      </div>
+
+      <div style="display:flex; gap:12px; align-items:end; flex-wrap:wrap; margin-bottom:12px;">
+        <div style="flex:1; min-width:200px;">
+          <label style="font-size:0.85rem; font-weight:500; display:block; margin-bottom:6px;">Query</label>
+          <input type="text" id="lru-query" class="demo-input" placeholder="Type a query (e.g., shoes, laptop, phone)" onkeydown="if(event.key==='Enter') queryLRU()" />
+        </div>
+        <button class="demo-btn" onclick="queryLRU()">Query</button>
+        <button class="btn" onclick="resetLRU()">Reset</button>
+      </div>
+
+      <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px;">
+        <span style="font-size:0.78rem; color:var(--text-dim);">Quick queries:</span>
+        <button class="btn" style="padding:4px 12px; font-size:0.78rem;" onclick="quickQuery('shoes')">shoes</button>
+        <button class="btn" style="padding:4px 12px; font-size:0.78rem;" onclick="quickQuery('laptop')">laptop</button>
+        <button class="btn" style="padding:4px 12px; font-size:0.78rem;" onclick="quickQuery('phone')">phone</button>
+        <button class="btn" style="padding:4px 12px; font-size:0.78rem;" onclick="quickQuery('headphones')">headphones</button>
+        <button class="btn" style="padding:4px 12px; font-size:0.78rem;" onclick="quickQuery('tablet')">tablet</button>
+        <button class="btn" style="padding:4px 12px; font-size:0.78rem;" onclick="quickQuery('watch')">watch</button>
+        <button class="btn" style="padding:4px 12px; font-size:0.78rem;" onclick="quickQuery('camera')">camera</button>
+      </div>
+
+      <div id="lru-hit-miss"></div>
+      <div class="cache-slots" id="lru-slots"></div>
+
+      <div class="cache-stats">
+        <div class="cache-stat"><div class="stat-label">Queries</div><div class="stat-value" id="lru-total">0</div></div>
+        <div class="cache-stat"><div class="stat-label">Hits</div><div class="stat-value" id="lru-hits" style="color:var(--accent2);">0</div></div>
+        <div class="cache-stat"><div class="stat-label">Misses</div><div class="stat-value" id="lru-misses" style="color:var(--accent3);">0</div></div>
+        <div class="cache-stat"><div class="stat-label">Hit Rate</div><div class="stat-value" id="lru-rate" style="color:var(--accent);">0%</div></div>
+      </div>
+
+      <div class="chart-wrap" style="margin-top:16px;">
+        <canvas id="lru-chart" height="200"></canvas>
+      </div>
+
+      <div class="query-log" id="lru-log"></div>
+    </div>
+  </section>
+
+  <!-- ===== SECTION 5: LFU vs LRU ===== -->
+  <section id="s5">
+    <h2><span class="num">05</span> LFU vs LRU</h2>
+    <p class="lead">Same cache size, same queries — different eviction strategies yield different results.</p>
+
+    <div class="playground">
+      <h4>Side-by-Side Comparison</h4>
+
+      <div style="display:flex; gap:12px; align-items:end; flex-wrap:wrap; margin-bottom:12px;">
+        <div style="flex:1; min-width:200px;">
+          <label style="font-size:0.85rem; font-weight:500; display:block; margin-bottom:6px;">Query Sequence (comma-separated)</label>
+          <input type="text" id="cmp-sequence" class="demo-input" value="A, B, C, A, A, D, E, A, B, B, C, D, A, E, A" />
+        </div>
+        <button class="demo-btn" onclick="runComparison()">Run Both</button>
+        <button class="btn" onclick="resetComparison()">Reset</button>
+      </div>
+
+      <div class="slider-group" style="grid-template-columns:1fr;">
+        <div class="slider-item">
+          <label>Cache Size <span id="cmp-size-val">3 slots</span></label>
+          <input type="range" id="cmp-size" min="2" max="6" value="3" oninput="document.getElementById('cmp-size-val').textContent=this.value+' slots'" />
+        </div>
+      </div>
+
+      <div class="side-by-side" id="cmp-panels">
+        <div class="side-panel">
+          <h4>LRU (Least Recently Used)</h4>
+          <div class="cache-slots" id="cmp-lru-slots"></div>
+          <div class="cache-stats">
+            <div class="cache-stat"><div class="stat-label">Hits</div><div class="stat-value" id="cmp-lru-hits" style="color:var(--accent2);">0</div></div>
+            <div class="cache-stat"><div class="stat-label">Hit Rate</div><div class="stat-value" id="cmp-lru-rate" style="color:var(--accent);">0%</div></div>
+          </div>
+          <div class="query-log" id="cmp-lru-log"></div>
+        </div>
+        <div class="side-panel">
+          <h4 style="color:var(--accent2);">LFU (Least Frequently Used)</h4>
+          <div class="cache-slots" id="cmp-lfu-slots"></div>
+          <div class="cache-stats">
+            <div class="cache-stat"><div class="stat-label">Hits</div><div class="stat-value" id="cmp-lfu-hits" style="color:var(--accent2);">0</div></div>
+            <div class="cache-stat"><div class="stat-label">Hit Rate</div><div class="stat-value" id="cmp-lfu-rate" style="color:var(--accent);">0%</div></div>
+          </div>
+          <div class="query-log" id="cmp-lfu-log"></div>
+        </div>
+      </div>
+
+      <div class="result-box" id="cmp-verdict" style="display:none; margin-top:16px;">
+        <div class="result-label">Verdict</div>
+        <div id="cmp-verdict-text" style="font-size:0.92rem; color:var(--text); line-height:1.7;"></div>
+      </div>
+    </div>
+
+    <h3>When to Use Which?</h3>
+    <table>
+      <thead><tr><th>Strategy</th><th>Best For</th><th>Weakness</th><th>Complexity</th></tr></thead>
+      <tbody>
+        <tr><td><strong>LRU</strong></td><td>General-purpose, changing workloads</td><td>Frequency-blind — one-time queries can evict popular ones</td><td>O(1) with doubly-linked list + hashmap</td></tr>
+        <tr><td><strong>LFU</strong></td><td>Stable popularity distribution</td><td>Slow to adapt — once-popular items clog the cache</td><td>O(log n) or O(1) with min-heap trick</td></tr>
+        <tr><td><strong>ARC</strong></td><td>Adaptive workloads</td><td>More memory overhead (tracks recency + frequency)</td><td>O(1) but complex bookkeeping</td></tr>
+        <tr><td><strong>W-TinyLFU</strong></td><td>Production caches (Caffeine, Guava)</td><td>Requires tuning window size</td><td>Sketch-based frequency estimation</td></tr>
+      </tbody>
+    </table>
+
+    <div class="insight">
+      <div class="insight-title">Production Choice</div>
+      <p><strong>W-TinyLFU</strong> (used by Caffeine in the JVM world) combines a small LRU admission window with frequency-based eviction. It adapts to workload shifts while maintaining near-optimal hit rates. Elasticsearch's internal node query cache uses a similar approach.</p>
+    </div>
+  </section>
+
+  <!-- ===== SECTION 6 ===== -->
+  <section id="s6">
+    <h2><span class="num">06</span> TTL and Invalidation</h2>
+    <p class="lead">Cached results become stale. TTL and invalidation strategies keep data fresh.</p>
+
+    <div class="grid-2">
+      <div class="card card-accent">
+        <h3>Time-To-Live (TTL)</h3>
+        <ul>
+          <li>Each cached entry expires after a fixed duration</li>
+          <li>Simple to implement, predictable staleness bound</li>
+          <li>Short TTL = fresher data, lower hit rate</li>
+          <li>Long TTL = higher hit rate, staler data</li>
+        </ul>
+        <div class="formula-box compact" style="margin-top:12px;">
+          $$ \text{Staleness} \leq \text{TTL} $$
+        </div>
+      </div>
+      <div class="card card-green">
+        <h3>Event-Driven Invalidation</h3>
+        <ul>
+          <li>Invalidate cache when underlying data changes</li>
+          <li>Product updated → purge all queries matching that product</li>
+          <li>More complex, but zero staleness for known changes</li>
+          <li>Hard to invalidate "all queries affected by this doc"</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="pro-tip">
+      <div class="tip-header">Pro Tip</div>
+      <p>Use a hybrid approach: short TTL (30-60s) as a safety net, plus event-driven invalidation for known changes. This gives you both freshness guarantees and protection against missed invalidation events.</p>
+    </div>
+
+    <h3>The Invalidation Trade-off</h3>
+    <table>
+      <thead><tr><th>Strategy</th><th>Freshness</th><th>Hit Rate</th><th>Complexity</th></tr></thead>
+      <tbody>
+        <tr><td><strong>TTL only</strong></td><td>Bounded by TTL</td><td>High</td><td>Low</td></tr>
+        <tr><td><strong>Event-driven only</strong></td><td>Near real-time</td><td>High</td><td>High</td></tr>
+        <tr><td><strong>TTL + Events</strong></td><td>Near real-time</td><td>Highest</td><td>Medium</td></tr>
+        <tr><td><strong>No cache</strong></td><td>Always fresh</td><td>N/A</td><td>None</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ===== SECTION 7: CACHE WARMING ===== -->
+  <section id="s7">
+    <h2><span class="num">07</span> Cache Warming</h2>
+    <p class="lead">A cold cache means every query is a miss. Warming pre-loads popular queries.</p>
+
+    <div class="playground">
+      <h4>Cold Start vs Warm Cache</h4>
+
+      <p style="font-size:0.88rem; color:var(--text-dim); margin-bottom:16px;">
+        Simulate 50 random queries drawn from a Zipf distribution (top queries are much more frequent).
+        Compare hit rates between a cold (empty) cache and one pre-warmed with the top 10 queries.
+      </p>
+
+      <div style="display:flex; gap:12px; flex-wrap:wrap; margin-bottom:16px;">
+        <button class="demo-btn" id="warm-run-btn" onclick="runWarmingExperiment()">Run Experiment</button>
+        <button class="btn btn-red" onclick="clearWarming()">Clear Cache (Cold Start)</button>
+        <button class="btn btn-green" onclick="warmCache()">Warm Cache (Top 10)</button>
+      </div>
+
+      <div class="warming-bar"><div class="fill" id="warm-progress" style="width:0%;"></div></div>
+
+      <div class="side-by-side">
+        <div class="side-panel">
+          <h4 style="color:var(--accent3);">Cold Start</h4>
+          <div class="cache-stats">
+            <div class="cache-stat"><div class="stat-label">Hit Rate</div><div class="stat-value" id="warm-cold-rate" style="color:var(--accent3);">—</div></div>
+            <div class="cache-stat"><div class="stat-label">Hits</div><div class="stat-value" id="warm-cold-hits">0</div></div>
+            <div class="cache-stat"><div class="stat-label">Misses</div><div class="stat-value" id="warm-cold-misses">0</div></div>
+          </div>
+        </div>
+        <div class="side-panel">
+          <h4 style="color:var(--accent2);">Warm Start</h4>
+          <div class="cache-stats">
+            <div class="cache-stat"><div class="stat-label">Hit Rate</div><div class="stat-value" id="warm-warm-rate" style="color:var(--accent2);">—</div></div>
+            <div class="cache-stat"><div class="stat-label">Hits</div><div class="stat-value" id="warm-warm-hits">0</div></div>
+            <div class="cache-stat"><div class="stat-label">Misses</div><div class="stat-value" id="warm-warm-misses">0</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="chart-wrap" style="margin-top:16px;">
+        <canvas id="warm-chart" height="220"></canvas>
+      </div>
+
+      <div class="result-box" id="warm-result" style="display:none; margin-top:16px;">
+        <div class="result-label">Conclusion</div>
+        <div id="warm-result-text" style="font-size:0.88rem; color:var(--text-dim); line-height:1.7;"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== SECTION 8 ===== -->
+  <section id="s8">
+    <h2><span class="num">08</span> Zipf's Law</h2>
+    <p class="lead">Caching works because query traffic is heavily skewed — a small % of queries account for most traffic.</p>
+
+    <div class="insight">
+      <div class="insight-title">Zipf's Law</div>
+      <p>The frequency of the n-th most common query is proportional to <code>1/n</code>. The most popular query is twice as frequent as the second, three times as frequent as the third, etc.</p>
+    </div>
+
+    <div class="formula-box">
+      $$ f(k) = \frac{1/k^s}{\sum_{n=1}^{N} 1/n^s} $$
+      <div class="label">Zipf distribution: k = rank, s = skew exponent (typically ~1.0 for search)</div>
+    </div>
+
+    <div class="chart-wrap">
+      <canvas id="zipf-chart" height="260"></canvas>
+    </div>
+
+    <div class="card">
+      <h3>Real-World Impact</h3>
+      <table>
+        <thead><tr><th>Top Queries</th><th>% of Traffic</th><th>Cache Size Needed</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Top 100</strong></td><td>~25-30%</td><td>Tiny (&lt; 1 MB)</td></tr>
+          <tr><td><strong>Top 1,000</strong></td><td>~40-50%</td><td>Small (10 MB)</td></tr>
+          <tr><td><strong>Top 10,000</strong></td><td>~60-70%</td><td>Moderate (100 MB)</td></tr>
+          <tr><td><strong>Top 100,000</strong></td><td>~80-85%</td><td>Large (1 GB)</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="pro-tip">
+      <div class="tip-header">Pro Tip</div>
+      <p>Always measure your actual query distribution before sizing caches. Zipf's law is a good starting model, but real traffic can be even more skewed (e.g., trending queries during sales events).</p>
+    </div>
+
+    <h3>Measuring Your Distribution</h3>
+    <div class="grid-2">
+      <div class="card card-accent">
+        <h3>Unique Query Ratio</h3>
+        <p>Count distinct queries / total queries over a day. If this ratio is low (e.g., 10-20%), caching will be very effective. If high (e.g., 80%+), most queries are unique and caching helps less.</p>
+      </div>
+      <div class="card card-green">
+        <h3>Frequency Decay Rate</h3>
+        <p>Plot query rank vs frequency. If the curve drops steeply, a small cache captures most traffic. If it's flat, you need a larger cache or a different strategy (like result-component caching).</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== SECTION 9 ===== -->
+  <section id="s9">
+    <h2><span class="num">09</span> Key Takeaway</h2>
+
+    <div class="insight">
+      <div class="insight-title">Summary</div>
+      <p><strong>Cache query results aggressively.</strong> Zipf's law means a small cache handles a large fraction of traffic. Use LRU for simplicity, LFU when access frequency patterns are stable.</p>
+      <p style="margin-top:12px;"><strong>Layer your caches.</strong> Client → CDN → Application → Engine. Each layer catches different query patterns and reduces load on downstream systems.</p>
+      <p style="margin-top:12px;"><strong>Warm your caches.</strong> After a deploy, restart, or scale event, pre-load the top queries to avoid a cold-start latency spike that can cascade into failures.</p>
+    </div>
+
+    <div class="formula-box">
+      $$ \text{Effective Latency} = (1 - \text{hit\_rate}) \times \text{miss\_latency} + \text{hit\_rate} \times \text{hit\_latency} $$
+      <div class="label">Cache hit rate is the single most impactful knob for search performance</div>
+    </div>
+
+    <h3>Cache Sizing Quick Reference</h3>
+    <table>
+      <thead><tr><th>Cache Layer</th><th>Typical Size</th><th>Technology</th><th>TTL</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Browser cache</strong></td><td>5-50 MB</td><td>HTTP Cache-Control headers</td><td>30-300s</td></tr>
+        <tr><td><strong>CDN edge cache</strong></td><td>Unlimited (per POP)</td><td>CloudFront, Fastly, Cloudflare</td><td>60-3600s</td></tr>
+        <tr><td><strong>Application cache</strong></td><td>1-16 GB per node</td><td>Redis, Memcached, Caffeine</td><td>30-300s</td></tr>
+        <tr><td><strong>ES query cache</strong></td><td>10% of JVM heap</td><td>Built-in node query cache</td><td>Invalidated on refresh</td></tr>
+        <tr><td><strong>ES request cache</strong></td><td>1% of JVM heap</td><td>Built-in shard request cache</td><td>Invalidated on refresh</td></tr>
+        <tr><td><strong>OS page cache</strong></td><td>50%+ of node RAM</td><td>OS kernel (mmap)</td><td>Until evicted by OS</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Common Caching Pitfalls</h3>
+    <div class="grid-2">
+      <div class="card card-red">
+        <h3>Cache Stampede</h3>
+        <p>When a popular cache key expires, hundreds of concurrent requests all miss and hit the backend simultaneously. Use <strong>lock-based refresh</strong> or <strong>early expiry jitter</strong> to prevent this.</p>
+      </div>
+      <div class="card card-yellow">
+        <h3>Cache Pollution</h3>
+        <p>One-time or rare queries fill the cache and evict popular entries. LFU or admission policies (like TinyLFU) help prevent pollution by only caching items that prove their frequency.</p>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <div class="card card-accent">
+        <h3>Thundering Herd</h3>
+        <p>Similar to stampede, but occurs when the cache layer itself restarts. Solution: stagger TTLs with random jitter, and implement <strong>cache warming</strong> on startup.</p>
+      </div>
+      <div class="card card-green">
+        <h3>Inconsistency Window</h3>
+        <p>Stale cached data served after a write. Acceptable for search (eventual consistency), but set clear staleness SLAs. Monitor the gap between writes and cache invalidation.</p>
+      </div>
+    </div>
+
+    <div class="pro-tip">
+      <div class="tip-header">Pro Tip</div>
+      <p>Implement <strong>stale-while-revalidate</strong> — serve the stale cached result immediately while asynchronously refreshing it in the background. Users get instant responses, and the cache stays warm. This is what <code>Cache-Control: stale-while-revalidate=60</code> does at the HTTP level.</p>
+    </div>
+  </section>
+
+</div>
+
+<footer>System Design Series — Caching for Search Systems Playground</footer>
+
+<script>
+/* ============ LRU SIMULATOR ============ */
+let lruCache = [];
+let lruSize = 5;
+let lruStats = { total: 0, hits: 0, misses: 0 };
+let lruHitRateHistory = [];
+let lruChart = null;
+
+function resetLRU() {
+  lruSize = parseInt(document.getElementById('lru-size').value);
+  document.getElementById('lru-size-val').textContent = lruSize + ' slots';
+  lruCache = [];
+  lruStats = { total: 0, hits: 0, misses: 0 };
+  lruHitRateHistory = [];
+  renderLRUSlots();
+  updateLRUStats();
+  document.getElementById('lru-hit-miss').innerHTML = '';
+  document.getElementById('lru-log').innerHTML = '';
+  if (lruChart) { lruChart.destroy(); lruChart = null; }
+  initLRUChart();
+}
+
+function queryLRU() {
+  const input = document.getElementById('lru-query');
+  const q = input.value.trim().toLowerCase();
+  if (!q) return;
+  input.value = '';
+  processLRUQuery(q);
+}
+
+function quickQuery(q) {
+  processLRUQuery(q);
+}
+
+function processLRUQuery(q) {
+  lruStats.total++;
+  const idx = lruCache.indexOf(q);
+  const isHit = idx !== -1;
+  const hm = document.getElementById('lru-hit-miss');
+  const log = document.getElementById('lru-log');
+
+  if (isHit) {
+    lruStats.hits++;
+    lruCache.splice(idx, 1);
+    lruCache.push(q);
+    hm.innerHTML = `<div class="hit-miss-badge hit">HIT — "${q}" found in cache</div>`;
+    log.innerHTML += `<div><span class="log-hit">[HIT]</span> "${q}" — moved to MRU position</div>`;
+  } else {
+    lruStats.misses++;
+    let evicted = null;
+    if (lruCache.length >= lruSize) {
+      evicted = lruCache.shift();
+    }
+    lruCache.push(q);
+    if (evicted) {
+      hm.innerHTML = `<div class="hit-miss-badge miss">MISS — "${q}" added, evicted "${evicted}"</div>`;
+      log.innerHTML += `<div><span class="log-miss">[MISS]</span> "${q}" — <span class="log-evict">evicted "${evicted}"</span></div>`;
+    } else {
+      hm.innerHTML = `<div class="hit-miss-badge miss">MISS — "${q}" added to cache</div>`;
+      log.innerHTML += `<div><span class="log-miss">[MISS]</span> "${q}" — added (cache not full)</div>`;
+    }
+  }
+
+  log.scrollTop = log.scrollHeight;
+  const rate = lruStats.total > 0 ? (lruStats.hits / lruStats.total * 100) : 0;
+  lruHitRateHistory.push(rate);
+  renderLRUSlots(isHit ? q : null);
+  updateLRUStats();
+  updateLRUChart();
+}
+
+function renderLRUSlots(highlightKey) {
+  const el = document.getElementById('lru-slots');
+  let html = '';
+  for (let i = 0; i < lruSize; i++) {
+    if (i < lruCache.length) {
+      const key = lruCache[i];
+      const cls = highlightKey === key ? 'cache-slot hit' : 'cache-slot';
+      html += `<div class="${cls}"><div class="slot-idx">${i}</div><div class="slot-key">${key}</div><div class="slot-meta">${i === 0 ? 'LRU' : i === lruCache.length - 1 ? 'MRU' : ''}</div></div>`;
+    } else {
+      html += `<div class="cache-slot empty"><div class="slot-idx">${i}</div><div class="slot-key">—</div></div>`;
+    }
+  }
+  el.innerHTML = html;
+}
+
+function updateLRUStats() {
+  document.getElementById('lru-total').textContent = lruStats.total;
+  document.getElementById('lru-hits').textContent = lruStats.hits;
+  document.getElementById('lru-misses').textContent = lruStats.misses;
+  const rate = lruStats.total > 0 ? (lruStats.hits / lruStats.total * 100).toFixed(1) : '0';
+  document.getElementById('lru-rate').textContent = rate + '%';
+}
+
+function initLRUChart() {
+  const ctx = document.getElementById('lru-chart').getContext('2d');
+  lruChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: [],
+      datasets: [{
+        label: 'Hit Rate %',
+        data: [],
+        borderColor: '#6c63ff',
+        backgroundColor: 'rgba(108,99,255,0.1)',
+        fill: true,
+        tension: 0.3,
+        pointRadius: 3,
+        pointBackgroundColor: '#6c63ff',
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { display: false } },
+      scales: {
+        y: { min: 0, max: 100, ticks: { color: '#9398ab', callback: v => v + '%' }, grid: { color: 'rgba(42,45,58,0.5)' } },
+        x: { ticks: { color: '#9398ab' }, grid: { color: 'rgba(42,45,58,0.3)' } }
+      }
+    }
+  });
+}
+
+function updateLRUChart() {
+  if (!lruChart) initLRUChart();
+  lruChart.data.labels = lruHitRateHistory.map((_, i) => i + 1);
+  lruChart.data.datasets[0].data = lruHitRateHistory;
+  lruChart.update();
+}
+
+resetLRU();
+
+/* ============ LFU vs LRU COMPARISON ============ */
+function runComparison() {
+  const seqStr = document.getElementById('cmp-sequence').value;
+  const seq = seqStr.split(',').map(s => s.trim()).filter(Boolean);
+  const size = parseInt(document.getElementById('cmp-size').value);
+
+  const lruResult = simulateLRU(seq, size);
+  const lfuResult = simulateLFU(seq, size);
+
+  renderCmpSlots('cmp-lru-slots', lruResult.cache, size);
+  renderCmpSlots('cmp-lfu-slots', lfuResult.cache.map(e => e.key), size);
+
+  document.getElementById('cmp-lru-hits').textContent = lruResult.hits;
+  document.getElementById('cmp-lfu-hits').textContent = lfuResult.hits;
+  document.getElementById('cmp-lru-rate').textContent = (lruResult.hits / seq.length * 100).toFixed(0) + '%';
+  document.getElementById('cmp-lfu-rate').textContent = (lfuResult.hits / seq.length * 100).toFixed(0) + '%';
+
+  document.getElementById('cmp-lru-log').innerHTML = lruResult.log;
+  document.getElementById('cmp-lfu-log').innerHTML = lfuResult.log;
+
+  const verdict = document.getElementById('cmp-verdict');
+  verdict.style.display = 'block';
+  const diff = lfuResult.hits - lruResult.hits;
+  if (diff > 0) {
+    document.getElementById('cmp-verdict-text').innerHTML =
+      `<strong style="color:var(--accent2);">LFU wins</strong> with ${lfuResult.hits} hits vs LRU's ${lruResult.hits} hits (+${diff}). LFU retains frequently accessed items even when they haven't been used recently — useful when popular queries have gaps between accesses.`;
+  } else if (diff < 0) {
+    document.getElementById('cmp-verdict-text').innerHTML =
+      `<strong style="color:var(--accent);">LRU wins</strong> with ${lruResult.hits} hits vs LFU's ${lfuResult.hits} hits (+${-diff}). LRU adapts faster to changing access patterns because it doesn't hold onto items with historically high frequency.`;
+  } else {
+    document.getElementById('cmp-verdict-text').innerHTML =
+      `<strong>Tie!</strong> Both got ${lruResult.hits} hits. Try a different sequence to see where they diverge.`;
+  }
+}
+
+function simulateLRU(seq, size) {
+  const cache = [];
+  let hits = 0;
+  let log = '';
+  seq.forEach(q => {
+    const idx = cache.indexOf(q);
+    if (idx !== -1) {
+      hits++;
+      cache.splice(idx, 1);
+      cache.push(q);
+      log += `<div><span class="log-hit">[HIT]</span> "${q}"</div>`;
+    } else {
+      let evicted = null;
+      if (cache.length >= size) evicted = cache.shift();
+      cache.push(q);
+      log += `<div><span class="log-miss">[MISS]</span> "${q}"${evicted ? ` <span class="log-evict">evicted "${evicted}"</span>` : ''}</div>`;
+    }
+  });
+  return { cache, hits, log };
+}
+
+function simulateLFU(seq, size) {
+  const cache = [];
+  let hits = 0;
+  let log = '';
+  seq.forEach(q => {
+    const entry = cache.find(e => e.key === q);
+    if (entry) {
+      hits++;
+      entry.freq++;
+      log += `<div><span class="log-hit">[HIT]</span> "${q}" freq=${entry.freq}</div>`;
+    } else {
+      let evicted = null;
+      if (cache.length >= size) {
+        cache.sort((a, b) => a.freq - b.freq);
+        evicted = cache.shift();
+      }
+      cache.push({ key: q, freq: 1 });
+      log += `<div><span class="log-miss">[MISS]</span> "${q}"${evicted ? ` <span class="log-evict">evicted "${evicted.key}" (freq=${evicted.freq})</span>` : ''}</div>`;
+    }
+  });
+  return { cache, hits, log };
+}
+
+function renderCmpSlots(id, keys, size) {
+  const el = document.getElementById(id);
+  let html = '';
+  for (let i = 0; i < size; i++) {
+    if (i < keys.length) {
+      html += `<div class="cache-slot"><div class="slot-key">${keys[i]}</div></div>`;
+    } else {
+      html += `<div class="cache-slot empty"><div class="slot-key">—</div></div>`;
+    }
+  }
+  el.innerHTML = html;
+}
+
+function resetComparison() {
+  document.getElementById('cmp-lru-slots').innerHTML = '';
+  document.getElementById('cmp-lfu-slots').innerHTML = '';
+  document.getElementById('cmp-lru-hits').textContent = '0';
+  document.getElementById('cmp-lfu-hits').textContent = '0';
+  document.getElementById('cmp-lru-rate').textContent = '0%';
+  document.getElementById('cmp-lfu-rate').textContent = '0%';
+  document.getElementById('cmp-lru-log').innerHTML = '';
+  document.getElementById('cmp-lfu-log').innerHTML = '';
+  document.getElementById('cmp-verdict').style.display = 'none';
+}
+
+/* ============ CACHE WARMING ============ */
+const QUERY_POOL = ['iphone','laptop','shoes','headphones','samsung','dress','watch','tablet','camera','charger',
+  'keyboard','monitor','mouse','speaker','jacket','sunglasses','ring','necklace','bag','coffee'];
+
+function zipfSample(pool, s) {
+  const weights = pool.map((_, i) => 1 / Math.pow(i + 1, s));
+  const total = weights.reduce((a, b) => a + b, 0);
+  const r = Math.random() * total;
+  let cum = 0;
+  for (let i = 0; i < pool.length; i++) {
+    cum += weights[i];
+    if (r <= cum) return pool[i];
+  }
+  return pool[pool.length - 1];
+}
+
+let warmChart = null;
+
+function initWarmChart() {
+  if (warmChart) warmChart.destroy();
+  const ctx = document.getElementById('warm-chart').getContext('2d');
+  warmChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: [],
+      datasets: [
+        { label: 'Cold Start', data: [], borderColor: '#ff6b6b', backgroundColor: 'rgba(255,107,107,0.08)', fill: false, tension: 0.3, pointRadius: 2 },
+        { label: 'Warm Start', data: [], borderColor: '#00c9a7', backgroundColor: 'rgba(0,201,167,0.08)', fill: false, tension: 0.3, pointRadius: 2 }
+      ]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { labels: { color: '#9398ab' } } },
+      scales: {
+        y: { min: 0, max: 100, ticks: { color: '#9398ab', callback: v => v + '%' }, grid: { color: 'rgba(42,45,58,0.5)' } },
+        x: { ticks: { color: '#9398ab' }, grid: { color: 'rgba(42,45,58,0.3)' }, title: { display: true, text: 'Query #', color: '#9398ab' } }
+      }
+    }
+  });
+}
+
+function runWarmingExperiment() {
+  const btn = document.getElementById('warm-run-btn');
+  btn.disabled = true;
+  btn.textContent = 'Running…';
+  initWarmChart();
+
+  const cacheSize = 10;
+  const numQueries = 50;
+  const queries = [];
+  for (let i = 0; i < numQueries; i++) queries.push(zipfSample(QUERY_POOL, 1.0));
+
+  const coldCache = [];
+  const warmCacheArr = QUERY_POOL.slice(0, 10).slice();
+  let coldHits = 0, coldMisses = 0;
+  let warmHits = 0, warmMisses = 0;
+  const coldRates = [];
+  const warmRates = [];
+
+  let step = 0;
+
+  function processStep() {
+    if (step >= numQueries) {
+      document.getElementById('warm-progress').style.width = '100%';
+      document.getElementById('warm-result').style.display = 'block';
+      const coldRate = (coldHits / numQueries * 100).toFixed(1);
+      const warmRate = (warmHits / numQueries * 100).toFixed(1);
+      document.getElementById('warm-result-text').innerHTML =
+        `Warm start achieved <strong>${warmRate}%</strong> hit rate vs cold start's <strong>${coldRate}%</strong>. ` +
+        `That's <strong>${(warmRate - coldRate).toFixed(1)}pp</strong> improvement, especially during the first 10-15 queries where the cold cache has near-zero hits.`;
+      btn.disabled = false;
+      btn.textContent = 'Run Experiment';
+      return;
+    }
+
+    const q = queries[step];
+
+    if (coldCache.indexOf(q) !== -1) { coldHits++; coldCache.splice(coldCache.indexOf(q), 1); coldCache.push(q); }
+    else { coldMisses++; if (coldCache.length >= cacheSize) coldCache.shift(); coldCache.push(q); }
+
+    if (warmCacheArr.indexOf(q) !== -1) { warmHits++; warmCacheArr.splice(warmCacheArr.indexOf(q), 1); warmCacheArr.push(q); }
+    else { warmMisses++; if (warmCacheArr.length >= cacheSize) warmCacheArr.shift(); warmCacheArr.push(q); }
+
+    const coldR = (step + 1) > 0 ? (coldHits / (step + 1) * 100) : 0;
+    const warmR = (step + 1) > 0 ? (warmHits / (step + 1) * 100) : 0;
+    coldRates.push(coldR);
+    warmRates.push(warmR);
+
+    document.getElementById('warm-cold-hits').textContent = coldHits;
+    document.getElementById('warm-cold-misses').textContent = coldMisses;
+    document.getElementById('warm-cold-rate').textContent = coldR.toFixed(0) + '%';
+    document.getElementById('warm-warm-hits').textContent = warmHits;
+    document.getElementById('warm-warm-misses').textContent = warmMisses;
+    document.getElementById('warm-warm-rate').textContent = warmR.toFixed(0) + '%';
+    document.getElementById('warm-progress').style.width = ((step + 1) / numQueries * 100) + '%';
+
+    warmChart.data.labels.push(step + 1);
+    warmChart.data.datasets[0].data.push(coldR);
+    warmChart.data.datasets[1].data.push(warmR);
+    warmChart.update('none');
+
+    step++;
+    setTimeout(processStep, 80);
+  }
+
+  processStep();
+}
+
+function clearWarming() {
+  document.getElementById('warm-cold-rate').textContent = '—';
+  document.getElementById('warm-warm-rate').textContent = '—';
+  document.getElementById('warm-cold-hits').textContent = '0';
+  document.getElementById('warm-cold-misses').textContent = '0';
+  document.getElementById('warm-warm-hits').textContent = '0';
+  document.getElementById('warm-warm-misses').textContent = '0';
+  document.getElementById('warm-progress').style.width = '0%';
+  document.getElementById('warm-result').style.display = 'none';
+  initWarmChart();
+}
+
+function warmCache() {
+  clearWarming();
+}
+
+/* ============ ZIPF CHART ============ */
+(function() {
+  const N = 20;
+  const s = 1.0;
+  const labels = [];
+  const freqs = [];
+  const cumulative = [];
+  let hN = 0;
+  for (let n = 1; n <= N; n++) hN += 1 / Math.pow(n, s);
+  let cum = 0;
+  for (let k = 1; k <= N; k++) {
+    labels.push('Rank ' + k);
+    const f = (1 / Math.pow(k, s)) / hN * 100;
+    freqs.push(f);
+    cum += f;
+    cumulative.push(cum);
+  }
+
+  const ctx = document.getElementById('zipf-chart').getContext('2d');
+  new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [
+        {
+          label: 'Query Frequency %',
+          data: freqs,
+          backgroundColor: 'rgba(108,99,255,0.5)',
+          borderColor: '#6c63ff',
+          borderWidth: 1,
+          borderRadius: 4,
+          yAxisID: 'y',
+        },
+        {
+          label: 'Cumulative %',
+          data: cumulative,
+          type: 'line',
+          borderColor: '#00c9a7',
+          backgroundColor: 'rgba(0,201,167,0.1)',
+          fill: false,
+          tension: 0.3,
+          pointRadius: 3,
+          pointBackgroundColor: '#00c9a7',
+          yAxisID: 'y',
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { labels: { color: '#9398ab' } },
+        title: { display: true, text: 'Zipf Distribution: Query Rank vs Frequency', color: '#9398ab' }
+      },
+      scales: {
+        y: { min: 0, max: 100, ticks: { color: '#9398ab', callback: v => v + '%' }, grid: { color: 'rgba(42,45,58,0.5)' } },
+        x: { ticks: { color: '#9398ab', maxRotation: 45 }, grid: { display: false } }
+      }
+    }
+  });
+})();
+
+/* --- TOC scroll highlighting --- */
+(function() {
+  const tocLinks = document.querySelectorAll('.toc a');
+  const sections = Array.from(tocLinks).map(a => document.querySelector(a.getAttribute('href')));
+
+  function onScroll() {
+    let current = 0;
+    const offset = 160;
+    sections.forEach((sec, i) => {
+      if (sec && sec.getBoundingClientRect().top <= offset) current = i;
+    });
+    tocLinks.forEach((a, i) => a.classList.toggle('active', i === current));
+  }
+  window.addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+})();
+</script>
+</body>
+</html>
