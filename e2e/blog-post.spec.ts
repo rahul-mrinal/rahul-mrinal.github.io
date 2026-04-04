@@ -37,7 +37,9 @@ test.describe('Blog Post Page', () => {
   test('content sections render with headings', async ({ page }) => {
     // At least one h2 section heading
     const sectionHeadings = page.locator('article h2');
-    expect(await sectionHeadings.count()).toBeGreaterThan(0);
+    await expect(sectionHeadings.first()).toBeVisible();
+    const count = await sectionHeadings.count();
+    expect(count).toBeGreaterThan(0);
   });
 
   test('tags render below header', async ({ page }) => {
@@ -45,7 +47,9 @@ test.describe('Blog Post Page', () => {
     const tags = page.locator('article header span').filter({
       hasText: /.+/,
     });
-    expect(await tags.count()).toBeGreaterThan(0);
+    await expect(tags.first()).toBeVisible();
+    const count = await tags.count();
+    expect(count).toBeGreaterThan(0);
   });
 
   test('series navigation renders at bottom', async ({ page }) => {
@@ -58,6 +62,8 @@ test.describe('Blog Post Page', () => {
 
     // Progress dots
     const progressDots = page.locator('div.h-1.rounded-full');
-    expect(await progressDots.count()).toBeGreaterThan(0);
+    await expect(progressDots.first()).toBeVisible();
+    const count = await progressDots.count();
+    expect(count).toBeGreaterThan(0);
   });
 });
