@@ -127,13 +127,15 @@ export default function FeaturedBlog() {
             <FiBookOpen size={16} />
             View All Posts
           </Link>
-          <Link
-            to="/blog/search-fundamentals/what-is-search"
-            className="inline-flex items-center gap-2 px-6 py-3 rounded-xl border border-border text-text-secondary font-semibold text-sm hover:border-accent hover:text-white hover:-translate-y-0.5 transition-all"
-          >
-            Start Reading
-            <FiArrowRight size={14} />
-          </Link>
+          {blogPosts.length > 0 && (
+            <Link
+              to={`/blog/${blogPosts[0].series}/${blogPosts[0].slug}`}
+              className="inline-flex items-center gap-2 px-6 py-3 rounded-xl border border-border text-text-secondary font-semibold text-sm hover:border-accent hover:text-white hover:-translate-y-0.5 transition-all"
+            >
+              Start Reading
+              <FiArrowRight size={14} />
+            </Link>
+          )}
         </motion.div>
       </div>
     </section>

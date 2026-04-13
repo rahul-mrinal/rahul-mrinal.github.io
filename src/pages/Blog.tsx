@@ -267,7 +267,7 @@ export default function Blog() {
         {/* Post grid */}
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
           {filteredPosts.map((post, i) => (
-            <BlogCard key={post.slug} post={post} index={i} />
+            <BlogCard key={`${post.series}/${post.slug}`} post={post} index={i} />
           ))}
         </div>
 

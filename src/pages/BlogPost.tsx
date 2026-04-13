@@ -1,12 +1,15 @@
 import { useParams, Link, Navigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { FiClock, FiCalendar, FiArrowLeft, FiExternalLink } from "react-icons/fi";
+import { FiClock, FiCalendar, FiArrowLeft } from "react-icons/fi";
 import Markdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import CodeBlock from "../components/blog/CodeBlock";
 import ReadingProgress from "../components/blog/ReadingProgress";
 import SeriesNav from "../components/blog/SeriesNav";
 import ShareButton from "../components/blog/ShareButton";
 import TableOfContents from "../components/blog/TableOfContents";
+import PlaygroundAccordion from "../components/playgrounds/PlaygroundAccordion";
+import PlaygroundComponent from "../components/playgrounds/PlaygroundComponent";
 import { getPostBySlug, getAdjacentPosts } from "../data/blogPosts";
 import { getPostSections } from "../data/blogPostContent";
 import { getSeriesById } from "../data/series";
@@ -93,15 +96,6 @@ export default function BlogPost() {
           </div>
 
           <div className="flex items-center gap-3 mt-6 flex-wrap">
-            {post.interactiveDemo && (
-              <a
-                href={post.interactiveDemo}
-                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg border border-accent/40 text-accent text-sm font-medium hover:bg-accent/10 transition-colors"
-              >
-                <FiExternalLink size={14} />
-                Open Interactive Playground
-              </a>
-            )}
             <ShareButton title={post.title} />
           </div>
         </motion.header>
@@ -121,6 +115,7 @@ export default function BlogPost() {
               </h2>
               <div className="text-text-secondary leading-relaxed prose-content">
                 <Markdown
+                  remarkPlugins={[remarkGfm]}
                   components={{
                     p: ({ children }) => <p className="mb-3">{children}</p>,
                     strong: ({ children }) => (
@@ -137,6 +132,20 @@ export default function BlogPost() {
                     blockquote: ({ children }) => (
                       <blockquote className="border-l-2 border-accent pl-4 italic text-text-secondary/80 my-4">{children}</blockquote>
                     ),
+                    table: ({ children }) => (
+                      <div className="overflow-x-auto my-4">
+                        <table className="w-full text-sm border-collapse">{children}</table>
+                      </div>
+                    ),
+                    thead: ({ children }) => (
+                      <thead className="border-b border-border">{children}</thead>
+                    ),
+                    th: ({ children }) => (
+                      <th className="text-left text-white font-semibold px-3 py-2 text-xs uppercase tracking-wider">{children}</th>
+                    ),
+                    td: ({ children }) => (
+                      <td className="px-3 py-2 border-b border-border/50">{children}</td>
+                    ),
                   }}
                 >
                   {section.content}
@@ -148,6 +157,11 @@ export default function BlogPost() {
                   language={section.language || "python"}
                   filename={section.filename}
                 />
+              )}
+              {section.playground && (
+                <PlaygroundAccordion title={`Try it: ${section.heading}`}>
+                  <PlaygroundComponent name={section.playground} />
+                </PlaygroundAccordion>
               )}
             </motion.section>
           ))}

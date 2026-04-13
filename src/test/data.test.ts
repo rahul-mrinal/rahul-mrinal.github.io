@@ -16,8 +16,8 @@ import {
 } from "../data/series";
 
 describe("blogPosts", () => {
-  it("contains 36 posts", () => {
-    expect(blogPosts).toHaveLength(36);
+  it("contains 52 posts", () => {
+    expect(blogPosts).toHaveLength(52);
   });
 
   it("every post has required fields", () => {
@@ -104,6 +104,25 @@ describe("getPostSections", () => {
     expect(sections[0].heading).toBeTruthy();
   });
 
+  it("returns sections for agentic-ai post", () => {
+    const sections = getPostSections(
+      "multi-agent-foundations",
+      "what-is-multi-agent-system"
+    );
+    expect(sections.length).toBeGreaterThan(0);
+    expect(sections[0].heading).toBeTruthy();
+  });
+
+  it("every blogPost has non-empty content", () => {
+    for (const post of blogPosts) {
+      const sections = getPostSections(post.series, post.slug);
+      expect(
+        sections.length,
+        `Missing content for ${post.series}/${post.slug}`
+      ).toBeGreaterThan(0);
+    }
+  });
+
   it("returns empty array for non-existent post", () => {
     const sections = getPostSections("nonexistent", "nope");
     expect(sections).toHaveLength(0);
@@ -115,8 +134,8 @@ describe("series helpers", () => {
     expect(CATEGORIES).toHaveLength(3);
   });
 
-  it("SERIES has 8 entries", () => {
-    expect(SERIES).toHaveLength(8);
+  it("SERIES has 12 entries", () => {
+    expect(SERIES).toHaveLength(12);
   });
 
   it("getSeriesById finds existing series", () => {
@@ -153,5 +172,13 @@ describe("series helpers", () => {
 
   it("getSeriesColor returns default for unknown series", () => {
     expect(getSeriesColor("nonexistent")).toBe("#6c63ff");
+  });
+
+  it("getSeriesByCategory returns agentic-ai series", () => {
+    const series = getSeriesByCategory("agentic-ai");
+    expect(series.length).toBe(4);
+    for (let i = 1; i < series.length; i++) {
+      expect(series[i].order).toBeGreaterThan(series[i - 1].order);
+    }
   });
 });

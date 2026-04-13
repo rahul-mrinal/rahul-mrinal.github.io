@@ -62,11 +62,27 @@ test.describe('Blog Page', () => {
     await expect(firstCard.getByText(/\d+ min/)).toBeVisible();
   });
 
-  test('"Start from beginning" CTA visible by default', async ({ page }) => {
-    const cta = page.getByRole('link', {
-      name: /Search Fundamentals: What is Search/i,
-    });
+  test('"Start from the beginning" CTA visible by default', async ({ page }) => {
+    const cta = page.getByRole('link', { name: /Start from the beginning/i });
     await expect(cta).toBeVisible();
+  });
+
+  test('agentic AI category filtering works', async ({ page }) => {
+    // Wait for initial cards to render before clicking filter
+    const cards = page.locator('a[href^="/blog/"]').filter({ has: page.locator('h3') });
+    await expect(cards.first()).toBeVisible();
+
+    await page.getByRole('button', { name: /Agentic AI/i }).click();
+    await expect(page).toHaveURL(/category=agentic-ai/);
+
+    // Use Playwright's auto-retry to wait for the filtered card count
+    await expect(cards).toHaveCount(16, { timeout: 5000 });
+  });
+
+  test('agentic AI series pills appear', async ({ page }) => {
+    await page.getByRole('button', { name: /Agentic AI/i }).click();
+    await expect(page.getByRole('button', { name: /All Series/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Foundations/i })).toBeVisible();
   });
 
   test('clicking a blog card navigates to post', async ({ page }) => {

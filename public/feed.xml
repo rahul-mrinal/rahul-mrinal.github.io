@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
   <channel>
-    <title>Rahul Mrinal - Search Engineering Blog</title>
+    <title>Rahul Mrinal - Technical Blog</title>
     <link>https://rahulmrinal.github.io/blog</link>
-    <description>Deep-dive technical writing on search engineering, AI systems, and more.</description>
+    <description>Deep-dive technical writing on search engineering, multi-agent systems, agentic AI, and more.</description>
     <language>en-us</language>
-    <lastBuildDate>Sat, 03 Apr 2026 00:00:00 GMT</lastBuildDate>
+    <lastBuildDate>Sun, 13 Apr 2026 00:00:00 GMT</lastBuildDate>
     <atom:link href="https://rahulmrinal.github.io/feed.xml" rel="self" type="application/rss+xml" />
     <item>
       <title>What Is Search</title>
@@ -258,6 +258,118 @@
       <guid isPermaLink="true">https://rahulmrinal.github.io/blog/advanced-search/search-diversity</guid>
       <pubDate>Sat, 03 Apr 2026 00:00:00 GMT</pubDate>
       <category>Advanced Search</category>
+    </item>
+    <item>
+      <title>What Is a Multi-Agent System?</title>
+      <link>https://rahulmrinal.github.io/blog/multi-agent-foundations/what-is-multi-agent-system</link>
+      <guid isPermaLink="true">https://rahulmrinal.github.io/blog/multi-agent-foundations/what-is-multi-agent-system</guid>
+      <pubDate>Mon, 13 Apr 2026 00:00:00 GMT</pubDate>
+      <category>Multi-Agent Foundations</category>
+    </item>
+    <item>
+      <title>Why Multi-Agent Over Single-Agent?</title>
+      <link>https://rahulmrinal.github.io/blog/multi-agent-foundations/why-multi-agent</link>
+      <guid isPermaLink="true">https://rahulmrinal.github.io/blog/multi-agent-foundations/why-multi-agent</guid>
+      <pubDate>Mon, 13 Apr 2026 00:00:00 GMT</pubDate>
+      <category>Multi-Agent Foundations</category>
+    </item>
+    <item>
+      <title>Classification Framework</title>
+      <link>https://rahulmrinal.github.io/blog/multi-agent-foundations/classification-framework</link>
+      <guid isPermaLink="true">https://rahulmrinal.github.io/blog/multi-agent-foundations/classification-framework</guid>
+      <pubDate>Mon, 13 Apr 2026 00:00:00 GMT</pubDate>
+      <category>Multi-Agent Foundations</category>
+    </item>
+    <item>
+      <title>Sequential &amp; Selector Patterns</title>
+      <link>https://rahulmrinal.github.io/blog/architecture-patterns/sequential-and-selector</link>
+      <guid isPermaLink="true">https://rahulmrinal.github.io/blog/architecture-patterns/sequential-and-selector</guid>
+      <pubDate>Mon, 13 Apr 2026 00:00:00 GMT</pubDate>
+      <category>Architecture Patterns</category>
+    </item>
+    <item>
+      <title>Handoff &amp; Hierarchical Patterns</title>
+      <link>https://rahulmrinal.github.io/blog/architecture-patterns/handoff-and-hierarchical</link>
+      <guid isPermaLink="true">https://rahulmrinal.github.io/blog/architecture-patterns/handoff-and-hierarchical</guid>
+      <pubDate>Mon, 13 Apr 2026 00:00:00 GMT</pubDate>
+      <category>Architecture Patterns</category>
+    </item>
+    <item>
+      <title>Debate &amp; Ensemble Patterns</title>
+      <link>https://rahulmrinal.github.io/blog/architecture-patterns/debate-and-ensemble</link>
+      <guid isPermaLink="true">https://rahulmrinal.github.io/blog/architecture-patterns/debate-and-ensemble</guid>
+      <pubDate>Mon, 13 Apr 2026 00:00:00 GMT</pubDate>
+      <category>Architecture Patterns</category>
+    </item>
+    <item>
+      <title>Graph &amp; Blackboard Patterns</title>
+      <link>https://rahulmrinal.github.io/blog/architecture-patterns/graph-and-blackboard</link>
+      <guid isPermaLink="true">https://rahulmrinal.github.io/blog/architecture-patterns/graph-and-blackboard</guid>
+      <pubDate>Mon, 13 Apr 2026 00:00:00 GMT</pubDate>
+      <category>Architecture Patterns</category>
+    </item>
+    <item>
+      <title>Market &amp; Federated Patterns</title>
+      <link>https://rahulmrinal.github.io/blog/architecture-patterns/market-and-federated</link>
+      <guid isPermaLink="true">https://rahulmrinal.github.io/blog/architecture-patterns/market-and-federated</guid>
+      <pubDate>Mon, 13 Apr 2026 00:00:00 GMT</pubDate>
+      <category>Architecture Patterns</category>
+    </item>
+    <item>
+      <title>Communication Patterns</title>
+      <link>https://rahulmrinal.github.io/blog/agent-communication-memory/communication-patterns</link>
+      <guid isPermaLink="true">https://rahulmrinal.github.io/blog/agent-communication-memory/communication-patterns</guid>
+      <pubDate>Mon, 13 Apr 2026 00:00:00 GMT</pubDate>
+      <category>Agent Communication &amp; Memory</category>
+    </item>
+    <item>
+      <title>Memory in Multi-Agent Systems</title>
+      <link>https://rahulmrinal.github.io/blog/agent-communication-memory/memory-systems</link>
+      <guid isPermaLink="true">https://rahulmrinal.github.io/blog/agent-communication-memory/memory-systems</guid>
+      <pubDate>Mon, 13 Apr 2026 00:00:00 GMT</pubDate>
+      <category>Agent Communication &amp; Memory</category>
+    </item>
+    <item>
+      <title>Pattern Comparison Matrix</title>
+      <link>https://rahulmrinal.github.io/blog/agent-communication-memory/comparison-matrix</link>
+      <guid isPermaLink="true">https://rahulmrinal.github.io/blog/agent-communication-memory/comparison-matrix</guid>
+      <pubDate>Mon, 13 Apr 2026 00:00:00 GMT</pubDate>
+      <category>Agent Communication &amp; Memory</category>
+    </item>
+    <item>
+      <title>Decision Framework: When to Use What</title>
+      <link>https://rahulmrinal.github.io/blog/agent-communication-memory/decision-framework</link>
+      <guid isPermaLink="true">https://rahulmrinal.github.io/blog/agent-communication-memory/decision-framework</guid>
+      <pubDate>Mon, 13 Apr 2026 00:00:00 GMT</pubDate>
+      <category>Agent Communication &amp; Memory</category>
+    </item>
+    <item>
+      <title>Implementation Frameworks</title>
+      <link>https://rahulmrinal.github.io/blog/building-multi-agent-systems/implementation-frameworks</link>
+      <guid isPermaLink="true">https://rahulmrinal.github.io/blog/building-multi-agent-systems/implementation-frameworks</guid>
+      <pubDate>Mon, 13 Apr 2026 00:00:00 GMT</pubDate>
+      <category>Building Multi-Agent Systems</category>
+    </item>
+    <item>
+      <title>Real-World Applications</title>
+      <link>https://rahulmrinal.github.io/blog/building-multi-agent-systems/real-world-applications</link>
+      <guid isPermaLink="true">https://rahulmrinal.github.io/blog/building-multi-agent-systems/real-world-applications</guid>
+      <pubDate>Mon, 13 Apr 2026 00:00:00 GMT</pubDate>
+      <category>Building Multi-Agent Systems</category>
+    </item>
+    <item>
+      <title>Design Principles &amp; Anti-Patterns</title>
+      <link>https://rahulmrinal.github.io/blog/building-multi-agent-systems/design-principles</link>
+      <guid isPermaLink="true">https://rahulmrinal.github.io/blog/building-multi-agent-systems/design-principles</guid>
+      <pubDate>Mon, 13 Apr 2026 00:00:00 GMT</pubDate>
+      <category>Building Multi-Agent Systems</category>
+    </item>
+    <item>
+      <title>Putting It All Together</title>
+      <link>https://rahulmrinal.github.io/blog/building-multi-agent-systems/putting-it-all-together</link>
+      <guid isPermaLink="true">https://rahulmrinal.github.io/blog/building-multi-agent-systems/putting-it-all-together</guid>
+      <pubDate>Mon, 13 Apr 2026 00:00:00 GMT</pubDate>
+      <category>Building Multi-Agent Systems</category>
     </item>
   </channel>
 </rss>

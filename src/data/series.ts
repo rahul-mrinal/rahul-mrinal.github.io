@@ -138,6 +138,52 @@ export const SERIES: Series[] = [
       "Learning to rank, click models, personalization, autocomplete, and search diversity - the cutting edge.",
     postCount: 5,
   },
+
+  // Agentic AI
+  {
+    id: "multi-agent-foundations",
+    category: "agentic-ai",
+    title: "Multi-Agent Foundations",
+    shortTitle: "Foundations",
+    order: 1,
+    color: "#00c9a7",
+    description:
+      "What multi-agent systems are, why they beat single agents past a complexity threshold, and how to classify them along three axes.",
+    postCount: 3,
+  },
+  {
+    id: "architecture-patterns",
+    category: "agentic-ai",
+    title: "Architecture Patterns",
+    shortTitle: "Patterns",
+    order: 2,
+    color: "#ff6b6b",
+    description:
+      "Ten architecture patterns for multi-agent systems - from sequential pipelines to federated networks - with trade-offs, code, and real-world analogies.",
+    postCount: 5,
+  },
+  {
+    id: "agent-communication-memory",
+    category: "agentic-ai",
+    title: "Agent Communication & Memory",
+    shortTitle: "Comms & Memory",
+    order: 3,
+    color: "#6c63ff",
+    description:
+      "How agents talk to each other, how they remember, and a decision framework for choosing the right pattern.",
+    postCount: 4,
+  },
+  {
+    id: "building-multi-agent-systems",
+    category: "agentic-ai",
+    title: "Building Multi-Agent Systems",
+    shortTitle: "Building MAS",
+    order: 4,
+    color: "#ffd93d",
+    description:
+      "From frameworks (AutoGen, LangGraph, CrewAI) to real-world applications to design principles - putting multi-agent theory into practice.",
+    postCount: 4,
+  },
 ];
 
 export function getSeriesById(id: string): Series | undefined {
