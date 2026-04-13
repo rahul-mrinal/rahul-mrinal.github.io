@@ -45,6 +45,23 @@ test.describe('Home Page', () => {
     expect(await cards.count()).toBeGreaterThan(0);
   });
 
+  test('projects section renders with project cards', async ({ page }) => {
+    const section = page.locator('#projects');
+    await section.scrollIntoViewIfNeeded();
+    await expect(section).toBeVisible();
+
+    await expect(section.getByRole('heading', { name: 'Projects', exact: true })).toBeVisible();
+    await expect(section.getByText('Key AI & architecture projects')).toBeVisible();
+
+    // At least one glass card with project info
+    const cards = section.locator('.glass-card');
+    expect(await cards.count()).toBeGreaterThan(0);
+
+    // Tech stack chips visible
+    const techChips = section.locator('.glass-card').first().locator('span').filter({ hasText: /.+/ });
+    expect(await techChips.count()).toBeGreaterThan(0);
+  });
+
   test('skills section renders with skill pills', async ({ page }) => {
     const section = page.locator('#skills');
     await section.scrollIntoViewIfNeeded();

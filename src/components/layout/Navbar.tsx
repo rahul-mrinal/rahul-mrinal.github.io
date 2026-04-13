@@ -8,7 +8,7 @@ const NAV_ITEMS = [
   { label: "Blog", href: "/blog" },
 ];
 
-const HOME_SECTIONS = ["about", "experience", "skills", "education", "blog-preview", "contact"];
+const HOME_SECTIONS = ["about", "experience", "projects", "skills", "education", "blog-preview", "contact"];
 
 export default function Navbar() {
   const [scrolled, setScrolled] = useState(false);

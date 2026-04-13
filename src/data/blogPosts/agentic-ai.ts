@@ -11,7 +11,7 @@ export const agenticAiPosts: BlogPostMeta[] = [
       "Two or more autonomous agents, each with its own prompt, tools, and scope - why specialization beats generalization once complexity crosses a threshold.",
     tags: ["multi-agent", "MAS", "agents", "specialization"],
     readTime: "8 min",
-    publishDate: "2026-04-13",
+    publishDate: "2026-04-06",
   },
   {
     slug: "why-multi-agent",
@@ -22,7 +22,7 @@ export const agenticAiPosts: BlogPostMeta[] = [
       "Context window management, role clarity, parallel execution, adversarial quality, and tool isolation - the five reasons to go multi-agent.",
     tags: ["multi-agent", "context-window", "parallelism", "tool-isolation"],
     readTime: "10 min",
-    publishDate: "2026-04-13",
+    publishDate: "2026-04-07",
   },
   {
     slug: "classification-framework",
@@ -33,7 +33,7 @@ export const agenticAiPosts: BlogPostMeta[] = [
       "Classify any multi-agent system along three independent axes: control structure, communication topology, and agent relationships.",
     tags: ["classification", "topology", "centralized", "decentralized"],
     readTime: "10 min",
-    publishDate: "2026-04-13",
+    publishDate: "2026-04-08",
   },
 
   // ─── Series 10: Architecture Patterns ──────────────────────────────
@@ -46,7 +46,7 @@ export const agenticAiPosts: BlogPostMeta[] = [
       "The pipeline - fixed order, zero routing cost, cumulative latency. The selector - an LLM picks the next speaker, dynamic but one extra call per turn.",
     tags: ["sequential", "pipeline", "selector", "router", "autogen"],
     readTime: "14 min",
-    publishDate: "2026-04-13",
+    publishDate: "2026-04-09",
   },
   {
     slug: "handoff-and-hierarchical",
@@ -57,7 +57,7 @@ export const agenticAiPosts: BlogPostMeta[] = [
       "Handoff/Swarm - agents self-route via transfer functions. Manager-Worker - a manager decomposes, delegates, and reviews.",
     tags: ["handoff", "swarm", "hierarchical", "manager-worker", "delegation"],
     readTime: "14 min",
-    publishDate: "2026-04-13",
+    publishDate: "2026-04-09",
   },
   {
     slug: "debate-and-ensemble",
@@ -68,7 +68,7 @@ export const agenticAiPosts: BlogPostMeta[] = [
       "Debate/Critic - adversarial pressure catches errors. Broadcast/Ensemble - run N agents in parallel and aggregate the best output.",
     tags: ["debate", "critic", "ensemble", "voting", "best-of-n"],
     readTime: "14 min",
-    publishDate: "2026-04-13",
+    publishDate: "2026-04-10",
   },
   {
     slug: "graph-and-blackboard",
@@ -79,7 +79,7 @@ export const agenticAiPosts: BlogPostMeta[] = [
       "Graph/State Machine - deterministic edges, typed state, LangGraph-style. Blackboard - decoupled agents writing to a shared workspace.",
     tags: ["graph", "state-machine", "langgraph", "blackboard", "shared-memory"],
     readTime: "15 min",
-    publishDate: "2026-04-13",
+    publishDate: "2026-04-10",
   },
   {
     slug: "market-and-federated",
@@ -90,7 +90,7 @@ export const agenticAiPosts: BlogPostMeta[] = [
       "Market/Auction - agents bid for tasks, self-organizing load balance. Federated - peer-to-peer, no single point of failure, consensus-based.",
     tags: ["market", "auction", "federated", "decentralized", "consensus"],
     readTime: "12 min",
-    publishDate: "2026-04-13",
+    publishDate: "2026-04-11",
   },
 
   // ─── Series 11: Agent Communication & Memory ──────────────────────
@@ -103,7 +103,7 @@ export const agenticAiPosts: BlogPostMeta[] = [
       "Five ways agents talk: direct messaging, broadcast, shared state, publish/subscribe, and streaming token-level communication.",
     tags: ["communication", "messaging", "pub-sub", "streaming", "broadcast"],
     readTime: "10 min",
-    publishDate: "2026-04-13",
+    publishDate: "2026-04-11",
   },
   {
     slug: "memory-systems",
@@ -114,7 +114,7 @@ export const agenticAiPosts: BlogPostMeta[] = [
       "Working memory, long-term episodic, semantic knowledge, procedural how-to, and inter-agent shared memory - the five memory types that separate demos from production.",
     tags: ["memory", "working-memory", "episodic", "semantic", "procedural"],
     readTime: "12 min",
-    publishDate: "2026-04-13",
+    publishDate: "2026-04-12",
   },
   {
     slug: "comparison-matrix",
@@ -125,7 +125,7 @@ export const agenticAiPosts: BlogPostMeta[] = [
       "All ten architecture patterns compared side-by-side across control, determinism, routing cost, parallelism, quality mechanism, and complexity.",
     tags: ["comparison", "matrix", "trade-offs", "patterns"],
     readTime: "8 min",
-    publishDate: "2026-04-13",
+    publishDate: "2026-04-12",
   },
   {
     slug: "decision-framework",
@@ -171,7 +171,7 @@ export const agenticAiPosts: BlogPostMeta[] = [
       "Six principles (single responsibility, fail gracefully, observability) and six anti-patterns (god agent, echo chamber, infinite loop) for multi-agent design.",
     tags: ["design-principles", "anti-patterns", "best-practices", "observability"],
     readTime: "10 min",
-    publishDate: "2026-04-13",
+    publishDate: "2026-04-14",
   },
   {
     slug: "putting-it-all-together",
@@ -182,6 +182,6 @@ export const agenticAiPosts: BlogPostMeta[] = [
       "End-to-end design of a multi-agent customer support system - choosing patterns, defining agents, wiring communication, and adding guardrails.",
     tags: ["end-to-end", "system-design", "customer-support", "capstone"],
     readTime: "15 min",
-    publishDate: "2026-04-13",
+    publishDate: "2026-04-14",
   },
 ];

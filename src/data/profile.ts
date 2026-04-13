@@ -198,10 +198,77 @@ export const skills: SkillGroup[] = [
     ],
     color: "#ffd93d",
   },
+
   {
     category: "Tools & Visualization",
-    skills: ["Power BI", "Alteryx", "Postman"],
+    skills: ["Power BI", "Alteryx", "Git", "Langfuse", "Postman", "OCR Workflows"],
     color: "#ffa94d",
+  },
+];
+
+export interface Project {
+  title: string;
+  subtitle: string;
+  role: string;
+  highlights: string[];
+  techStack: string[];
+}
+
+export const projects: Project[] = [
+  {
+    title: "AI-Powered Enterprise Desktop Assistant",
+    subtitle: "Multi-Platform AI Copilot",
+    role: "Solution Architect & Technical Lead",
+    highlights: [
+      "Designed end-to-end architecture for an enterprise AI assistant featuring a 3D animated avatar with real-time voice interaction, deployed across desktop (Electron), web (React widget), and mobile (React Native) from a single platform-agnostic core SDK",
+      "Engineered a configurable voice provider abstraction layer supporting OpenAI Realtime, Google Gemini Live, and Azure OpenAI, enabling enterprise-tunable cost-quality tradeoffs across speech-to-speech AI models",
+      "Built an MCP (Model Context Protocol) integration framework with 4-tier enterprise governance (built-in, verified, approved, blocked), admin-controlled policies, tool-level filtering, and full audit logging",
+      "Implemented long-term memory system using Azure AI Search (vector embeddings) and Cosmos DB for cross-session personalization, RAG-based context injection, and communication style modeling",
+      "Designed Azure deployment topology with Front Door (WAF), API Management (JWT validation), VNet-integrated Functions, Private Endpoints for all data services, and Bicep IaC across dev/staging/prod environments",
+      "Led Phase 1 delivery: Turborepo monorepo (5 packages), Electron shell with auto-launch, frameless window, system tray, and Azure Entra ID SSO via MSAL PKCE, establishing foundation for the full 12-phase product roadmap",
+    ],
+    techStack: ["Azure OpenAI", "Azure AI Search", "Cosmos DB", "Electron", "React Native", "Turborepo", "MCP", "Bicep IaC", "Azure Entra ID"],
+  },
+  {
+    title: "AI Regulatory Intelligence Platform",
+    subtitle: "Responsible AI Compliance",
+    role: "Solution Architect & Technical Lead",
+    highlights: [
+      "Architected an intelligent regulatory analysis system that ingests and decomposes global regulatory documents across jurisdictions, enabling automated identification of compliance gaps, obligation mapping, and cross-border regulatory alignment",
+      "Built high-fidelity document ingestion and structured extraction pipelines using Azure Document Intelligence, converting long-form regulatory PDFs into clause-level structured data with obligation tagging, entity extraction, and hierarchical section parsing",
+      "Designed and implemented multi-agent workflows that decompose complex regulatory documents into searchable units, classify obligation types, and map external regulations against internal policy knowledge bases",
+      "Developed a retrieval and alignment engine that programmatically matches incoming regulatory requirements to existing internal policies, surfacing gaps, conflicts, and areas requiring legal review with confidence-scored recommendations",
+      "Automated large-scale cross-jurisdictional analysis workflows that previously required weeks of manual legal review, significantly improving consistency of compliance assessments and reducing time-to-regulatory-readiness",
+    ],
+    techStack: ["Azure Document Intelligence", "Multi-agent Systems", "LLMs", "RAG", "Azure AI Search", "Python"],
+  },
+  {
+    title: "AI-Powered Predictive Insights & Search Platform",
+    subtitle: "Aviation MRO Analytics",
+    role: "Solution Architect",
+    highlights: [
+      "Designed and built an AI-powered aviation maintenance analytics platform for a major aerospace manufacturer, enabling reliability engineers, supervisors, and executive leadership to go from question to cited, decision-ready insight in minutes",
+      "Architected a multi-agent system on Azure AI Foundry with 5 specialized agents (Text-to-SQL, Data Extraction, Non-safety Report AI, Analytics, Graph Analytics), each routing queries to the optimal retrieval strategy based on intent",
+      "Engineered a hybrid retrieval pipeline (SQL + Vector + Graph) that fuses structured data queries with semantic document search and relationship-aware entity linking, delivering confidence-scored answers with inline citations",
+      "Built a governed Prompt Library with persona-aware one-click starters parameterized by fleet, date, and tail number — capturing expert analytical workflows as reusable, vetted templates",
+      "Deployed on Azure with enterprise-grade architecture: Application Gateway with WAF and DDoS protection, multi-zone App Service, Container Apps with private VNet ingress, Cosmos DB for session state, and Azure AI Search for vector indices",
+      "Delivered role-aware analytics enabling root-cause investigation, fleet reliability analysis, and executive-ready summaries with exportable charts — all grounded in governed, auditable data sources",
+    ],
+    techStack: ["Azure AI Foundry", "Multi-agent Systems", "Text-to-SQL", "Azure AI Search", "Cosmos DB", "Graph Analytics", "Python"],
+  },
+  {
+    title: "AI-Powered Compliance Validation Platform",
+    subtitle: "Pharma MLR Review",
+    role: "Solution Architect & Technical Lead",
+    highlights: [
+      "Architected and led development of an AI-powered compliance review platform for pharmaceutical marketing materials, automating Medical-Legal-Regulatory (MLR) validation across promotional emails, brochures, and websites against FDA-approved labels",
+      "Designed and built a serverless processing engine spanning multiple AWS services (Lambdas, ECS Fargate workers, Step Functions), orchestrating a parallel fan-out pipeline that decomposes documents into structured elements and executes AI-powered compliance checks simultaneously",
+      "Engineered a multi-model LLM integration layer (GPT-4o, o4-mini, GPT-5) with a custom token-bucket rate limiter, Redis-backed response caching, async queue processing, and S3 payload offload — handling high-throughput inference across all 19 check types",
+      "Built a semantic claim matching system using OpenSearch vector indices for AFD similarity, reference validation, and visual comparison, enabling automated detection of unsupported claims, missing citations, and inconsistent safety language",
+      "Developed a full-featured Admin Portal (FastAPI + Next.js) with multi-tenant RBAC (4 roles, granular permissions), a two-tier check configuration system, business rule management, and audit logging across 17 API route modules",
+      "Implemented multi-tenant architecture partitioned by RCO, with a shared Lambda layer, multi-auth SSO (MS Entra, Ping Federate, SAML), and a dual-repo deployment strategy porting across CI/CD environments (GitHub Actions to Azure DevOps)",
+    ],
+    techStack: ["AWS Lambda", "Step Functions", "ECS Fargate", "OpenSearch", "Redis", "FastAPI", "Next.js", "GPT-4o", "S3"],
   },
 ];
 
@@ -222,7 +289,7 @@ export const education: Education[] = [
   {
     degree: "B.E, Electronics & Communication Engineering",
     institution: "NMAM Institute of Technology, NITTE",
-    period: "2014 – 2018",
+    period: "May 2014 – May 2018",
   },
 ];
 

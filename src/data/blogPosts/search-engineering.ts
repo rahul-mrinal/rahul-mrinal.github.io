@@ -11,7 +11,7 @@ export const searchEngineeringPosts: BlogPostMeta[] = [
       "Start from the very beginning - brute-force scanning vs indexed retrieval, and why search is fundamentally an O(N) to O(1) problem.",
     tags: ["search", "brute-force", "indexing", "big-o"],
     readTime: "8 min",
-    publishDate: "2026-03-26",
+    publishDate: "2025-11-04",
   },
   {
     slug: "bm25-from-scratch",
@@ -22,7 +22,7 @@ export const searchEngineeringPosts: BlogPostMeta[] = [
       "Build the BM25 ranking algorithm piece by piece - term frequency, IDF, length normalization, saturation, and the k1/b parameters.",
     tags: ["bm25", "tf-idf", "ranking", "algorithm"],
     readTime: "15 min",
-    publishDate: "2026-03-26",
+    publishDate: "2025-11-08",
   },
   {
     slug: "tf-idf-vs-bm25",
@@ -33,7 +33,7 @@ export const searchEngineeringPosts: BlogPostMeta[] = [
       "Compare TF-IDF and BM25 on keyword stuffing, long documents, and rare terms to see exactly where and why BM25 wins.",
     tags: ["tf-idf", "bm25", "comparison", "ranking"],
     readTime: "10 min",
-    publishDate: "2026-03-26",
+    publishDate: "2025-11-13",
   },
   {
     slug: "vector-search",
@@ -44,7 +44,7 @@ export const searchEngineeringPosts: BlogPostMeta[] = [
       "Understand embeddings, cosine similarity, and why vectors capture semantic meaning that keywords miss entirely.",
     tags: ["vectors", "embeddings", "cosine-similarity", "semantic"],
     readTime: "12 min",
-    publishDate: "2026-03-26",
+    publishDate: "2025-11-17",
   },
   {
     slug: "hybrid-search",
@@ -55,7 +55,7 @@ export const searchEngineeringPosts: BlogPostMeta[] = [
       "Combine BM25 and vector search using Reciprocal Rank Fusion (RRF) to get the precision of keywords with the recall of semantics.",
     tags: ["hybrid", "rrf", "bm25", "vectors"],
     readTime: "10 min",
-    publishDate: "2026-03-27",
+    publishDate: "2025-11-22",
   },
   {
     slug: "evaluation-metrics",
@@ -66,7 +66,7 @@ export const searchEngineeringPosts: BlogPostMeta[] = [
       "Master precision, recall, F1, MRR, MAP, and NDCG - the metrics that tell you if your search engine actually works.",
     tags: ["precision", "recall", "ndcg", "mrr", "map"],
     readTime: "12 min",
-    publishDate: "2026-03-27",
+    publishDate: "2025-11-27",
   },
 
   // ─── Series 2: Indexing ──────────────────────────────────────────
@@ -79,7 +79,7 @@ export const searchEngineeringPosts: BlogPostMeta[] = [
       "Build an inverted index from scratch - the data structure that makes sub-second search across billions of documents possible.",
     tags: ["inverted-index", "data-structure", "posting-list"],
     readTime: "12 min",
-    publishDate: "2026-03-27",
+    publishDate: "2025-12-03",
   },
   {
     slug: "document-chunking",
@@ -90,7 +90,7 @@ export const searchEngineeringPosts: BlogPostMeta[] = [
       "Break large documents into optimal chunks for indexing - fixed-size, sentence-based, paragraph-based, and semantic chunking.",
     tags: ["chunking", "indexing", "preprocessing"],
     readTime: "10 min",
-    publishDate: "2026-03-27",
+    publishDate: "2025-12-07",
   },
   {
     slug: "metadata-and-fields",
@@ -101,7 +101,7 @@ export const searchEngineeringPosts: BlogPostMeta[] = [
       "Structure your index with field types - text, keyword, numeric, boolean, date - and understand when to search vs filter.",
     tags: ["metadata", "fields", "filtering", "schema"],
     readTime: "8 min",
-    publishDate: "2026-03-28",
+    publishDate: "2025-12-12",
   },
   {
     slug: "index-operations",
@@ -112,7 +112,7 @@ export const searchEngineeringPosts: BlogPostMeta[] = [
       "Create, update, delete, and reindex - including zero-downtime reindexing with aliases and versioning strategies.",
     tags: ["crud", "reindex", "aliases", "zero-downtime"],
     readTime: "10 min",
-    publishDate: "2026-03-28",
+    publishDate: "2025-12-16",
   },
 
   // ─── Series 3: Query Processing ─────────────────────────────────
@@ -125,7 +125,7 @@ export const searchEngineeringPosts: BlogPostMeta[] = [
       "Build the full pipeline: tokenization, lowercasing, punctuation removal, stopword filtering, stemming, and lemmatization.",
     tags: ["tokenization", "stemming", "stopwords", "nlp"],
     readTime: "10 min",
-    publishDate: "2026-03-28",
+    publishDate: "2025-12-22",
   },
   {
     slug: "retrieval-flow",
@@ -136,7 +136,7 @@ export const searchEngineeringPosts: BlogPostMeta[] = [
       "Trace a query end-to-end through preprocessing, BM25 retrieval, vector search, RRF fusion, filtering, and final ranking.",
     tags: ["retrieval", "pipeline", "end-to-end"],
     readTime: "12 min",
-    publishDate: "2026-03-28",
+    publishDate: "2025-12-26",
   },
   {
     slug: "filtering",
@@ -147,7 +147,7 @@ export const searchEngineeringPosts: BlogPostMeta[] = [
       "Understand ranking vs filtering, pre-filter vs post-filter, faceted search, and the performance implications of each approach.",
     tags: ["filtering", "facets", "pre-filter", "post-filter"],
     readTime: "10 min",
-    publishDate: "2026-03-29",
+    publishDate: "2025-12-30",
   },
   {
     slug: "spell-correction",
@@ -158,7 +158,7 @@ export const searchEngineeringPosts: BlogPostMeta[] = [
       "Build 'Did you mean?' using edit distance and word frequency, plus synonym expansion for better recall.",
     tags: ["spell-check", "edit-distance", "synonyms", "query-expansion"],
     readTime: "10 min",
-    publishDate: "2026-03-29",
+    publishDate: "2026-01-04",
   },
 
   // ─── Series 4: Ranking & Relevance ──────────────────────────────
@@ -171,7 +171,7 @@ export const searchEngineeringPosts: BlogPostMeta[] = [
       "Design a ranking pipeline with candidate generation (L0), lightweight scoring (L1), and heavy re-ranking (L2) - the hiring funnel analogy.",
     tags: ["ranking", "re-ranking", "pipeline", "l0-l1-l2"],
     readTime: "12 min",
-    publishDate: "2026-03-29",
+    publishDate: "2026-01-09",
   },
   {
     slug: "hybrid-scoring",
@@ -182,7 +182,7 @@ export const searchEngineeringPosts: BlogPostMeta[] = [
       "Three production methods for combining BM25 and vector scores - linear combination, RRF, and learned fusion.",
     tags: ["hybrid-scoring", "rrf", "fusion", "normalization"],
     readTime: "10 min",
-    publishDate: "2026-03-29",
+    publishDate: "2026-01-14",
   },
   {
     slug: "relevance-tuning",
@@ -193,7 +193,7 @@ export const searchEngineeringPosts: BlogPostMeta[] = [
       "Field boosting, function scoring (recency, popularity), query-time boosting, and A/B testing for search relevance.",
     tags: ["boosting", "function-score", "tuning", "a-b-testing"],
     readTime: "10 min",
-    publishDate: "2026-03-30",
+    publishDate: "2026-01-19",
   },
   {
     slug: "ranking-signals",
@@ -204,7 +204,7 @@ export const searchEngineeringPosts: BlogPostMeta[] = [
       "Keyword, semantic, popularity, freshness, quality, and personalization signals - how they combine into a ranking scorecard.",
     tags: ["signals", "features", "scoring", "personalization"],
     readTime: "12 min",
-    publishDate: "2026-03-30",
+    publishDate: "2026-01-23",
   },
 
   // ─── Series 5: System Design ────────────────────────────────────
@@ -217,7 +217,7 @@ export const searchEngineeringPosts: BlogPostMeta[] = [
       "Back-of-envelope math for QPS, storage, memory, and bandwidth - the restaurant analogy for search capacity planning.",
     tags: ["capacity", "qps", "storage", "estimation"],
     readTime: "10 min",
-    publishDate: "2026-03-30",
+    publishDate: "2026-01-28",
   },
   {
     slug: "sharding-and-replication",
@@ -228,7 +228,7 @@ export const searchEngineeringPosts: BlogPostMeta[] = [
       "Split data across shards for throughput, replicate for availability - the pizza kitchen analogy for distributed search.",
     tags: ["sharding", "replication", "distributed", "scaling"],
     readTime: "12 min",
-    publishDate: "2026-03-30",
+    publishDate: "2026-02-02",
   },
   {
     slug: "caching",
@@ -239,7 +239,7 @@ export const searchEngineeringPosts: BlogPostMeta[] = [
       "LRU, LFU, and TTL caching strategies for search - what to cache, when to invalidate, and the librarian analogy.",
     tags: ["caching", "lru", "lfu", "invalidation"],
     readTime: "12 min",
-    publishDate: "2026-03-31",
+    publishDate: "2026-02-06",
   },
   {
     slug: "architecture-walkthrough",
@@ -250,7 +250,7 @@ export const searchEngineeringPosts: BlogPostMeta[] = [
       "Full system design deep-dive walkthrough - requirements, high-level design, query flow, ingestion pipeline, and failure modes.",
     tags: ["system-design", "architecture", "ecommerce", "walkthrough"],
     readTime: "18 min",
-    publishDate: "2026-03-31",
+    publishDate: "2026-02-11",
   },
 
   // ─── Series 6: Data Pipelines ───────────────────────────────────
@@ -263,7 +263,7 @@ export const searchEngineeringPosts: BlogPostMeta[] = [
       "Two fundamental approaches to moving data - nightly rebuilds vs instant updates, and when to use each.",
     tags: ["batch", "real-time", "streaming", "processing"],
     readTime: "10 min",
-    publishDate: "2026-03-31",
+    publishDate: "2026-02-16",
   },
   {
     slug: "etl-pipeline",
@@ -274,7 +274,7 @@ export const searchEngineeringPosts: BlogPostMeta[] = [
       "Build the Extract-Transform-Load pipeline - handling messy data, dead letter queues, monitoring, and error recovery.",
     tags: ["etl", "pipeline", "data-quality", "dlq"],
     readTime: "10 min",
-    publishDate: "2026-03-31",
+    publishDate: "2026-02-20",
   },
   {
     slug: "index-update-strategies",
@@ -285,7 +285,7 @@ export const searchEngineeringPosts: BlogPostMeta[] = [
       "Full reindex, partial update, upsert, and zero-downtime reindexing with alias swaps - keeping the index fresh.",
     tags: ["reindex", "upsert", "alias-swap", "freshness"],
     readTime: "10 min",
-    publishDate: "2026-04-01",
+    publishDate: "2026-02-25",
   },
   {
     slug: "data-quality",
@@ -296,7 +296,7 @@ export const searchEngineeringPosts: BlogPostMeta[] = [
       "Schema validation, completeness checks, freshness monitoring, and duplicate detection - ensuring your index is trustworthy.",
     tags: ["data-quality", "validation", "monitoring", "deduplication"],
     readTime: "8 min",
-    publishDate: "2026-04-01",
+    publishDate: "2026-02-28",
   },
 
   // ─── Series 7: RAG Systems ──────────────────────────────────────
@@ -309,7 +309,7 @@ export const searchEngineeringPosts: BlogPostMeta[] = [
       "Retrieval-Augmented Generation explained - the open-book exam analogy, the three problems RAG solves, and the R-A-G pipeline.",
     tags: ["rag", "llm", "retrieval", "generation"],
     readTime: "10 min",
-    publishDate: "2026-04-01",
+    publishDate: "2026-03-05",
   },
   {
     slug: "chunking-for-rag",
@@ -320,7 +320,7 @@ export const searchEngineeringPosts: BlogPostMeta[] = [
       "Why chunk size and overlap matter enormously for RAG quality - the index card analogy and five chunking strategies.",
     tags: ["chunking", "rag", "overlap", "strategies"],
     readTime: "10 min",
-    publishDate: "2026-04-01",
+    publishDate: "2026-03-09",
   },
   {
     slug: "retrieval-pipeline",
@@ -331,7 +331,7 @@ export const searchEngineeringPosts: BlogPostMeta[] = [
       "The complete RAG journey - offline (chunk → embed → store) and online (embed query → search → re-rank → prompt).",
     tags: ["retrieval", "embedding", "re-ranking", "pipeline"],
     readTime: "12 min",
-    publishDate: "2026-04-02",
+    publishDate: "2026-03-13",
   },
   {
     slug: "rag-evaluation",
@@ -342,7 +342,7 @@ export const searchEngineeringPosts: BlogPostMeta[] = [
       "Measure RAG quality with four metrics - context relevance, faithfulness, answer relevance, and chunk utilization.",
     tags: ["evaluation", "faithfulness", "relevance", "metrics"],
     readTime: "10 min",
-    publishDate: "2026-04-02",
+    publishDate: "2026-03-17",
   },
   {
     slug: "advanced-rag",
@@ -353,7 +353,7 @@ export const searchEngineeringPosts: BlogPostMeta[] = [
       "HyDE, multi-query retrieval, parent-child chunking, and self-RAG - patterns that push beyond basic retrieve-and-generate.",
     tags: ["hyde", "multi-query", "self-rag", "advanced"],
     readTime: "14 min",
-    publishDate: "2026-04-02",
+    publishDate: "2026-03-21",
   },
 
   // ─── Series 8: Advanced Search ──────────────────────────────────
@@ -366,7 +366,7 @@ export const searchEngineeringPosts: BlogPostMeta[] = [
       "Teach a machine to judge relevance - pointwise, pairwise, and listwise approaches with feature engineering for search.",
     tags: ["ltr", "machine-learning", "ranking", "features"],
     readTime: "14 min",
-    publishDate: "2026-04-03",
+    publishDate: "2026-03-25",
   },
   {
     slug: "click-models",
@@ -377,7 +377,7 @@ export const searchEngineeringPosts: BlogPostMeta[] = [
       "Implicit feedback, position bias, debiased CTR, and the cascade click model - turning clicks into training signal.",
     tags: ["clicks", "implicit-feedback", "position-bias", "ctr"],
     readTime: "12 min",
-    publishDate: "2026-04-03",
+    publishDate: "2026-03-28",
   },
   {
     slug: "personalization",
@@ -388,7 +388,7 @@ export const searchEngineeringPosts: BlogPostMeta[] = [
       "Same query, different results - user profiles, collaborative filtering, contextual personalization, and the filter bubble problem.",
     tags: ["personalization", "collaborative-filtering", "user-profiles"],
     readTime: "12 min",
-    publishDate: "2026-04-03",
+    publishDate: "2026-03-31",
   },
   {
     slug: "autocomplete",
@@ -399,7 +399,7 @@ export const searchEngineeringPosts: BlogPostMeta[] = [
       "Build autocomplete from a trie data structure - prefix search, popularity ranking, fuzzy matching, and real-time suggestions.",
     tags: ["autocomplete", "trie", "typeahead", "prefix-search"],
     readTime: "12 min",
-    publishDate: "2026-04-04",
+    publishDate: "2026-04-02",
   },
   {
     slug: "search-diversity",

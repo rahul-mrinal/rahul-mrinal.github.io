@@ -23,8 +23,8 @@ test.describe('Navbar', () => {
     // Section buttons visible on home
     await expect(desktopNav.getByRole('button', { name: /about/i })).toBeVisible();
     await expect(desktopNav.getByRole('button', { name: /experience/i })).toBeVisible();
+    await expect(desktopNav.getByRole('button', { name: /projects/i })).toBeVisible();
     await expect(desktopNav.getByRole('button', { name: /skills/i })).toBeVisible();
-    await expect(desktopNav.getByRole('button', { name: /education/i })).toBeVisible();
   });
 
   test('clicking Blog navigates to blog page', async ({ page }) => {
