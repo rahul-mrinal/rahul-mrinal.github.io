@@ -1,0 +1,51 @@
+---
+title: "Data Quality - Garbage In, Garbage Out"
+description: "Schema validation, completeness checks, freshness monitoring, and duplicate detection - ensuring your index is trustworthy."
+tags:
+  - "data-quality"
+  - "validation"
+  - "monitoring"
+  - "deduplication"
+readTime: "8 min"
+publishDate: "2026-02-28"
+seriesOrder: 4
+headings:
+  - "The Five Quality Dimensions"
+  - "Pre-Load Validation Checklist"
+  - "Post-Load Sanity Checks"
+  - "Key Takeaway"
+---
+## The Five Quality Dimensions
+
+Data quality is the invisible backbone of search relevance. When users complain about search quality, the root cause is often not the ranking algorithm - it's bad data:
+
+1. **Schema** - does the data match expected types? Strings in numeric fields cause indexing failures.
+2. **Completeness** - are required fields present? Missing titles make documents unsearchable.
+3. **Freshness** - is the data up to date? Stale prices erode user trust.
+4. **Consistency** - do related fields agree? A product marked "in stock" with quantity 0.
+5. **Uniqueness** - are there duplicates? Duplicate documents inflate result counts and waste index space.
+
+## Pre-Load Validation Checklist
+
+Run automated quality checks at every stage. A document that fails validation should never reach the index:
+
+| Check | What It Catches | Action on Failure |
+|---|---|---|
+| Required fields present | Missing title, ID | Reject to DLQ |
+| Field type validation | String in numeric field | Reject to DLQ |
+| Value range checks | Negative prices, year 9999 | Reject to DLQ |
+| Text length bounds | Empty descriptions, 10MB blobs | Truncate or reject |
+| Duplicate detection | Same ID twice in batch | Keep latest version |
+| Schema compatibility | Unknown fields | Add dynamic mapping or reject |
+| Encoding validation | Broken UTF-8, mojibake | Clean or reject |
+
+## Post-Load Sanity Checks
+
+After reindexing, validate before swapping the alias: compare document counts between old and new index (abort if new < 95% of old), run canary queries ("shoes", "laptop") and verify non-zero results, check field statistics (avg price, null rates) for anomalies.
+
+Freshness monitoring: track the timestamp of the most recently indexed document. Data Freshness = t_now - max(t_source_updated). If the gap exceeds your SLA, fire an alert. A stale pipeline might still be "running" - just not processing new data.
+
+## Key Takeaway
+
+Validate data at ingestion time, not query time. Bad data in the index is worse than missing data - it actively degrades search quality. Build automated quality checks into every pipeline stage: pre-load validation catches corrupt documents, post-load sanity checks prevent bad indexes from going live.
+

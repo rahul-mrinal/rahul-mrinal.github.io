@@ -1,0 +1,51 @@
+---
+title: "Search Diversity"
+description: "Don't show 10 identical results - MMR, intent-aware diversification, and the Jaguar problem."
+tags:
+  - "diversity"
+  - "mmr"
+  - "intent"
+  - "ambiguity"
+readTime: "10 min"
+publishDate: "2026-04-04"
+seriesOrder: 5
+headings:
+  - "The Jaguar Problem"
+  - "Maximal Marginal Relevance (MMR)"
+  - "Beyond MMR"
+  - "Key Takeaway"
+---
+## The Jaguar Problem
+
+Search "jaguar" - do you mean the car, the animal, the Jacksonville NFL team, or the macOS version? Without diversity, all 10 results might be about the car (most popular meaning). Diversity ensures coverage across intents, giving every interpretation a fair representation on the first page.
+
+Diversity is especially critical for: ambiguous queries (multiple meanings), eCommerce (show variety of brands, price points, categories), news (multiple perspectives on an event), and recommendations (avoid showing the same type of item repeatedly).
+
+## Maximal Marginal Relevance (MMR)
+
+MMR is the most widely used diversity algorithm. It builds the result list greedily: at each step, pick the document that's most relevant to the query but least similar to what you've already selected.
+
+The formula: MMR(d) = λ × relevance(d, query) - (1-λ) × max_similarity(d, selected_docs)
+
+λ controls the relevance-diversity trade-off: λ = 1.0 → pure relevance (no diversity), λ = 0.5 → balanced, λ = 0.0 → maximum diversity (ignore relevance). Drag the slider to see how changing λ reshuffles the ranked list.
+
+<PlaygroundAccordion title="Try it: Maximal Marginal Relevance (MMR)">
+  <PlaygroundComponent name="mmr-diversity" />
+</PlaygroundAccordion>
+
+## Beyond MMR
+
+| Method | Approach | Best For |
+|---|---|---|
+| **MMR** | Greedy relevance-diversity balance | General search, RAG |
+| **xQuAD** | Explicitly model sub-topics | Ambiguous queries |
+| **PM-2** | Proportional representation of intents | Multi-intent queries |
+| **Category diversification** | Ensure top-K has ≤2 results per category | eCommerce |
+| **DPP (Determinantal Point Process)** | Probabilistic diversity | Recommendations |
+
+For eCommerce, also diversify by brand (≤3 from same brand in top 10), price range (mix of budget and premium), and seller (prevent one seller from dominating).
+
+## Key Takeaway
+
+Diversity matters most for ambiguous queries. Use MMR as a simple, effective default. Set λ between 0.5-0.7 for a good balance. Measure diversity alongside relevance: a perfectly relevant but homogeneous result page is a bad user experience.
+

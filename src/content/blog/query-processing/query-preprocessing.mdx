@@ -1,0 +1,69 @@
+---
+title: "Query Preprocessing Pipeline"
+description: "Build the full pipeline: tokenization, lowercasing, punctuation removal, stopword filtering, stemming, and lemmatization."
+tags:
+  - "tokenization"
+  - "stemming"
+  - "stopwords"
+  - "nlp"
+readTime: "10 min"
+publishDate: "2025-12-22"
+seriesOrder: 1
+headings:
+  - "Why Preprocess?"
+  - "The Six Preprocessing Steps"
+  - "Interactive Preprocessing Pipeline"
+  - "Query to Embeddings"
+  - "Key Takeaway"
+---
+## Why Preprocess?
+
+Before a search query ever touches an index, it goes through a **preprocessing pipeline** that normalizes, expands, and cleans the raw user input. Each step dramatically affects recall and precision.
+
+Imagine you're a translator. Someone speaks to you with an accent, slang, and grammatical errors. Before translating, you mentally clean up the sentence, guess the intended words, and expand abbreviations. Query preprocessing does the same thing - it turns messy human input into a clean, structured representation that the search engine can work with.
+
+## The Six Preprocessing Steps
+
+**1. Tokenization** - Split raw query into tokens. Language-aware tokenizers handle contractions ("can't" -> ["ca", "n't"]), currency, and numbers correctly.
+
+**2. Lowercasing** - Convert tokens to lowercase so "Python", "PYTHON", and "python" all match. Exception: entity-sensitive contexts where "WHO" (organization) != "who" (pronoun).
+
+**3. Stemming vs Lemmatization** - Reduce words to root forms.
+
+| Aspect | Stemming | Lemmatization |
+|---|---|---|
+| Method | Rule-based suffix stripping | Dictionary + morphological analysis |
+| Speed | Very fast | Slower (needs POS tagging) |
+| "running" | -> "run" | -> "run" (verb) |
+| "better" | -> "better" (fails) | -> "good" (adjective) |
+| Best for | High recall, speed-critical | Precision, user-facing suggestions |
+
+**4. Stop Word Removal** - Remove common words ("the", "is", "at") that carry little search value. Modern systems with good IDF weighting often skip this step entirely.
+
+**5. Spell Correction** - Uses edit distance, n-gram overlap, and language models to fix typos. EditDistance("recieve", "receive") = 1.
+
+**6. Query Expansion** - Add synonyms or related terms. Methods: thesaurus-based (static dictionary), embedding-based (nearest neighbors in vector space), query logs (other users who searched X also searched Y).
+
+## Interactive Preprocessing Pipeline
+
+Type any query and watch each preprocessing step applied live - tokenization, lowercasing, spell correction, stop word removal, stemming, and synonym expansion.
+
+<PlaygroundAccordion title="Try it: Interactive Preprocessing Pipeline">
+  <PlaygroundComponent name="query-preprocessor" />
+</PlaygroundAccordion>
+
+## Query to Embeddings
+
+For vector/semantic search, the preprocessed query must be converted into a **dense vector** (embedding). The embedding model used to encode documents at indexing time **must be the same model** used to encode queries at search time - each model learns its own latent space.
+
+| Type | Design | Best For | Example Models |
+|---|---|---|---|
+| **Symmetric** | Same encoder for query and doc | Semantic similarity, duplicate detection | `all-MiniLM-L6-v2`, `gte-base` |
+| **Asymmetric** | Short query vs long document, may use instruction prefixes | Search, Q&A retrieval, RAG | `e5-large` (with "query:" prefix), `msmarco-distilbert` |
+
+Query embedding is generated at search time (latency matters: 5-50ms). Document embedding is generated at index time (batch processing, latency less critical). The sweet spot is a model small enough for real-time inference but large enough to capture semantic nuance.
+
+## Key Takeaway
+
+Apply the same preprocessing to both queries and documents at index time. Mismatched preprocessing is the #1 cause of "search returns nothing" bugs. The preprocessing pipeline is the foundation everything else builds on.
+

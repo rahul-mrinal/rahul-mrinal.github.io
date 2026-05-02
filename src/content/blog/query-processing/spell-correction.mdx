@@ -1,0 +1,81 @@
+---
+title: "Spell Correction & Query Expansion"
+description: "Build 'Did you mean?' using edit distance and word frequency, plus synonym expansion for better recall."
+tags:
+  - "spell-check"
+  - "edit-distance"
+  - "synonyms"
+  - "query-expansion"
+readTime: "10 min"
+publishDate: "2026-01-04"
+seriesOrder: 4
+headings:
+  - "The Typo Problem"
+  - "Edit Distance (Levenshtein)"
+  - "Correction Candidates and SymSpell"
+  - "Auto-Correct vs \"Did You Mean?\""
+  - "Query Expansion (Synonyms)"
+  - "Key Takeaway"
+---
+## The Typo Problem
+
+Studies show that **10-15% of search queries** contain spelling errors. On mobile, the rate jumps to 20%+. Without spell correction, these queries return zero or irrelevant results.
+
+| Platform | Typo Rate | Most Common Error |
+|---|---|---|
+| Desktop browser | ~10% | Adjacent key substitution |
+| Mobile (phone) | ~20% | Missing letter (fat-finger) |
+| Voice-to-text | ~25% | Phonetic confusion |
+| Non-native speakers | ~30% | Phonetic spelling |
+
+Four common typo types: **insertion** ("thhe" -> "the"), **deletion** ("th" -> "the"), **substitution** ("tge" -> "the"), **transposition** ("hte" -> "the").
+
+## Edit Distance (Levenshtein)
+
+The **Levenshtein distance** between two strings is the minimum number of single-character edits (insertions, deletions, substitutions) needed to transform one into the other. Dynamic programming fills an (m+1) x (n+1) matrix bottom-up.
+
+Edit distance 1 covers ~80% of typos; distance 2 covers ~95%. For a 5-letter word, edit distance 1 generates ~280 candidates, edit distance 2 generates ~78,000 - but only a tiny fraction will be real dictionary words.
+
+Try the interactive calculator below to visualize the DP matrix and optimal alignment path.
+
+<PlaygroundAccordion title="Try it: Edit Distance (Levenshtein)">
+  <PlaygroundComponent name="edit-distance-calculator" />
+</PlaygroundAccordion>
+
+## Correction Candidates and SymSpell
+
+Given a misspelled word, find all dictionary words within edit distance 1-2, then rank by **word frequency** (a common word is more likely to be the intended target).
+
+The probabilistic foundation: By Bayes' theorem, P(c|w) is proportional to P(w|c) x P(c). P(c) is the language model prior (how common is "wireless" vs "wisely"?). P(w|c) is the error model (how likely is the typo "wireles" given intended "wireless"?).
+
+**SymSpell** (Symmetric Delete Distance) is the production solution: precompute all delete-1 and delete-2 forms of every dictionary word at index time. At query time, compute only delete forms of the input. If any overlap, the words are within edit distance 2. This is ~1000x faster than brute force - SymSpell processes 1M corrections/sec on a single CPU core.
+
+## Auto-Correct vs "Did You Mean?"
+
+The decision of *when* to correct is as important as *how*:
+
+**Auto-correct**: Silently fix the query and show results for the corrected version. Use when confidence is very high (>95%) and the original query returns zero results.
+
+**Suggest ("Did you mean?")**: Show results for the original query but offer the correction as a link. Use when the original query has some results or confidence is moderate.
+
+Confidence signals: edit distance 1 = high confidence, original results = 0 = high confidence, correction is 100x more common = high confidence, adjacent key on QWERTY = high confidence.
+
+Context-aware correction uses **n-gram context**: "over there" -> keep as-is, "there apples" -> suggest "three apples".
+
+## Query Expansion (Synonyms)
+
+Even correctly spelled queries miss relevant documents when users and authors use different vocabulary. Synonym expansion bridges this gap.
+
+| Method | Source | Pros | Cons |
+|---|---|---|---|
+| **Curated synonym lists** | Domain experts | Highest precision | High maintenance cost |
+| **Learned embeddings** | Embedding space neighbors | High recall, low maintenance | Noisy ("dog" and "cat" are similar but not synonyms) |
+| **Query logs** | User search patterns | Real user vocabulary | Requires traffic |
+| **LLM rewriting** | Language model | Best intent reformulation | Expensive, 500ms+ latency |
+
+Risks of over-expansion: query drift ("Java" programming -> "coffee"), noise injection, and increased latency. Mitigation: give original terms 2x weight, use context-aware disambiguation, limit expansion depth, and always A/B test.
+
+## Key Takeaway
+
+The best search engine understands what users *meant*, not just what they typed. Spell correction fixes the "how they typed it" problem; query expansion fixes the "what words they chose" problem. Together they dramatically improve recall. Implement spell correction first (biggest impact on day 1), then add synonyms for common terms in your domain.
+

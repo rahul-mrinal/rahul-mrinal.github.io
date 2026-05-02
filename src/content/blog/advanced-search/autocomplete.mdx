@@ -1,0 +1,85 @@
+---
+title: "Autocomplete & Typeahead"
+description: "Build autocomplete from a trie data structure - prefix search, popularity ranking, fuzzy matching, and real-time suggestions."
+tags:
+  - "autocomplete"
+  - "trie"
+  - "typeahead"
+  - "prefix-search"
+readTime: "12 min"
+publishDate: "2026-04-02"
+seriesOrder: 4
+headings:
+  - "The Trie Data Structure"
+  - "Interactive Trie"
+  - "Production Autocomplete Architecture"
+  - "Key Takeaway"
+---
+## The Trie Data Structure
+
+A trie (prefix tree) is the backbone of autocomplete. Each node represents a character; paths from root to nodes spell out prefixes. To find suggestions for "pyt", traverse to the p→y→t node and collect all completions below it, ranked by popularity.
+
+Tries provide O(L) lookup where L is the prefix length - independent of the dictionary size. With millions of terms, this is critical for the &lt;50ms latency requirement.
+
+```python
+class TrieNode:
+    def __init__(self):
+        self.children = {}
+        self.is_end = False
+        self.popularity = 0
+
+class AutocompleteTrie:
+    def __init__(self):
+        self.root = TrieNode()
+
+    def insert(self, word, popularity=1):
+        node = self.root
+        for char in word.lower():
+            if char not in node.children:
+                node.children[char] = TrieNode()
+            node = node.children[char]
+        node.is_end = True
+        node.popularity += popularity
+
+    def suggest(self, prefix, limit=5):
+        node = self.root
+        for char in prefix.lower():
+            if char not in node.children:
+                return []
+            node = node.children[char]
+        results = []
+        self._collect(node, prefix, results)
+        return sorted(results, key=lambda x: -x[1])[:limit]
+
+    def _collect(self, node, prefix, results):
+        if node.is_end:
+            results.append((prefix, node.popularity))
+        for char, child in node.children.items():
+            self._collect(child, prefix + char, results)
+```
+
+## Interactive Trie
+
+Type a prefix and watch the trie find matching completions ranked by popularity. The trie is pre-loaded with common search terms.
+
+<PlaygroundAccordion title="Try it: Interactive Trie">
+  <PlaygroundComponent name="autocomplete-trie" />
+</PlaygroundAccordion>
+
+## Production Autocomplete Architecture
+
+In production, autocomplete combines multiple data sources:
+
+| Source | Weight | Example |
+|---|---|---|
+| Popular queries | High | Past search logs ranked by frequency |
+| Product titles | Medium | Direct matches from the catalog |
+| Category suggestions | Medium | "Electronics", "Kitchen" |
+| Recent user queries | Low | Personalized history |
+
+Cache aggressively: the same prefixes are queried repeatedly. Top-100 prefixes account for ~30% of autocomplete traffic (Zipf's law). Use Redis sorted sets for fast prefix + popularity lookups. Add fuzzy matching for typo tolerance (edit distance 1).
+
+## Key Takeaway
+
+Autocomplete must be fast (&lt;50ms) because it runs on every keystroke. Use a trie for prefix matching, rank by popularity/recency, add fuzzy matching for typo tolerance, and cache aggressively. The autocomplete experience is often the first impression of your search quality.
+

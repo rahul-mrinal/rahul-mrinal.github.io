@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://rahulmrinal.github.io/sitemap.xml
+Sitemap: https://rahul-mrinal.github.io/sitemap.xml

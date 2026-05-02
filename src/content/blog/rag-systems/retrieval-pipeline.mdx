@@ -1,0 +1,46 @@
+---
+title: "RAG Retrieval Pipeline"
+description: "The complete RAG journey - offline (chunk → embed → store) and online (embed query → search → re-rank → prompt)."
+tags:
+  - "retrieval"
+  - "embedding"
+  - "re-ranking"
+  - "pipeline"
+readTime: "12 min"
+publishDate: "2026-03-13"
+seriesOrder: 3
+headings:
+  - "Two Phases"
+  - "Step Through the Pipeline"
+  - "The Re-Ranking Difference"
+  - "Key Takeaway"
+---
+## Two Phases
+
+**Offline (indexing):** Raw documents → chunk → generate embeddings → store in vector database with metadata. This runs once per document (or on updates). Embedding generation is the bottleneck: ~500 texts/sec on GPU.
+
+**Online (querying):** Embed the user's query → retrieve top-K chunks via ANN search → re-rank with a cross-encoder → assemble the prompt with system instructions + retrieved context + user question → send to LLM for generation.
+
+## Step Through the Pipeline
+
+Click through each stage of the offline and online RAG pipeline. The offline phase runs asynchronously when documents change; the online phase runs synchronously for every user query.
+
+<PlaygroundAccordion title="Try it: Step Through the Pipeline">
+  <PlaygroundComponent name="rag-pipeline-flow" />
+</PlaygroundAccordion>
+
+## The Re-Ranking Difference
+
+The re-ranking step is often the difference between a good and great RAG system. Bi-encoders (used for initial retrieval) encode query and document independently - fast but miss fine-grained interactions. Cross-encoders process the query-document pair together, capturing token-level interactions.
+
+| Model | Type | Latency (10 docs) | Quality |
+|---|---|---|---|
+| all-MiniLM-L6-v2 | Bi-encoder | ~5ms | Baseline |
+| ms-marco-MiniLM | Cross-encoder | ~50ms | Good |
+| Cohere Rerank | API cross-encoder | ~100ms | Production-grade |
+| ColBERT v2 | Late interaction | ~30ms | Good speed/quality |
+
+## Key Takeaway
+
+Retrieve broadly (top 50-100 chunks), re-rank to find the best 3-5 chunks, and only send those to the LLM. This maximizes context quality within the token budget. The pipeline is a funnel: cheap retrieval on many candidates, expensive re-ranking on few.
+

@@ -1,0 +1,86 @@
+---
+title: "Market & Federated Patterns"
+description: "Market/Auction - agents bid for tasks, self-organizing load balance. Federated - peer-to-peer, no single point of failure, consensus-based."
+tags:
+  - "market"
+  - "auction"
+  - "federated"
+  - "decentralized"
+  - "consensus"
+readTime: "12 min"
+publishDate: "2026-04-11"
+seriesOrder: 5
+headings:
+  - "Market / Auction-Based"
+  - "Market - Strengths & Weaknesses"
+  - "Federated / Decentralized"
+  - "Federated - Strengths & Weaknesses"
+  - "Key Takeaway"
+---
+## Market / Auction-Based
+
+Tasks are announced to all agents. Each agent evaluates the task against its capabilities and resources, then submits a "bid" - a self-assessment of how well-suited it is for the task. The task is assigned to the highest bidder (or the bidder selected by a policy).
+
+1. A new task enters the system
+2. The task description is broadcast to all available agents
+3. Each agent evaluates: "How well can I handle this?"
+4. Agents submit bids (confidence scores, estimated quality, estimated time)
+5. A selection policy picks the winning agent (highest confidence, lowest cost, fastest, etc.)
+6. The winning agent executes the task
+
+<PlaygroundAccordion title="Try it: Market / Auction-Based">
+  <PlaygroundComponent name="auction-sim" />
+</PlaygroundAccordion>
+
+## Market - Strengths & Weaknesses
+
+**Strengths:**
+- **Self-organizing.** Agents route themselves based on their own capability assessment.
+- **Load balancing.** Busy agents bid lower; idle agents bid higher.
+- **Naturally scalable.** New agents join by simply participating in auctions.
+- **No central routing intelligence needed.** The routing emerges from bidding.
+
+**Weaknesses:**
+- **Bid quality.** Agents may overestimate or underestimate their ability.
+- **Overhead per task.** Every agent evaluates every task, even ones they can't handle.
+- **Strategic behavior.** Agents might "game" bidding if reward structures incentivize it.
+- **Not common in LLM systems.** More theoretical than practical for current AI agent frameworks.
+
+**When to use:** Large agent pools where different instances have different loads, systems with heterogeneous agent capabilities (different models, different tool access), dynamic environments where agent availability changes.
+
+## Federated / Decentralized
+
+There is no central coordinator, manager, or router. Each agent operates autonomously with its own data and tools. Agents communicate peer-to-peer when they need information or collaboration. Decisions are made through negotiation, consensus, or voting among agents.
+
+1. Each agent monitors its own domain/data source
+2. When an agent encounters a problem it can't solve alone, it queries neighboring agents
+3. Agents negotiate directly: "Can you provide X?" "I can, in exchange for Y."
+4. Results are assembled collaboratively, without any single agent seeing the full picture
+5. Consensus mechanisms ensure agreement on shared outputs
+
+## Federated - Strengths & Weaknesses
+
+**Strengths:**
+- **No single point of failure.** The system continues if any one agent goes down.
+- **Privacy preserving.** Each agent can keep its data local; only results are shared.
+- **Highly scalable.** No bottleneck at a central coordinator.
+- **Resilient.** Naturally handles partial failures and network partitions.
+
+**Weaknesses:**
+- **Consensus is hard.** Getting agents to agree on a final output requires complex protocols.
+- **Debugging nightmare.** No central log, no single view of what happened.
+- **Coordination overhead.** Peer-to-peer negotiation generates many messages.
+- **Rarely practical for LLM agents.** Current frameworks don't natively support this well.
+
+**When to use:** Multi-organization systems where no single entity should have full control, privacy-sensitive applications (healthcare, finance), large-scale distributed systems, research and experimental settings.
+
+## Key Takeaway
+
+Market and Federated patterns sit at the far end of the decentralization spectrum. They're the most powerful for large, heterogeneous, privacy-sensitive systems - but also the hardest to implement and debug. Most teams won't need them today, but understanding them helps you recognize when simpler patterns aren't enough.
+
+As the agentic AI ecosystem matures and standards like A2A (Agent-to-Agent protocol) become production-ready, federated architectures will become increasingly practical for multi-organization agent collaboration.
+
+<PlaygroundAccordion title="Try it: Key Takeaway">
+  <PlaygroundComponent name="decentralization-spectrum" />
+</PlaygroundAccordion>
+

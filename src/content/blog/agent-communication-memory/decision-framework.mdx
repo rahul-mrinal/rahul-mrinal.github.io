@@ -1,0 +1,81 @@
+---
+title: "Decision Framework: When to Use What"
+description: "Three questions to pick the right pattern, a use-case selection table, and the maturity progression most teams follow."
+tags:
+  - "decision-framework"
+  - "use-cases"
+  - "maturity"
+  - "selection"
+readTime: "10 min"
+publishDate: "2026-04-13"
+seriesOrder: 4
+headings:
+  - "The Three Questions"
+  - "Pattern Selection by Use Case"
+  - "The Maturity Progression"
+  - "Combining Patterns"
+---
+## The Three Questions
+
+Start every multi-agent design with these three questions:
+
+**Question 1: How predictable is the workflow?**
+- Very predictable (same steps every time) → **Sequential** or **Graph**
+- Somewhat predictable (known categories, varied handling) → **Selector** or **Handoff**
+- Unpredictable (open-ended tasks, novel queries) → **Hierarchical** or **Ensemble**
+
+**Question 2: How important is output quality vs. speed?**
+- Speed critical, quality acceptable → **Sequential** or **Handoff** (fewest LLM calls)
+- Quality critical, speed acceptable → **Debate** or **Ensemble** (multiple checks)
+- Balanced → **Selector** or **Hierarchical**
+
+**Question 3: Do you need auditability and reproducibility?**
+- Yes, strictly → **Graph** (deterministic paths, explicit state transitions)
+- Yes, mostly → **Sequential** or **Hierarchical** (clear chains of responsibility)
+- Not critical → **Selector**, **Handoff**, or **Ensemble**
+
+<PlaygroundAccordion title="Try it: The Three Questions">
+  <PlaygroundComponent name="pattern-wizard" />
+</PlaygroundAccordion>
+
+## Pattern Selection by Use Case
+
+| Use Case | Recommended Pattern | Why |
+|---|---|---|
+| Customer support chatbot | Selector or Handoff | Queries vary widely; need dynamic routing |
+| Code generation + review | Debate or Sequential | Quality benefits from critique; steps are known |
+| Research assistant | Hierarchical | Manager decomposes complex questions |
+| Document processing pipeline | Sequential or Graph | Stages are fixed and ordered |
+| Incident response | Graph + Hierarchical | Needs deterministic triage with expert analysis |
+| Creative brainstorming | Ensemble | Diverse perspectives improve ideation |
+| Production API | Graph | Auditability, reliability, testability |
+| Compliance review | Debate | Multiple reviewers catch different issues |
+| Multi-team collaboration | Blackboard or Federated | Teams work independently on shared artifact |
+
+<PlaygroundAccordion title="Try it: Pattern Selection by Use Case">
+  <PlaygroundComponent name="use-case-matcher" />
+</PlaygroundAccordion>
+
+## The Maturity Progression
+
+Most teams follow this evolution:
+
+1. **Start with Sequential.** Get agents working at all. Prove value.
+2. **Move to Selector or Handoff.** Add dynamic routing as query diversity grows.
+3. **Add Debate for quality.** Layer in a reviewer agent for high-stakes outputs.
+4. **Graduate to Graph.** When you need production reliability, encode the workflow explicitly.
+5. **Optimize with Ensemble.** For critical paths, run parallel agents and pick the best output.
+
+Don't skip steps. Each level teaches you something about your system's needs that informs the next level. Teams that jump straight to Graph often build overly complex graphs because they haven't learned which paths actually matter.
+
+## Combining Patterns
+
+Real production systems rarely use a single pattern. Common combinations:
+
+- **Graph + Debate:** Deterministic routing with adversarial quality checks at key nodes.
+- **Hierarchical + Ensemble:** A manager delegates to workers, and critical subtasks use best-of-N.
+- **Selector + Handoff:** A selector picks the initial agent, which can then hand off to specialists.
+- **Graph + Blackboard:** Graph controls the macro flow; agents within each node use a shared blackboard for coordination.
+
+The architecture patterns are building blocks, not straitjackets. Mix them to match your actual system requirements.
+

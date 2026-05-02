@@ -85,9 +85,11 @@ export default function Blog() {
           className="mb-8"
         >
           <div className="relative max-w-md">
-            <FiSearch size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#6d7290]" />
+            <label htmlFor="blog-search" className="sr-only">Search posts</label>
+            <FiSearch size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#6d7290]" aria-hidden />
             <input
-              type="text"
+              id="blog-search"
+              type="search"
               placeholder="Search posts by title, topic, or tag..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -96,9 +98,10 @@ export default function Blog() {
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery("")}
+                aria-label="Clear search"
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-[#6d7290] hover:text-white transition-colors"
               >
-                <FiX size={16} />
+                <FiX size={16} aria-hidden />
               </button>
             )}
           </div>

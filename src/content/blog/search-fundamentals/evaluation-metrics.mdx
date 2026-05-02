@@ -1,0 +1,145 @@
+---
+title: "Search Evaluation Metrics"
+description: "Master precision, recall, F1, MRR, MAP, and NDCG - the metrics that tell you if your search engine actually works."
+tags:
+  - "precision"
+  - "recall"
+  - "ndcg"
+  - "mrr"
+  - "map"
+readTime: "12 min"
+publishDate: "2025-11-27"
+seriesOrder: 6
+headings:
+  - "Why Metrics Matter"
+  - "Precision and Recall"
+  - "MRR - Mean Reciprocal Rank"
+  - "MAP - Mean Average Precision"
+  - "NDCG - The Gold Standard"
+  - "Metric Comparison"
+  - "Key Takeaway"
+---
+## Why Metrics Matter
+
+You can't improve what you can't measure. Search quality is subjective, but metrics make it objective. Imagine tuning a search engine by feel - "the results look okay." That's like optimizing a car engine by listening to it purr. Metrics are the dashboard gauges: they tell you exactly what's working and what's not.
+
+Metrics serve three purposes: **compare algorithms** (is BM25 better than TF-IDF for your corpus?), **track regressions** (did your latest ranking pipeline change make things worse?), and **guide optimization** (low precision? add better filtering. Low recall? expand query terms).
+
+| Question | Metric |
+|---|---|
+| Are the returned results actually relevant? | **Precision** |
+| Did we find all the relevant results? | **Recall** |
+| How quickly does the user find what they need? | **MRR** |
+| Are the best results ranked at the top? | **NDCG** |
+| Balance between precision and recall? | **F1 Score** |
+
+## Precision and Recall
+
+**Precision@K** = relevant documents in top-K / K. Of everything you returned, how much was actually relevant? High precision means few irrelevant results shown to the user. Precision = 1.0 means every result was relevant. Precision = 0.2 means only 1 in 5 was relevant - terrible experience.
+
+**Recall@K** = relevant documents in top-K / total relevant in corpus. Of all the relevant documents that exist, how many did you actually find? Recall = 1.0 means you found everything. Recall = 0.1 means the user is missing 90% of what they need.
+
+A search engine is like a fishing net. Precision asks: "Of all the fish I caught, what fraction are the type I wanted?" Recall asks: "Of all the target fish in the lake, what fraction did my net catch?" A tiny, fine net catches only target fish (high precision) but misses most (low recall). A massive net catches everything (high recall) but also junk (low precision).
+
+**F1 Score** = 2 * (Precision * Recall) / (Precision + Recall). The harmonic mean - it penalizes extreme imbalance. If Precision = 1.0 and Recall = 0.01, the arithmetic mean = 0.505 (sounds fine!) but the harmonic mean = 0.0198 (correctly shows the system is terrible).
+
+| System | Prioritize | Why |
+|---|---|---|
+| Legal discovery | Recall | Missing a relevant document can lose a case |
+| E-commerce search | Precision | Top results must be relevant - users won't scroll past page 1 |
+| RAG retrieval | Balance | Need enough relevant chunks (recall) but too much noise confuses the LLM |
+| Medical diagnosis | Recall | Missing a disease is worse than a false alarm |
+
+Use the interactive demo below to toggle document retrieval and watch precision, recall, and F1 update live.
+
+```python
+def precision_at_k(relevant, retrieved, k):
+    """What fraction of the top-k results are relevant?"""
+    top_k = retrieved[:k]
+    return len(set(top_k) & set(relevant)) / k
+
+def recall_at_k(relevant, retrieved, k):
+    """What fraction of all relevant docs appear in top-k?"""
+    top_k = retrieved[:k]
+    return len(set(top_k) & set(relevant)) / len(relevant)
+
+relevant = {"doc1", "doc3", "doc5"}
+retrieved = ["doc1", "doc2", "doc3", "doc4", "doc5"]
+
+print(f"P@3: {precision_at_k(relevant, retrieved, 3):.2f}")  # 0.67
+print(f"R@3: {recall_at_k(relevant, retrieved, 3):.2f}")     # 0.67
+```
+
+<PlaygroundAccordion title="Try it: Precision and Recall">
+  <PlaygroundComponent name="precision-recall-slider" />
+</PlaygroundAccordion>
+
+## MRR - Mean Reciprocal Rank
+
+How quickly does the user find the **first** relevant result? MRR measures this by averaging 1/rank of the first relevant result across all queries.
+
+**MRR = (1/|Q|) * sum(1 / rank_i)**
+
+MRR captures the "I'm feeling lucky" quality of your search engine. If the first result is always relevant (rank 1), MRR = 1.0. If users typically scroll to the 5th result, MRR = 0.2.
+
+| First relevant at rank | Reciprocal Rank | User Experience |
+|---|---|---|
+| 1 | 1.000 | Perfect - first result is what they need |
+| 2 | 0.500 | Good - second result works |
+| 3 | 0.333 | Okay - user scans a bit |
+| 5 | 0.200 | Mediocre - user digs through results |
+| 10 | 0.100 | Poor - user might give up |
+
+MRR is ideal for navigational queries ("take me to X") and Q&A systems where users just need the one right answer.
+
+## MAP - Mean Average Precision
+
+MAP extends precision to consider the full ranking, not just a single cutoff. For each query: at every rank position where a relevant doc appears, compute precision at that cutoff. Average those precision values. Then average across all queries.
+
+**AP(q) = (1/|Rel|) * sum(P(k) * rel(k))**
+
+Example: Results are [R, N, R, N, R] (R=relevant, N=not). P@1 = 1/1 = 1.0, P@3 = 2/3 = 0.67, P@5 = 3/5 = 0.60. AP = (1.0 + 0.67 + 0.60) / 3 = 0.756.
+
+MAP rewards systems that rank relevant docs higher. It's widely used in information retrieval benchmarks like TREC.
+
+## NDCG - The Gold Standard
+
+Precision and recall treat relevance as binary - relevant or not. But a "highly relevant" doc at position 3 is worse than a "perfectly relevant" doc at position 1. NDCG (Normalized Discounted Cumulative Gain) handles **graded relevance** (e.g., 0 = irrelevant, 1 = marginally relevant, 2 = relevant, 3 = highly relevant).
+
+The formula works in steps:
+
+1. **DCG@K** = sum of (2^rel_i - 1) / log2(i + 1). The numerator exponentially rewards higher relevance grades (a grade-3 doc contributes 7, while grade-1 contributes only 1). The log denominator discounts results at lower positions.
+2. **IDCG@K** = the ideal DCG - sort all results by relevance descending. This is the best possible score.
+3. **NDCG@K** = DCG@K / IDCG@K, normalized to [0, 1]. A score of 1.0 means perfect ranking.
+
+Worked example: Results with graded relevance [3, 2, 0, 1].
+- DCG = (2^3-1)/log2(2) + (2^2-1)/log2(3) + (2^0-1)/log2(4) + (2^1-1)/log2(5)
+- DCG = 7/1 + 3/1.585 + 0/2 + 1/2.322 = 7 + 1.893 + 0 + 0.431 = 9.324
+
+NDCG@10 is the most commonly reported metric in search. Most search competitions (TREC, Kaggle) use it as the primary metric. Use the calculator below to assign relevance grades and watch DCG, IDCG, and NDCG compute step by step.
+
+<PlaygroundAccordion title="Try it: NDCG - The Gold Standard">
+  <PlaygroundComponent name="ndcg-calculator" />
+</PlaygroundAccordion>
+
+## Metric Comparison
+
+Each metric captures a different aspect of search quality:
+
+| Metric | Measures | Relevance Type | Position-Aware? | Best For |
+|---|---|---|---|---|
+| Precision@K | How clean the results are | Binary | No | Web search, user-facing results |
+| Recall@K | How complete the results are | Binary | No | Legal discovery, medical search |
+| F1 | Balance of P and R | Binary | No | Single summary metric |
+| MRR | Speed to first relevant result | Binary | Yes (first only) | Q&A, navigational search |
+| MAP | Average precision across recall levels | Binary | Yes (all hits) | IR benchmarks |
+| NDCG@K | Ranking quality with graded relevance | Graded (0-3+) | Yes (all positions) | General ranking evaluation - gold standard |
+
+For most search systems, use NDCG. For a quick sanity check, Precision@5 tells stakeholders "of the first 5 results, how many are good?" They understand it immediately.
+
+## Key Takeaway
+
+There is no single "best" metric - each captures a different aspect of search quality. Match the metric to the task: Precision when showing garbage is unacceptable (e-commerce, ads). Recall when missing a relevant result is costly (legal, medical, security). MRR when users just need the one right answer (Q&A, autocomplete). NDCG when ranking order matters and relevance isn't binary (web search, recommendations).
+
+In practice, track **multiple metrics** simultaneously. A change that improves NDCG but tanks Precision@1 probably isn't worth it. The workflow: define relevance -> choose metrics -> measure baseline -> iterate and improve.
+

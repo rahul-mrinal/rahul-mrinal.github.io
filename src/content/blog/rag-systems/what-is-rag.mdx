@@ -1,0 +1,43 @@
+---
+title: "What is RAG?"
+description: "Retrieval-Augmented Generation explained - the open-book exam analogy, the three problems RAG solves, and the R-A-G pipeline."
+tags:
+  - "rag"
+  - "llm"
+  - "retrieval"
+  - "generation"
+readTime: "10 min"
+publishDate: "2026-03-05"
+seriesOrder: 1
+headings:
+  - "The Open-Book Exam Analogy"
+  - "The 3 Problems RAG Solves"
+  - "The RAG Pipeline"
+  - "Key Takeaway"
+---
+## The Open-Book Exam Analogy
+
+A plain LLM is like a closed-book exam - it can only use what it memorized during training. RAG is an open-book exam - the model retrieves relevant context from external documents before generating an answer. This means it can answer questions about your private data, stay current, and cite sources.
+
+The RAG pipeline has two distinct phases: an offline phase (index your documents) and an online phase (answer user queries). Both matter equally - a perfect LLM with bad retrieval produces bad answers.
+
+## The 3 Problems RAG Solves
+
+1. **Knowledge cutoff** - LLMs don't know about events after their training date. RAG retrieves current information from your knowledge base.
+2. **Hallucination** - grounding answers in retrieved documents reduces fabrication. The LLM can only state facts that appear in the context.
+3. **Private data** - your company's internal docs, Confluence pages, Slack history, and proprietary databases aren't in the training data. RAG makes them accessible.
+
+The quality bottleneck is almost always retrieval. If the right chunks aren't retrieved, even GPT-4 can't generate a correct answer. This is why search engineering skills are critical for RAG systems.
+
+## The RAG Pipeline
+
+Step through the complete RAG pipeline from document ingestion to answer generation. The offline phase processes and indexes your documents; the online phase handles user queries in real-time.
+
+<PlaygroundAccordion title="Try it: The RAG Pipeline">
+  <PlaygroundComponent name="rag-pipeline-flow" />
+</PlaygroundAccordion>
+
+## Key Takeaway
+
+RAG = Retrieve relevant context + Augment the prompt with that context + Generate an answer. The retrieval quality is the bottleneck - invest in chunking, embedding model selection, and hybrid search before tuning the LLM prompt.
+

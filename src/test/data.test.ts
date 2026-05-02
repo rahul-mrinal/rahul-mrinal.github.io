@@ -5,7 +5,6 @@ import {
   getPostsBySeries,
   getAdjacentPosts,
 } from "../data/blogPosts";
-import { getPostSections } from "../data/blogPostContent";
 import {
   CATEGORIES,
   SERIES,
@@ -97,35 +96,31 @@ describe("getAdjacentPosts", () => {
   });
 });
 
-describe("getPostSections", () => {
-  it("returns sections for existing post", () => {
-    const sections = getPostSections("search-fundamentals", "what-is-search");
-    expect(sections.length).toBeGreaterThan(0);
-    expect(sections[0].heading).toBeTruthy();
-  });
+const MDX_MODULES = import.meta.glob("../content/blog/**/*.mdx");
 
-  it("returns sections for agentic-ai post", () => {
-    const sections = getPostSections(
-      "multi-agent-foundations",
-      "what-is-multi-agent-system"
-    );
-    expect(sections.length).toBeGreaterThan(0);
-    expect(sections[0].heading).toBeTruthy();
-  });
-
-  it("every blogPost has non-empty content", () => {
+describe("MDX content files", () => {
+  it("every blogPost has an MDX file", () => {
     for (const post of blogPosts) {
-      const sections = getPostSections(post.series, post.slug);
+      const key = `../content/blog/${post.series}/${post.slug}.mdx`;
       expect(
-        sections.length,
-        `Missing content for ${post.series}/${post.slug}`
-      ).toBeGreaterThan(0);
+        MDX_MODULES[key],
+        `Missing MDX: ${post.series}/${post.slug}`
+      ).toBeDefined();
     }
   });
 
-  it("returns empty array for non-existent post", () => {
-    const sections = getPostSections("nonexistent", "nope");
-    expect(sections).toHaveLength(0);
+  it("has MDX file for what-is-search", () => {
+    expect(
+      MDX_MODULES["../content/blog/search-fundamentals/what-is-search.mdx"]
+    ).toBeDefined();
+  });
+
+  it("has MDX file for what-is-multi-agent-system", () => {
+    expect(
+      MDX_MODULES[
+        "../content/blog/multi-agent-foundations/what-is-multi-agent-system.mdx"
+      ]
+    ).toBeDefined();
   });
 });
 

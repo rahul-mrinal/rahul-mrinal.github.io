@@ -1,0 +1,73 @@
+---
+title: "Batch vs Real-Time Processing"
+description: "Two fundamental approaches to moving data - nightly rebuilds vs instant updates, and when to use each."
+tags:
+  - "batch"
+  - "real-time"
+  - "streaming"
+  - "processing"
+readTime: "10 min"
+publishDate: "2026-02-16"
+seriesOrder: 1
+headings:
+  - "Buffet vs Made-to-Order"
+  - "Batch Ingestion"
+  - "Real-Time Ingestion"
+  - "The Comparison"
+  - "Hybrid: The Production Answer"
+  - "Key Takeaway"
+---
+## Buffet vs Made-to-Order
+
+Batch processing is like a buffet - prepare everything at once, serve it all. Real-time is made-to-order - process each item as it arrives. The most fundamental architectural decision in any search pipeline is: how frequently do you update your index?
+
+## Batch Ingestion
+
+Scheduled bulk reindexing at fixed intervals - nightly, hourly, or on-demand. The simplest approach and often the right starting point.
+
+The pattern: Data Sources → Scheduler (Cron/Airflow) → Batch ETL Job → Build New Index → Alias Swap.
+
+Advantages: simple to build/test/debug, consistency guaranteed (full snapshot from source of truth), easy rollback (point alias back), can leverage Spark/dbt, lower infrastructure cost (no always-on streaming).
+
+## Real-Time Ingestion
+
+Event-driven, near-instant updates. Every change in the source system triggers an index update within seconds.
+
+The pattern: CDC (Debezium) / App Events → Kafka → Stream Processor (Flink/Kafka Streams) → Search Index (Upsert). Failed messages route to a Dead Letter Queue.
+
+Advantages: near-instant freshness, no expensive full reindexing, better UX for time-sensitive data, natural fit for event-driven architectures.
+
+## The Comparison
+
+| Dimension | Batch | Real-Time |
+|---|---|---|
+| Latency | Minutes–hours | Seconds |
+| Complexity | Low | High |
+| Consistency | Strong (snapshot) | Eventual |
+| Error recovery | Re-run the batch | DLQ, retries, offset management |
+| Infrastructure cost | Pay only during batch window | Always-on consumers + brokers |
+| Handles deletes | Naturally (missing = deleted) | Requires explicit delete events |
+| Data drift risk | None (full rebuild) | High (bugs accumulate) |
+
+Toggle between batch and real-time to compare how each approach handles the same pipeline stages.
+
+<PlaygroundAccordion title="Try it: The Comparison">
+  <PlaygroundComponent name="batch-vs-realtime" />
+</PlaygroundAccordion>
+
+## Hybrid: The Production Answer
+
+Almost every production search system uses a hybrid approach: real-time for incremental updates (keeps the index fresh) plus periodic batch for full reindex (catches anything the real-time stream missed and corrects drift). The batch acts as a consistency checkpoint.
+
+| Scenario | Approach |
+|---|---|
+| MVP or prototype | Batch only |
+| eCommerce product search | Hybrid - real-time for price/stock, batch for catalog rebuild |
+| News / social feed | Real-time heavy |
+| Internal knowledge base | Batch (hourly) |
+| Marketplace (eBay-style) | Hybrid - listings go live immediately, nightly quality cleanup |
+
+## Key Takeaway
+
+Start with batch (simpler, more reliable). Add real-time only when freshness requirements demand it. The hybrid approach - nightly batch + real-time delta updates - is the industry standard. The batch path acts as a safety net that corrects any drift accumulated by the real-time path.
+

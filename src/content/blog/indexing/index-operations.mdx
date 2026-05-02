@@ -1,0 +1,70 @@
+---
+title: "Index Operations - CRUD & Reindexing"
+description: "Create, update, delete, and reindex - including zero-downtime reindexing with aliases and versioning strategies."
+tags:
+  - "crud"
+  - "reindex"
+  - "aliases"
+  - "zero-downtime"
+readTime: "10 min"
+publishDate: "2025-12-16"
+seriesOrder: 4
+headings:
+  - "The Index Lifecycle"
+  - "CRUD Operations"
+  - "Segment Merging"
+  - "Zero-Downtime Reindexing with Alias Swap"
+  - "Schema Evolution and Versioning"
+  - "Key Takeaway"
+---
+## The Index Lifecycle
+
+A search index is a living data structure. Documents flow in, get updated, become outdated, and eventually need to be removed. The lifecycle: Create Schema -> Index Documents -> Search & Query -> Update / Delete -> Reindex.
+
+When you index a document, it doesn't become searchable immediately. Search engines use a buffer-and-flush model: new documents land in an in-memory buffer first (not yet searchable), then periodically the buffer is flushed to a new **segment** on disk (now searchable). In Elasticsearch, the default refresh interval is 1 second - this is **near-real-time (NRT) search**.
+
+## CRUD Operations
+
+**Create**: Single document inserts are simple but slow for large datasets. Bulk/batch inserts (500-5,000 documents per request) are 10-100x faster because they amortize network overhead. Tip: disable refresh during bulk loads for 2-5x throughput.
+
+**Update**: Documents in search indexes are **immutable** under the hood. An "update" actually deletes the old version and creates a new one. Partial updates send only changed fields (engine merges internally); full replaces overwrite everything. Use optimistic concurrency (version numbers) to prevent lost updates.
+
+**Delete**: Hard delete marks the document as deleted (space reclaimed during next segment merge). Soft delete sets a `deleted: true` field and filters it from queries - recoverable but grows index size.
+
+## Segment Merging
+
+Each refresh creates a new **segment** - an immutable mini-index. Over time, you accumulate hundreds of small segments. Searching across many segments is slow, so the engine periodically merges them into larger segments. Segments are never modified after creation - only merged into new segments. "Deleting" a document just marks it as deleted (a tombstone). This immutability enables lock-free concurrent reads and simple crash recovery.
+
+## Zero-Downtime Reindexing with Alias Swap
+
+When you need to change the schema (can't modify existing mappings), the solution is **index aliases**: (1) Create new index with updated schema (products_v2), (2) Reindex all docs from source of truth into v2, (3) Validate document counts and sample queries, (4) Atomic alias swap - remove alias from v1 and add to v2 in a single transaction, (5) Keep v1 for 24-48h for rollback, then delete.
+
+Your app always references the alias ("products"), never the versioned index name. Infrastructure change, zero code change.
+
+```python
+# Alias swap pattern - ATOMIC, zero downtime
+POST /_aliases
+{
+  "actions": [
+    { "remove": { "index": "products_v1", "alias": "products" } },
+    { "add":    { "index": "products_v2", "alias": "products" } }
+  ]
+}
+```
+
+## Schema Evolution and Versioning
+
+| Change | In-Place? | Solution |
+|---|---|---|
+| Add a new field | Yes | Dynamic mapping adds it automatically |
+| Change field type | No | Reindex with alias swap |
+| Change analyzer | No | Reindex with alias swap |
+| Delete a field | Sort of | Field stays in mapping; reindex to reclaim space |
+| Add sub-fields | Yes | Update mapping, reindex existing docs |
+
+Versioning strategies: **Alias swap** (zero downtime, 2x cost during reindex), **Blue-Green** (2x cost always, instant rollback), **Rolling/incremental** (fast but can't handle schema changes), **Delete + Rebuild** (minutes-hours of downtime).
+
+## Key Takeaway
+
+Treat your index like a deployment. Master CRUD operations for day-to-day management, but invest early in alias-based reindexing for zero-downtime schema migrations. The alias swap pattern is the single most important operational pattern in search engineering. Always use aliases in production, never point apps at versioned index names, batch inserts for bulk operations, validate before swapping, and keep old indexes for rollback.
+

@@ -1,0 +1,63 @@
+---
+title: "ETL Pipeline for Search"
+description: "Build the Extract-Transform-Load pipeline - handling messy data, dead letter queues, monitoring, and error recovery."
+tags:
+  - "etl"
+  - "pipeline"
+  - "data-quality"
+  - "dlq"
+readTime: "10 min"
+publishDate: "2026-02-20"
+seriesOrder: 2
+headings:
+  - "The Assembly Line"
+  - "Extract: Getting Data Out"
+  - "Transform: Making Data Search-Ready"
+  - "Load: Pushing to the Index"
+  - "Error Handling: Dead Letter Queues"
+  - "Key Takeaway"
+---
+## The Assembly Line
+
+An ETL pipeline is like a factory assembly line. Raw materials enter one end (Extract), each station performs a single well-defined job (Transform), and finished products emerge at the other end (Load). If a sheet is warped, it's pulled off the line - not jammed through.
+
+Each stage can be tested independently, scaled horizontally, and failures are isolated. Clean boundaries prevent cascading failures.
+
+## Extract: Getting Data Out
+
+The extraction strategy depends on your source system:
+
+| Source Type | Method | Considerations |
+|---|---|---|
+| Relational DB | SQL queries, CDC (Debezium) | Use read replicas, avoid lock contention |
+| REST API | Paginated GET, webhooks | Rate limiting, pagination cursors |
+| File stores | S3 listing + download | Track processed files |
+| Event streams | Kafka consumer, SQS | Offset tracking, exactly-once vs at-least-once |
+| NoSQL (MongoDB) | Change streams, periodic export | Oplog size limits |
+
+CDC (Change Data Capture) is the gold standard: reads the database's write-ahead log for zero-impact, guaranteed capture of every change.
+
+## Transform: Making Data Search-Ready
+
+Raw data is never directly indexable. The transform stage shapes it for search:
+
+**Cleaning** - Strip HTML, fix encoding, remove nulls, deduplicate. **Normalizing** - Standardize dates (ISO 8601), prices (cents integers), lowercase text, canonicalize categories. **Enriching** - NER, language detection, sentiment analysis, geo-coding, taxonomy classification. **Embedding Generation** - Dense vectors for semantic search via batch GPU inference.
+
+Each transform should be a pure function: doc in, doc out, no side effects. Validate before expensive operations like embedding generation.
+
+## Load: Pushing to the Index
+
+Always use bulk operations. Single inserts achieve ~50 docs/sec; bulk inserts achieve ~5,000 docs/sec; parallel bulk workers reach ~20,000+ docs/sec.
+
+Best practices: batch 500-2000 docs per request, disable refresh during bulk load (`refresh_interval=-1`), set replicas to 0 during load then restore, use alias swapping for zero-downtime reindexing.
+
+## Error Handling: Dead Letter Queues
+
+When a message fails after all retries, route it to a Dead Letter Queue for later inspection. Each DLQ entry records: the original document, the error message and stack trace, and the timestamp and retry count.
+
+In most pipelines, 0.1-1% of documents hit the DLQ - that's normal. Set up alerts when DLQ depth exceeds a threshold. Use exponential backoff with jitter: delay = min(base × 2^attempt + random(0, jitter), max_delay).
+
+## Key Takeaway
+
+Build idempotent pipelines - re-running them should produce the same result. Use dead letter queues for failed documents. Monitor pipeline health: throughput, error rate, end-to-end latency. Every document should have a deterministic ID so upserts are safe to replay.
+

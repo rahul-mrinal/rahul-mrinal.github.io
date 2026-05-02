@@ -1,0 +1,48 @@
+---
+title: "Click Models - Learning from User Behavior"
+description: "Implicit feedback, position bias, debiased CTR, and the cascade click model - turning clicks into training signal."
+tags:
+  - "clicks"
+  - "implicit-feedback"
+  - "position-bias"
+  - "ctr"
+readTime: "12 min"
+publishDate: "2026-03-28"
+seriesOrder: 2
+headings:
+  - "The Position Bias Problem"
+  - "Click Debiasing"
+  - "Click Model Types"
+  - "Key Takeaway"
+---
+## The Position Bias Problem
+
+Users click position 1 far more than position 5, regardless of relevance. A study by Joachims et al. showed that swapping two results changed click patterns based on position, not content. Raw click-through rates are contaminated by this position bias.
+
+The core issue: if you train a ranking model on raw CTR, it learns "position 1 is good" rather than "this document is relevant." You need to debias clicks before using them as training signal.
+
+Position bias follows a roughly logarithmic decay: P(examine position k) ≈ 1/log₂(k+1). Position 1 gets examined 100% of the time, position 5 about 39%, position 10 about 29%.
+
+## Click Debiasing
+
+Adjust the top-5 raw CTR values using position bias correction and see how the debiased relevance scores change. The debiased CTR = raw CTR / position_bias(k) reveals the true relevance signal hidden under position effects.
+
+<PlaygroundAccordion title="Try it: Click Debiasing">
+  <PlaygroundComponent name="click-debiaser" />
+</PlaygroundAccordion>
+
+## Click Model Types
+
+| Model | Assumption | Complexity |
+|---|---|---|
+| **Position model** | P(click) = P(examine) × P(attract) | Low - just divide by position bias |
+| **Cascade model** | User scans top-down, clicks first relevant result, stops | Medium - models sequential examination |
+| **DBN (Dynamic Bayesian Network)** | User may continue scanning after a click if not satisfied | High - models satisfaction and continuation |
+| **Neural click model** | Learn examination and attractiveness jointly with deep learning | Highest - captures complex patterns |
+
+The simplest approach (inverse propensity weighting) divides each click by the examination probability for that position. More sophisticated models jointly estimate relevance and position bias.
+
+## Key Takeaway
+
+Never use raw CTR as a relevance signal - it's position-biased. Use debiased CTR (divide by position examination probability) or train a cascade click model. Combine implicit signals (debiased clicks, dwell time, scroll depth) with sparse explicit signals (ratings, purchases) for the best training data.
+

@@ -1,0 +1,67 @@
+---
+title: "Hybrid Scoring Methods"
+description: "Three production methods for combining BM25 and vector scores - linear combination, RRF, and learned fusion."
+tags:
+  - "hybrid-scoring"
+  - "rrf"
+  - "fusion"
+  - "normalization"
+readTime: "10 min"
+publishDate: "2026-01-14"
+seriesOrder: 2
+headings:
+  - "The Score Scale Problem"
+  - "Method 1: Min-Max + Weighted Sum"
+  - "Method 2: Reciprocal Rank Fusion (RRF)"
+  - "Score Normalizer"
+  - "Method 3: Learned Fusion"
+  - "Key Takeaway"
+---
+## The Score Scale Problem
+
+BM25 and vector search produce scores on completely different scales. BM25 ranges from 0 to ~25+ (unbounded, right-skewed), while cosine similarity ranges from -1 to 1 (bounded, roughly normal). Naively adding them: 14.2 + 0.91 = 15.11 - BM25 contributes 94% of the final score, making vector similarity nearly irrelevant.
+
+In production systems, BM25 scores for top results typically cluster between 8 and 18, while vector similarities cluster between 0.7 and 0.95. The gap in magnitude is the core problem that fusion methods must solve.
+
+## Method 1: Min-Max + Weighted Sum
+
+Normalize both score sets to [0, 1] using min-max scaling: norm(s) = (s - s_min) / (s_max - s_min). Then combine with alpha: hybrid(d) = alpha x norm_bm25(d) + (1 - alpha) x norm_vec(d).
+
+alpha = 1.0 -> pure keyword, alpha = 0.0 -> pure semantic, alpha = 0.5 -> equal weight. Pros: simple, one tunable parameter. Cons: sensitive to outliers, requires scores from both retrievers, normalization is query-dependent.
+
+Tuning guidance: alpha ~0.7 for technical docs/error codes/SKUs (keyword-heavy), alpha ~0.5 for general search (balanced), alpha ~0.3 for natural language questions (semantic-heavy).
+
+## Method 2: Reciprocal Rank Fusion (RRF)
+
+Ignore scores entirely - combine using only rank positions: RRF(d) = sum over rankers: 1 / (k + rank_r(d)). k = 60 is the standard constant (empirically optimal from Cormack et al. 2009).
+
+With k=60: rank 1 gets 1/61 = 0.0164, rank 2 gets 1/62 = 0.0161 - only 2% difference. This prevents top-ranked documents from dominating. Documents ranked highly by *both* systems get the highest fused scores.
+
+Pros: no normalization needed, robust to outliers, parameter-free (k=60 works everywhere). Cons: ignores score magnitude - rank #1 with score 0.99 and rank #1 with score 0.51 are treated the same.
+
+## Score Normalizer
+
+Enter raw BM25 and vector scores to see how min-max normalization and alpha weighting produce fused results. Experiment with different alpha values to see how rankings shift.
+
+<PlaygroundAccordion title="Try it: Score Normalizer">
+  <PlaygroundComponent name="score-normalizer" />
+</PlaygroundAccordion>
+
+## Method 3: Learned Fusion
+
+Train a model to learn optimal weights from real user behavior (clicks, purchases, dwell time). For each query-document pair, extract features (bm25_score, vector_sim, bm25_rank, vector_rank, title_match, doc_freshness, click_rate) and train a LambdaMART or XGBoost model optimized for NDCG.
+
+Requires click data (10k+ queries with clicks). Start with RRF, graduate to learned fusion once you have sufficient data.
+
+| Criterion | Min-Max + Weighted | RRF | Learned Fusion |
+|---|---|---|---|
+| Complexity | Low | Low | High |
+| Needs Scores | Yes | No (ranks only) | Yes |
+| Outlier Robust | No | Yes | Depends on model |
+| Needs Training Data | No | No | Yes (10k+ queries) |
+| Best For | Stable distributions | General purpose | High-traffic production |
+
+## Key Takeaway
+
+There is no single best fusion method. RRF is the safest default - score-agnostic, outlier-resistant, requires no tuning. Graduate to weighted sum when you understand your score distributions, and to learned fusion when you have enough click data. The biggest mistake is not combining signals at all.
+

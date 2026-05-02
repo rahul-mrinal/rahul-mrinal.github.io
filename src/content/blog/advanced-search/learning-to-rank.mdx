@@ -1,0 +1,49 @@
+---
+title: "Learning to Rank (LTR)"
+description: "Teach a machine to judge relevance - pointwise, pairwise, and listwise approaches with feature engineering for search."
+tags:
+  - "ltr"
+  - "machine-learning"
+  - "ranking"
+  - "features"
+readTime: "14 min"
+publishDate: "2026-03-25"
+seriesOrder: 1
+headings:
+  - "Three Approaches"
+  - "Feature Engineering for LTR"
+  - "Key Takeaway"
+---
+## Three Approaches
+
+Learning to Rank (LTR) uses machine learning to combine multiple ranking signals into an optimal final ranking. The three paradigms differ in how they frame the training objective:
+
+1. **Pointwise** - predict an absolute relevance score for each document independently. Training: regression or classification on (query, doc, label) triples. Simple but ignores relative ordering.
+
+2. **Pairwise** - predict which of two documents is more relevant. Training: binary classification on (query, doc_a, doc_b, which_is_better). RankNet, LambdaRank, and LambdaMART use this approach.
+
+3. **Listwise** - optimize the entire ranking list directly, typically optimizing NDCG. Training: directly optimize the ranking metric. ListNet, ApproxNDCG, and SoftRank fall in this category.
+
+| Approach | Training Signal | Models | Best For |
+|---|---|---|---|
+| Pointwise | Absolute labels per doc | Regression, neural net | Simple baselines |
+| Pairwise | Relative preference | LambdaMART, RankNet | Production systems |
+| Listwise | Full ranking list | ListNet, ApproxNDCG | Maximum ranking quality |
+
+## Feature Engineering for LTR
+
+The features fed to an LTR model determine its ceiling. Common feature categories:
+
+| Category | Features | Signal |
+|---|---|---|
+| Text relevance | BM25 score, vector similarity, query-title overlap | How well the doc matches the query |
+| Popularity | CTR, conversion rate, view count | Collective wisdom |
+| Quality | Rating, review count, return rate | Customer satisfaction |
+| Freshness | Days since listing, last price change | Recency |
+| Commercial | Price vs category avg, margin, stock | Business value |
+| Personalization | Brand affinity, price sensitivity | Per-user relevance |
+
+## Key Takeaway
+
+LTR requires training data (typically from click logs - 10K+ queries with clicks). Start with pairwise approaches (LambdaMART is the industry workhorse). Use XGBoost or LightGBM for gradient-boosted trees. The features matter more than the model - invest in feature engineering before model complexity.
+

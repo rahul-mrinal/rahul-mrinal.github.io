@@ -1,0 +1,62 @@
+---
+title: "Ranking Signals - The Complete Catalog"
+description: "Keyword, semantic, popularity, freshness, quality, and personalization signals - how they combine into a ranking scorecard."
+tags:
+  - "signals"
+  - "features"
+  - "scoring"
+  - "personalization"
+readTime: "12 min"
+publishDate: "2026-01-23"
+seriesOrder: 4
+headings:
+  - "What is a Signal?"
+  - "The Six Signal Categories"
+  - "Signal Mixer"
+  - "Learning to Rank (LTR)"
+  - "Key Takeaway"
+---
+## What is a Signal?
+
+A ranking signal is any feature or measurement that contributes to determining how relevant a document is to a query. Modern search systems combine dozens of signals: score(d, q) = sum of w_i x signal_i(d, q).
+
+Think of ranking like a hiring committee. Each committee member (signal) evaluates the candidate (document) from a different angle - resume keywords, cultural fit, experience, references. The final hiring decision combines all perspectives with different weights.
+
+## The Six Signal Categories
+
+**1. Keyword Signals** - BM25 score, exact phrase match, field match (title vs body), term proximity, query coverage. Layered strategy: first try exact match (instant, highest precision), then phrase match, then BM25 as fallback.
+
+**2. Semantic Signals** - Bi-encoder (vector search) for first-stage retrieval, cross-encoder for re-ranking. ColBERT-style token-level matching for a middle ground.
+
+**3. Popularity Signals** - Click-through rate (position-normalized), dwell time, page views, purchases, bounce rate. Use time-windowed or exponentially-decayed counts to avoid biasing toward old content. Cold start: use Bayesian smoothing (clicks + alpha) / (impressions + beta).
+
+**4. Freshness Signals** - Publish date, last modified, crawl freshness, content velocity (how often the page changes). Not all queries benefit from freshness - use query classification to detect time-sensitive vs. evergreen queries.
+
+**5. Quality Signals** - User ratings (Bayesian average to avoid 1-review-5-stars bias), spam score, content depth, readability (Flesch-Kincaid), domain authority.
+
+**6. Personalization Signals** - User history (clicks, purchases), location, user segment, language preference, device context. Balance with diversity to avoid filter bubbles.
+
+## Signal Mixer
+
+Adjust the weight of each signal category and watch the radar chart reshape. Use presets to see how different search types (e-commerce, news, knowledge base, social feed) prioritize different signals.
+
+<PlaygroundAccordion title="Try it: Signal Mixer">
+  <PlaygroundComponent name="signal-mixer" />
+</PlaygroundAccordion>
+
+## Learning to Rank (LTR)
+
+Modern systems use **Learning to Rank** - a machine learning model trained on human relevance judgments: FinalScore(q, d) = F(s1, s2, ..., sn) where F is typically a gradient-boosted tree (LambdaMART, XGBoost).
+
+| Approach | Training | Models |
+|---|---|---|
+| **Pointwise** | Predict absolute relevance per doc | Linear regression, neural net |
+| **Pairwise** | Learn which doc in a pair is more relevant | RankNet, LambdaRank |
+| **Listwise** | Optimize the entire ranking list (NDCG) | LambdaMART, ListNet |
+
+Evaluation metrics: NDCG@k (ranking quality, industry standard), MAP (average precision across recall levels), MRR (speed to first relevant result), Recall@k (critical for L0 evaluation).
+
+## Key Takeaway
+
+No single signal is sufficient. Keyword signals catch what users type, semantic signals catch what they mean, popularity encodes collective wisdom, freshness handles time-sensitivity, quality filters noise, and personalization tailors results. Start with keyword + semantic, add popularity and freshness, then personalization. The art is finding the right mix for your use case.
+

@@ -1,0 +1,103 @@
+---
+title: "Vector Search - From Zero"
+description: "Understand embeddings, cosine similarity, and why vectors capture semantic meaning that keywords miss entirely."
+tags:
+  - "vectors"
+  - "embeddings"
+  - "cosine-similarity"
+  - "semantic"
+readTime: "12 min"
+publishDate: "2025-11-17"
+seriesOrder: 4
+headings:
+  - "The Limits of Keywords"
+  - "What Are Embeddings?"
+  - "Distance Metrics: Cosine, Dot Product, Euclidean"
+  - "ANN Algorithms: Making Vector Search Fast"
+  - "Key Takeaway"
+---
+## The Limits of Keywords
+
+BM25 is powerful, but it has a fundamental limitation: it only matches exact terms. Search for "automobile" and you won't find documents about "cars." Search for "how to fix a broken heart" and you'll get results about cardiac surgery, not relationship advice.
+
+Keyword search is like looking up a word in a dictionary - you need the exact word. Semantic search is like asking a knowledgeable friend - they understand what you *mean* even if you use different words. Vector search solves this by representing documents and queries as points in a high-dimensional space where semantic similarity maps to geometric proximity.
+
+## What Are Embeddings?
+
+An embedding is a dense vector (a list of floating-point numbers) that represents the *meaning* of text in a high-dimensional space. Texts with similar meanings get vectors that are close together. The key idea: "King" - "Man" + "Woman" approximates "Queen." Embeddings capture semantic relationships as geometric relationships in vector space.
+
+The process: text goes through a tokenizer, then a transformer encoder (12+ layers), then mean pooling over token embeddings produces a single vector (e.g., 384 dimensions).
+
+| Model | Year | Dimensions | Key Innovation |
+|---|---|---|---|
+| Word2Vec | 2013 | 100-300 | Word-level embeddings via skip-gram/CBOW. Showed arithmetic on word vectors works |
+| GloVe | 2014 | 50-300 | Global co-occurrence statistics. Better at capturing global patterns |
+| ELMo | 2018 | 1024 | Context-dependent word embeddings. "Bank" gets different vectors in "river bank" vs "bank account" |
+| BERT | 2018 | 768 | Bidirectional transformers. Deep contextual embeddings |
+| Sentence-BERT | 2019 | 384-768 | Fine-tuned for sentence-level similarity using siamese networks |
+| OpenAI text-embedding-3 | 2024 | 256-3072 | Matryoshka embeddings - truncate to any dimension |
+
+Real embeddings live in 384-3072 dimensions. When projected to 2D for visualization, information is lost - many concepts that appear overlapping in 2D are actually well-separated in the full space.
+
+## Distance Metrics: Cosine, Dot Product, Euclidean
+
+Given two vectors, there are three main ways to measure their similarity:
+
+**Cosine Similarity** = dot(a,b) / (norm(a) * norm(b)). Measures the angle between vectors. Range [-1, 1]. Most common in NLP because it ignores magnitude - a 3-word sentence and a 300-word paragraph can still be "close" if they express the same idea.
+
+**Dot Product** = sum(a_i * b_i). Measures both direction and magnitude. Preferred when vector norms carry meaning (e.g., popularity). When vectors are normalized, equivalent to cosine but faster to compute.
+
+**Euclidean Distance** = sqrt(sum((a_i - b_i)^2)). Straight-line distance in space. Lower = more similar. Sensitive to magnitude, so may need normalization first.
+
+| Metric | Best For | Note |
+|---|---|---|
+| Cosine | Text similarity, NLP | Ignores magnitude - only cares about direction |
+| Dot Product | Recommendations, MIPS | Faster to compute; equivalent to cosine when normalized |
+| Euclidean | Spatial data, clustering | Sensitive to scale - may need normalization first |
+
+Try the interactive simulator to compare two sentences and see cosine similarity in action.
+
+```python
+import numpy as np
+
+def cosine_similarity(a, b):
+    """Measure similarity between two vectors.
+    Returns 1.0 for identical directions, 0.0 for orthogonal."""
+    return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
+
+car_vec = np.array([0.8, 0.6, 0.1, 0.3])
+automobile_vec = np.array([0.79, 0.62, 0.12, 0.28])
+pizza_vec = np.array([0.1, 0.2, 0.9, 0.7])
+
+print(f"car vs automobile: {cosine_similarity(car_vec, automobile_vec):.3f}")  # ~0.999
+print(f"car vs pizza: {cosine_similarity(car_vec, pizza_vec):.3f}")            # ~0.507
+```
+
+<PlaygroundAccordion title="Try it: Distance Metrics: Cosine, Dot Product, Euclidean">
+  <PlaygroundComponent name="cosine-similarity" />
+</PlaygroundAccordion>
+
+## ANN Algorithms: Making Vector Search Fast
+
+With millions of vectors, exact nearest-neighbor search is O(N) - too slow. Approximate Nearest Neighbor (ANN) algorithms trade a tiny bit of accuracy for massive speed gains.
+
+**HNSW (Hierarchical Navigable Small World)**: Builds a multi-layer graph where the top layers have few, long-range "highway" connections and the bottom layer has dense, short-range connections. Search starts at the top and greedily descends - like airport routing: intercontinental flights (top layer) get you close, regional flights (middle), then a taxi (bottom) takes you to the exact address. O(log N) search time, very high recall (~98%), but high memory usage.
+
+**IVF (Inverted File Index)**: Partitions the vector space into clusters using k-means. At query time, find the nearest cluster centroids and only search vectors in those clusters. Like a library with labeled sections - instead of scanning every book, go to the 1-2 relevant sections. With nlist=1000 and nprobe=10, you skip 99% of vectors.
+
+**PQ (Product Quantization)**: Compresses vectors by splitting them into sub-vectors and quantizing each to a codebook entry. A 768-dim vector (3072 bytes) compresses to just 8 bytes - a 384x reduction. A billion vectors goes from 3 TB to ~8 GB.
+
+| Algorithm | Speed | Memory | Recall@10 | Best For |
+|---|---|---|---|---|
+| HNSW | ~1ms @ 10M | High (full vectors + graph) | ~98% | Best recall, moderate scale |
+| IVF | ~2ms @ 100M | Medium | ~95% | Large scale, tunable speed/recall |
+| PQ | ~5ms @ 1B | Very low (compressed) | ~85% | Billion-scale, memory constrained |
+| IVF-PQ | ~3ms @ 1B | Very low | ~95% | Production billion-scale (FAISS) |
+| HNSW + PQ Rescore | ~2ms @ 100M | Medium-low | ~98% | Best quality at scale (Vespa, Qdrant) |
+
+Rule of thumb: Under 1M vectors? Brute force or HNSW. 1M-100M? HNSW with PQ rescoring. 100M-1B+? IVF-PQ with proper nprobe tuning.
+
+## Key Takeaway
+
+Vector search captures meaning, not just keywords. The pipeline is: text -> embedding model -> dense vector -> ANN index -> nearest neighbors. But it comes with trade-offs: embedding models are slower and more expensive than BM25, vectors require more storage, and they can sometimes miss exact keyword matches. That's why modern search engines use both keyword and vector search together - which brings us to hybrid search.
+

@@ -1,0 +1,64 @@
+---
+title: "What Is a Multi-Agent System?"
+description: "Two or more autonomous agents, each with its own prompt, tools, and scope - why specialization beats generalization once complexity crosses a threshold."
+tags:
+  - "multi-agent"
+  - "MAS"
+  - "agents"
+  - "specialization"
+readTime: "8 min"
+publishDate: "2026-04-06"
+seriesOrder: 1
+headings:
+  - "Definition"
+  - "Key Properties of Multi-Agent Systems"
+  - "Agents vs Tools"
+  - "Key Takeaway"
+---
+## Definition
+
+A multi-agent system (MAS) is a system composed of two or more autonomous agents that interact with each other and their environment to accomplish tasks that are difficult or impossible for a single agent to perform effectively.
+
+In the context of LLM-powered applications, each "agent" is typically:
+
+- An LLM instance with a specific **system prompt** defining its role
+- A set of **tools** it can call (APIs, databases, code execution)
+- A defined **scope of responsibility** (what it handles, what it doesn't)
+- A **communication channel** for interacting with other agents
+
+The fundamental insight is that **specialization beats generalization** once task complexity crosses a threshold. A single LLM trying to be an expert coder, thorough reviewer, careful planner, and security auditor simultaneously will underperform four focused agents with clear roles.
+
+<PlaygroundAccordion title="Try it: Definition">
+  <PlaygroundComponent name="single-vs-multi-agent" />
+</PlaygroundAccordion>
+
+## Key Properties of Multi-Agent Systems
+
+Every multi-agent system exhibits five core properties:
+
+- **Autonomy** - Each agent operates independently with its own reasoning
+- **Specialization** - Agents have distinct roles, tools, and domain knowledge
+- **Interaction** - Agents communicate through defined protocols
+- **Emergence** - System-level behavior arises from individual agent interactions
+- **Scalability** - New agents can be added without redesigning the whole system
+
+These properties are what separate a multi-agent system from a single agent calling multiple tools. The agents don't just execute - they reason, decide, and coordinate.
+
+<PlaygroundAccordion title="Try it: Key Properties of Multi-Agent Systems">
+  <PlaygroundComponent name="mas-property-toggle" />
+</PlaygroundAccordion>
+
+## Agents vs Tools
+
+A common misconception is that wrapping each tool call in its own agent makes a system "multi-agent." It doesn't. An agent is justified when the task requires **reasoning**, **judgment**, or **multi-step decision-making** - not when a single function call would suffice.
+
+Ask yourself: does this component need to think, or does it just need to execute? If it just executes, it's a tool. If it reasons about *what* to execute and *when*, it's an agent.
+
+<PlaygroundAccordion title="Try it: Agents vs Tools">
+  <PlaygroundComponent name="agent-vs-tool-quiz" />
+</PlaygroundAccordion>
+
+## Key Takeaway
+
+Multi-agent systems trade coordination overhead for specialization and parallelism. They're not always the right choice - but once your task involves multiple distinct reasoning domains, context that overflows a single window, or quality requirements that benefit from adversarial checking, a multi-agent architecture will outperform a monolithic agent.
+

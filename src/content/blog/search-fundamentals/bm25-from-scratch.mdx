@@ -1,0 +1,203 @@
+---
+title: "BM25 From Scratch"
+description: "Build the BM25 ranking algorithm piece by piece - term frequency, IDF, length normalization, saturation, and the k1/b parameters."
+tags:
+  - "bm25"
+  - "tf-idf"
+  - "ranking"
+  - "algorithm"
+readTime: "15 min"
+publishDate: "2025-11-08"
+seriesOrder: 2
+headings:
+  - "Why BM25 Matters"
+  - "Part 1: Term Frequency (TF)"
+  - "Part 2: Inverse Document Frequency (IDF)"
+  - "TF-IDF: The Stepping Stone"
+  - "The Full BM25 Formula"
+  - "Part 3: Length Normalization"
+  - "The Parameters: k₁ and b"
+  - "Saturation: The Key Insight"
+  - "Live BM25 Playground"
+  - "BM25 Variants"
+  - "BM25 vs Semantic Search"
+  - "Key Takeaway"
+---
+## Why BM25 Matters
+
+BM25 (Best Matching 25) is the default ranking algorithm in Elasticsearch, Solr, Lucene, and virtually every production search engine. Despite being published in 1994, it remains remarkably hard to beat for keyword search. Understanding BM25 deeply is non-negotiable for anyone working in search.
+
+You have a collection of documents and a user types a query. How do you rank which documents are most relevant? You can't just count word matches - that approach has four fatal problems:
+
+- **Longer docs win unfairly.** A 10,000-word document mentions "python" 50 times. A 200-word doc mentions it 10 times. Raw count says the big doc is better, but the small one is 10x more focused on Python.
+- **Common words dominate.** The word "the" appears in every document. Matching on "the" tells you nothing. But matching on "eigenvalue"? That's very informative.
+- **Diminishing returns.** If a doc mentions "cat" 100 times vs 50 times, is it really 2x more relevant? Probably not. After a point, more mentions don't add much.
+- **No principled scoring.** Raw counts give you absolute numbers with no meaningful scale.
+
+BM25 solves all four problems. Let's build up to it step by step.
+
+## Part 1: Term Frequency (TF)
+
+The first building block: how often does the query term appear in a document? A document mentioning "python" 10 times is probably more relevant than one mentioning it once.
+
+But raw TF has a problem - a document mentioning "python" 100 times isn't 100x more relevant than one mentioning it once. BM25 uses a saturation function to handle this.
+
+Common TF variants:
+
+- **Raw** - just count occurrences: `f(t,d)`
+- **Log-scaled** - compress high frequencies: `1 + log f(t,d)`
+- **Boolean** - only care about presence: `1 if f > 0 else 0`
+- **BM25-style** - saturating: `f(t,d) / (k₁ + f(t,d))` - approaches but never reaches 1
+
+The BM25-style TF creates a **saturation curve** where the first few occurrences matter a lot, but additional ones give rapidly diminishing gains.
+
+```python
+import math
+
+def tf_raw(term, doc):
+    """Raw term frequency - count occurrences."""
+    return doc.lower().split().count(term.lower())
+
+def tf_bm25(term, doc, k1=1.2):
+    """BM25 saturating TF: tf / (tf + k1)
+    As tf grows, this approaches 1.0 but never reaches it."""
+    raw = tf_raw(term, doc)
+    return raw / (raw + k1)
+
+doc = "python is great python is used for python development"
+print(f"Raw TF: {tf_raw('python', doc)}")       # 3
+print(f"BM25 TF: {tf_bm25('python', doc):.3f}")  # 0.714
+```
+
+## Part 2: Inverse Document Frequency (IDF)
+
+Not all terms are equally useful for finding relevant documents. The word "the" appears in almost every document, so it shouldn't contribute much to relevance. IDF measures how rare a term is across the entire corpus - rare terms get higher weights.
+
+Think of it like diamonds vs sand. Diamonds are valuable because they're rare. The word "the" is like sand - everywhere, worthless for search. The word "eigendecomposition" is like a diamond - rare, and finding it in a document tells you a LOT about what that document is about.
+
+BM25 uses the Robertson-Sparck Jones IDF formula: `IDF(t) = ln((N - df(t) + 0.5) / (df(t) + 0.5) + 1)` where N is total documents and df(t) is documents containing term t. This prevents negative IDF values and handles edge cases.
+
+**IDF intuition with numbers** (corpus of 10,000 docs):
+- "the" appears in 9,950 docs → IDF ≈ 0.005 (worthless)
+- "python" appears in 500 docs → IDF ≈ 3.0 (moderately informative)
+- "asyncio" appears in 25 docs → IDF ≈ 6.0 (very informative)
+- "eigendecomposition" appears in 3 docs → IDF ≈ 8.1 (extremely targeted)
+
+```python
+def idf(term, corpus):
+    """IDF = log((N - df + 0.5) / (df + 0.5) + 1)
+    where N = total docs, df = docs containing the term."""
+    N = len(corpus)
+    df = sum(1 for doc in corpus if term.lower() in doc.lower())
+    return math.log((N - df + 0.5) / (df + 0.5) + 1)
+```
+
+## TF-IDF: The Stepping Stone
+
+Before BM25, there was TF-IDF - simply multiply TF by IDF. High score means the term is frequent in this document AND rare across all documents. TF-IDF was a huge leap forward, but it still has weaknesses:
+
+- **No saturation** - TF grows linearly. 100 mentions vs 50 still matters too much.
+- **No length normalization** - longer documents naturally have higher TF, and TF-IDF doesn't correct for this.
+
+BM25 fixes both. It's essentially a **better-tuned, probabilistically-motivated version of TF-IDF**.
+
+## The Full BM25 Formula
+
+Here it is - the formula that powers Elasticsearch, Lucene, and most search engines on earth:
+
+**BM25(q, d) = Σ IDF(t) × f(t,d) × (k₁ + 1) / (f(t,d) + k₁ × (1 - b + b × |d| / avgdl))**
+
+Breaking it down:
+
+- **f(t, d)** - Raw term frequency in the document
+- **IDF(t)** - Inverse document frequency (rarity)
+- **k₁** - TF saturation parameter (typically 1.2–2.0)
+- **b** - Length normalization parameter (0–1, typically 0.75)
+- **|d|** - Length of the document
+- **avgdl** - Average document length across the corpus
+
+The three layers: IDF asks "how rare is this term?", saturating TF asks "how frequent, with diminishing returns?", and length normalization adjusts for document length.
+
+## Part 3: Length Normalization
+
+Longer documents naturally contain more term occurrences. Without normalization, a 10,000-word document would always rank higher than a 100-word document. BM25's parameter `b` controls how much document length affects scoring - b=1 means full normalization, b=0 means none.
+
+```python
+def bm25_score(term, doc, corpus, k1=1.2, b=0.75):
+    """Full BM25 score for a single term."""
+    tf = tf_raw(term, doc)
+    doc_len = len(doc.split())
+    avg_dl = sum(len(d.split()) for d in corpus) / len(corpus)
+
+    # Length-normalized TF with saturation
+    tf_component = (tf * (k1 + 1)) / (tf + k1 * (1 - b + b * doc_len / avg_dl))
+
+    return idf(term, corpus) * tf_component
+```
+
+## The Parameters: k₁ and b
+
+**k₁ - Saturation Control:**
+- k₁ = 0 → Binary model (only presence/absence matters)
+- k₁ = 1.2 → Default (moderate saturation, most common)
+- k₁ = 2.0 → Slower saturation (extra occurrences still help)
+- k₁ → ∞ → No saturation (linear TF, like raw counting)
+
+**b - Length Normalization:**
+- b = 0 → No length normalization (ignore doc length)
+- b = 0.75 → Default (moderate penalty for long docs)
+- b = 1.0 → Full normalization (strongly penalize long docs)
+
+**When to tune:** Increase k₁ for verbose collections (news articles, books) where repetition indicates topicality. Decrease for short documents (tweets, titles). Decrease b for collections with uniform document lengths. Increase when long docs tend to be unfocused.
+
+## Saturation: The Key Insight
+
+The saturation curve is what makes BM25 smarter than TF-IDF. The first few occurrences of a term contribute a lot to the score, but additional occurrences have rapidly diminishing returns. Drag the k₁ slider to see how it changes the curve shape.
+
+<PlaygroundAccordion title="Try it: Saturation: The Key Insight">
+  <PlaygroundComponent name="bm25-tf-saturation" />
+</PlaygroundAccordion>
+
+## Live BM25 Playground
+
+Type a query and documents below. BM25 will rank them in real-time. Adjust k₁ and b to see how they affect the ranking. Watch how the scores change as you modify parameters - this builds intuition for tuning.
+
+<PlaygroundAccordion title="Try it: Live BM25 Playground">
+  <PlaygroundComponent name="bm25-calculator" />
+</PlaygroundAccordion>
+
+## BM25 Variants
+
+Researchers have proposed improvements to the original BM25 (a.k.a. BM25 Okapi):
+
+- **BM25+** (2011) - Adds a small constant δ (typically 1) to the TF component. Solves the problem where BM25 can give a score of 0 to a document that contains the query term but is very long.
+- **BM25L** (2011) - Modifies the length normalization to be less aggressive for long documents.
+- **BM25F** (Field-aware) - Extends BM25 to handle structured documents with multiple fields (title, body, anchor text). Each field gets its own boost weight and length normalization. This is what Elasticsearch/Lucene uses for multi-field queries.
+
+| Variant | Key Change | Best For |
+|---|---|---|
+| BM25 (Okapi) | Original | General purpose - great default |
+| BM25+ | Floor on TF component | Corpora with high length variance |
+| BM25L | Softer length penalty | Long documents that are genuinely relevant |
+| BM25F | Per-field weights | Structured docs (web pages, products) |
+
+## BM25 vs Semantic Search
+
+In the age of embeddings and LLMs, is BM25 still relevant? **Absolutely.**
+
+| Aspect | BM25 | Semantic Search |
+|---|---|---|
+| Matching type | Exact keyword | Meaning-based similarity |
+| Handles synonyms | No | Yes |
+| Exact term matching | Excellent | Can miss exact matches |
+| Speed | Extremely fast | Slower (ANN search) |
+| Index size | Small | Large (dense vectors) |
+| ML needed | No | Yes |
+| Interpretable | Yes | No |
+
+Modern search systems use **hybrid retrieval**: BM25 + semantic search combined via Reciprocal Rank Fusion. This is the approach used by Elasticsearch with vector search, Pinecone hybrid, Weaviate, and RAG pipelines. BM25 catches exact matches that embeddings miss, while semantic search catches conceptual matches that BM25 misses.
+
+## Key Takeaway
+
+BM25 = IDF × saturated TF with length normalization. The two key parameters are k₁ (controls TF saturation - higher means raw count matters more) and b (controls length normalization - higher penalizes long documents more). Most engines default to k₁=1.2, b=0.75. BM25 isn't outdated - it's *complementary*. Even the most advanced RAG systems use BM25 as a critical component.
+

@@ -1,0 +1,61 @@
+---
+title: "Pattern Comparison Matrix"
+description: "All ten architecture patterns compared side-by-side across control, determinism, routing cost, parallelism, quality mechanism, and complexity."
+tags:
+  - "comparison"
+  - "matrix"
+  - "trade-offs"
+  - "patterns"
+readTime: "8 min"
+publishDate: "2026-04-12"
+seriesOrder: 3
+headings:
+  - "The Full Comparison"
+  - "Reading the Matrix"
+  - "The Complexity-Capability Trade-off"
+---
+## The Full Comparison
+
+Here is every architecture pattern compared across seven dimensions. Use this as a reference when evaluating which pattern fits your system.
+
+| Pattern | Control | Deterministic? | LLM Routing Cost | Parallelism | Quality Mechanism | Complexity |
+|---|---|---|---|---|---|---|
+| **Sequential** | Fixed order | Yes | None | None | None | Low |
+| **Selector** | LLM selector | No | High (per turn) | None | Re-routing | Medium |
+| **Handoff** | Each agent | No | None (embedded) | None | Self-assessment | Medium |
+| **Hierarchical** | Manager agent | No | Low | Optional | Manager review | Medium |
+| **Debate** | Turn-taking | No | None | None | Adversarial | Medium |
+| **Ensemble** | Parallel + aggregate | N/A | None | Full | Redundancy | High |
+| **Graph** | Explicit edges | Yes | None | Conditional | Programmatic checks | High |
+| **Blackboard** | Event-driven | Partially | None | Agent-level | Incremental | High |
+| **Market** | Bidding | No | None | Bidding phase | Competition | High |
+| **Federated** | Consensus | No | None | Full | Negotiation | Very High |
+
+<PlaygroundAccordion title="Try it: The Full Comparison">
+  <PlaygroundComponent name="pattern-matrix" />
+</PlaygroundAccordion>
+
+## Reading the Matrix
+
+**Control** tells you who decides what happens next. Fixed order and explicit edges are deterministic; everything else introduces variability.
+
+**LLM Routing Cost** is the overhead for deciding who goes next. Only the Selector pattern requires a dedicated LLM call for routing. Handoff embeds the routing decision in the agent's own reasoning.
+
+**Parallelism** is your lever for reducing wall-clock time. Ensemble gives you full parallelism. Graph gives you conditional parallelism (parallel branches). Everything else is sequential.
+
+**Quality Mechanism** is how the system catches and corrects errors. Adversarial (debate) and redundancy (ensemble) are the strongest. None (sequential) means errors flow straight through.
+
+## The Complexity-Capability Trade-off
+
+There's a clear spectrum from simple to complex:
+
+**Low complexity:** Sequential → Handoff → Selector → Hierarchical
+
+**High complexity:** Debate → Ensemble → Graph → Blackboard → Market → Federated
+
+More complexity isn't better. It's only justified when the quality, reliability, or scalability requirements demand it. Start at the simplest pattern that meets your needs, and only add complexity when you can measure the benefit.
+
+<PlaygroundAccordion title="Try it: The Complexity-Capability Trade-off">
+  <PlaygroundComponent name="pattern-radar" />
+</PlaygroundAccordion>
+

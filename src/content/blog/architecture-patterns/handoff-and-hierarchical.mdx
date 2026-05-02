@@ -1,0 +1,134 @@
+---
+title: "Handoff & Hierarchical Patterns"
+description: "Handoff/Swarm - agents self-route via transfer functions. Manager-Worker - a manager decomposes, delegates, and reviews."
+tags:
+  - "handoff"
+  - "swarm"
+  - "hierarchical"
+  - "manager-worker"
+  - "delegation"
+readTime: "14 min"
+publishDate: "2026-04-09"
+seriesOrder: 2
+headings:
+  - "Handoff / Swarm"
+  - "Handoff - Strengths & Weaknesses"
+  - "Handoff - Implementation"
+  - "Hierarchical / Manager-Worker"
+  - "Hierarchical - Strengths & Weaknesses"
+  - "Hierarchical - Implementation"
+---
+## Handoff / Swarm
+
+There is no central router. Each agent decides on its own when to transfer control to another agent, and to which one. The transfer is explicit - the agent calls a handoff function/tool that switches the active agent.
+
+Every agent has access to `transfer_to_X()` functions for the agents it's allowed to hand off to. The agent itself decides whether to handle the request, respond directly, or transfer.
+
+1. User message reaches the currently active agent (initially Agent A)
+2. Agent A processes the message. If it can answer, it does
+3. If Agent A determines another agent is better suited, it calls `transfer_to_agent_b()`
+4. Agent B becomes the active agent and receives the conversation context
+5. Agent B can respond, use tools, or transfer to yet another agent
+
+The key difference from the selector pattern: **the agents themselves make routing decisions**, not a separate selector LLM.
+
+<PlaygroundAccordion title="Try it: Handoff / Swarm">
+  <PlaygroundComponent name="handoff-flow" />
+</PlaygroundAccordion>
+
+## Handoff - Strengths & Weaknesses
+
+**Strengths:**
+- **No selector overhead.** No extra LLM call for routing - the agent's own reasoning handles it.
+- **Agent autonomy.** Agents are self-aware about their limitations.
+- **Natural conversational flow.** "Let me transfer you to our billing department" feels natural.
+- **Contextual handoffs.** The transferring agent can include context about why it's transferring.
+
+**Weaknesses:**
+- **Potential loops.** Agent A transfers to B, B transfers back to A. Needs loop detection.
+- **Inconsistent handoff quality.** Some agents might be too eager or too reluctant to transfer.
+- **Harder to enforce global routing policy.** Each agent has its own transfer logic.
+- **Transfer graph complexity.** With N agents, you need to carefully design which agents can transfer to which others.
+
+**When to use:** Conversational AI where transfers feel natural (support, sales, helpdesk), agents with clear non-overlapping domains, when the handoff decision is tied to the agent's own analysis.
+
+## Handoff - Implementation
+
+OpenAI's Swarm framework demonstrates the handoff pattern. Each agent has functions that return other agents to transfer control.
+
+```python
+def transfer_to_billing():
+    """Transfer to the billing agent for payment and invoice questions."""
+    return billing_agent
+
+def transfer_to_technical():
+    """Transfer to technical support for troubleshooting."""
+    return technical_agent
+
+triage_agent = Agent(
+    name="Triage",
+    instructions="Route customers to the right department.",
+    functions=[transfer_to_billing, transfer_to_technical, transfer_to_sales],
+)
+
+# Real-world analogy: A phone support system where each
+# department can transfer you to another. The person you're
+# speaking with decides when they can't help and who can.
+```
+
+## Hierarchical / Manager-Worker
+
+A manager agent breaks down the task into subtasks, assigns each subtask to a specialist worker agent, collects their results, and synthesizes a final output. The manager is both the orchestrator and a quality reviewer.
+
+Unlike the selector pattern, the manager agent itself decides what to delegate and to whom - it's not a separate routing LLM. The manager is also an active participant who adds its own reasoning.
+
+1. User sends a complex request to the manager
+2. The manager analyzes the request and breaks it into subtasks
+3. The manager delegates each subtask to the appropriate worker
+4. Workers execute their subtasks and report back
+5. The manager reviews all worker outputs
+6. If any output is insufficient, the manager re-delegates or asks for revision
+7. The manager synthesizes the final answer
+
+<PlaygroundAccordion title="Try it: Hierarchical / Manager-Worker">
+  <PlaygroundComponent name="manager-worker-demo" />
+</PlaygroundAccordion>
+
+## Hierarchical - Strengths & Weaknesses
+
+**Strengths:**
+- **Quality control.** The manager reviews every worker output before it reaches the user.
+- **Task decomposition.** Complex problems are broken into manageable pieces.
+- **Clear accountability.** The manager is responsible for the final output.
+- **Revision loops.** The manager can reject and re-request work.
+
+**Weaknesses:**
+- **Manager bottleneck.** Everything flows through one agent, which can become a token/latency bottleneck.
+- **Manager quality ceiling.** The system can't produce better output than the manager can evaluate.
+- **Single point of failure.** If the manager reasons poorly, the entire system fails.
+- **High token cost.** The manager sees all worker outputs, which can be very large.
+
+**When to use:** Complex research tasks requiring multiple information sources, document generation with multiple sections from different experts, project planning with architectural review - any task where a human manager would naturally delegate and review.
+
+## Hierarchical - Implementation
+
+The manager typically uses a strong model for reasoning, while workers can use faster/cheaper models for execution.
+
+```python
+manager = AssistantAgent(
+    name="ProjectManager",
+    system_message="Break tasks into subtasks. Delegate to specialists. "
+                   "Review their work. Synthesize the final deliverable.",
+    model_client=strong_model,
+)
+
+researcher = AssistantAgent(name="Researcher", tools=[search_web, search_docs])
+coder = AssistantAgent(name="Coder", tools=[write_code, run_tests])
+reviewer = AssistantAgent(name="Reviewer", tools=[analyze_code, check_security])
+
+# Real-world analogy: A project manager who receives a client
+# brief, assigns research to one team member, design to another,
+# and implementation to a third, then reviews everything before
+# presenting to the client.
+```
+

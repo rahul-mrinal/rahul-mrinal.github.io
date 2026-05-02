@@ -1,0 +1,281 @@
+---
+title: "What is Search?"
+description: "Start from the very beginning - brute-force scanning vs indexed retrieval, and why search is fundamentally an O(N) to O(1) problem."
+tags:
+  - "search"
+  - "brute-force"
+  - "indexing"
+  - "big-o"
+readTime: "8 min"
+publishDate: "2025-11-04"
+seriesOrder: 1
+headings:
+  - "The Simplest Search - Brute Force"
+  - "Why Brute Force Fails at Scale"
+  - "Full-Text Search vs Structured Queries"
+  - "The Search Pipeline"
+  - "The Inverted Index"
+  - "Vector Search and Cosine Similarity"
+  - "Approximate Nearest Neighbor (ANN) Algorithms"
+  - "Hybrid Search - Combining Keyword and Semantic"
+  - "Evaluation: Precision, Recall, and the F1 Trade-off"
+  - "NDCG - The Gold Standard Ranking Metric"
+  - "Key Takeaway"
+---
+## The Simplest Search - Brute Force
+
+Imagine a massive warehouse with millions of boxes. A customer walks in and says, "I need something about Italian cooking for beginners." Brute-force search means opening every single box to check. That's O(N x M) where N is the number of documents and M is the average document length.
+
+This is how many people first think about search - scan every document, check for a match. It works for small collections, but it completely falls apart at scale. Try the interactive demo below to watch brute-force search scan through every vector one by one.
+
+```python
+documents = [
+    "the cat sat on the mat",
+    "the dog chased the cat",
+    "machine learning is amazing",
+    "search engines power the web",
+]
+
+def brute_force_search(query, docs):
+    """O(N × M) - check every word in every doc."""
+    results = []
+    query_lower = query.lower()
+    for i, doc in enumerate(docs):
+        if query_lower in doc.lower():
+            results.append((i, doc))
+    return results
+
+print(brute_force_search("cat", documents))
+```
+
+<PlaygroundAccordion title="Try it: The Simplest Search - Brute Force">
+  <PlaygroundComponent name="brute-force-search" />
+</PlaygroundAccordion>
+
+## Why Brute Force Fails at Scale
+
+Google indexes over 100 billion web pages. If each page averages 2,000 words, brute-force search would mean checking 200 trillion words for every query. At 1 million queries per second, that's physically impossible.
+
+The key insight: we need to preprocess documents so that at query time, we can jump directly to relevant results instead of scanning everything.
+
+## Full-Text Search vs Structured Queries
+
+Before diving deeper, it helps to understand what makes search hard. There are two fundamentally different kinds of search:
+
+| Aspect | Full-Text Search | Structured Queries |
+|---|---|---|
+| Data type | Unstructured natural language (articles, web pages, PDFs) | Structured rows and columns with defined schemas |
+| Example query | "best Italian pasta recipes for beginners" | `SELECT * FROM recipes WHERE cuisine = 'Italian'` |
+| Matching | Fuzzy, ranked by degree of relevance | Exact - a row either matches the WHERE clause or it doesn't |
+| Techniques | BM25, TF-IDF, vector search, inverted indexes | B-trees, hash indexes, query planners |
+
+Full-text search is fundamentally harder because there's no binary "match" - only a spectrum of relevance. You must deal with ambiguity, synonyms, typos, context, and user intent.
+
+## The Search Pipeline
+
+Every search system - from Google to your internal Elasticsearch cluster - follows the same high-level pipeline:
+
+| Stage | What Happens |
+|---|---|
+| **Query** | User enters their information need - keywords, a question, or natural language |
+| **Understand** | Query processing: tokenization, lowercasing, stemming, synonym expansion, spell correction, intent classification |
+| **Retrieve** | Cast a wide net to find candidate documents from the corpus (high recall). Uses inverted indexes or ANN search. Typically returns hundreds to thousands of candidates |
+| **Rank** | Score and sort candidates by relevance. BM25, learned rankers, cross-encoders, or LLM-based rerankers apply here. Optimize for precision at the top |
+| **Return** | Return the top-k results with snippets, highlights, metadata, and facets |
+
+The art of search engineering is optimizing each stage. Earlier stages prioritize speed and recall; later stages prioritize precision.
+
+## The Inverted Index
+
+The foundational data structure of text search. Instead of scanning every document (forward index: doc -> terms), we flip the mapping: **term -> list of documents containing that term**.
+
+Think about the index at the back of a textbook. Instead of reading every page to find "photosynthesis," you flip to the index, find "photosynthesis -> pages 42, 87, 156" and go directly there.
+
+| Term | Posting List |
+|---|---|
+| `cat` | D1, D2 |
+| `sat` | D1 |
+| `dog` | D2 |
+| `mat` | D1, D3 |
+| `red` | D3 |
+
+Query "cat mat" -> intersect posting lists -> D1 appears in both -> rank D1 highest. No full scan needed.
+
+Before text enters the index, it goes through a processing pipeline: Raw Text -> Tokenize -> Lowercase -> Remove Stopwords -> Stem/Lemmatize -> Index. The same pipeline must run at both index time and query time - mismatched preprocessing is one of the most common causes of search bugs.
+
+```python
+# A simple "index" - maps words to document IDs
+index = {}
+for doc_id, doc in enumerate(documents):
+    for word in doc.lower().split():
+        if word not in index:
+            index[word] = set()
+        index[word].add(doc_id)
+
+# Now "cat" lookup is O(1)!
+print(index.get("cat", set()))  # {0, 1}
+```
+
+## Vector Search and Cosine Similarity
+
+Keyword search fails when users express the same idea with different words. Search for "automobile" and BM25 won't find documents about "cars." Vector search solves this by representing text as dense vectors (lists of floating-point numbers) in a high-dimensional space where **semantic similarity maps to geometric proximity**.
+
+An embedding model (like Sentence-BERT or OpenAI's text-embedding-3) converts text into vectors of 384-3072 dimensions. The key property: texts with similar meanings end up with similar vectors. "King" - "Man" + "Woman" approximates "Queen" - embeddings capture semantic relationships as geometric relationships.
+
+Three main distance metrics measure similarity between vectors:
+
+| Metric | Formula | Range | Best For |
+|---|---|---|---|
+| **Cosine Similarity** | dot(a,b) / (norm(a) * norm(b)) | [-1, 1] | Text similarity, NLP - ignores magnitude, only cares about direction |
+| **Dot Product** | sum(a_i * b_i) | Unbounded | Recommendations, MIPS - when normalized, equivalent to cosine but faster |
+| **Euclidean Distance** | sqrt(sum((a_i - b_i)^2)) | [0, inf) | Spatial data, clustering - sensitive to scale, may need normalization |
+
+Cosine similarity is the most common in NLP because it ignores magnitude - a 3-word sentence and a 300-word paragraph can still be "close" if they express the same idea. Try the interactive simulator below to compare two sentences.
+
+```python
+import numpy as np
+
+def cosine_similarity(a, b):
+    """Measure similarity between two vectors.
+    Returns 1.0 for identical directions, 0.0 for orthogonal."""
+    return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
+
+car_vec = np.array([0.8, 0.6, 0.1, 0.3])
+automobile_vec = np.array([0.79, 0.62, 0.12, 0.28])
+pizza_vec = np.array([0.1, 0.2, 0.9, 0.7])
+
+print(f"car vs automobile: {cosine_similarity(car_vec, automobile_vec):.3f}")  # ~0.999
+print(f"car vs pizza: {cosine_similarity(car_vec, pizza_vec):.3f}")            # ~0.507
+```
+
+<PlaygroundAccordion title="Try it: Vector Search and Cosine Similarity">
+  <PlaygroundComponent name="cosine-similarity" />
+</PlaygroundAccordion>
+
+## Approximate Nearest Neighbor (ANN) Algorithms
+
+With millions of vectors, exact nearest-neighbor search (comparing the query against every vector) is too slow. ANN algorithms trade a tiny bit of accuracy for massive speed gains.
+
+Imagine finding the closest coffee shop. Exact search means measuring the distance to every coffee shop on earth. ANN is like knowing "I'm in downtown Manhattan" and only checking shops in nearby neighborhoods. You might miss a shop 1 block outside your search zone, but you find a great one in 1ms instead of 1 hour.
+
+| Algorithm | How It Works | Speed | Memory | Recall@10 |
+|---|---|---|---|---|
+| **Flat (brute force)** | Compare against every vector | O(N) | 100% | 100% |
+| **HNSW** | Multi-layer graph with skip-list navigation. Top layers have long-range "highway" connections, bottom layers are dense local connections. Search starts at top, greedily descends | O(log N) | ~130% (graph overhead) | ~98% |
+| **IVF** | Cluster vectors with k-means, only search nearest clusters at query time. More "probes" = better recall but slower | O(N/k * nprobe) | 100% | ~95% |
+| **PQ** | Compress vectors by splitting into sub-vectors and quantizing each to a codebook entry. Distances approximated via lookup tables | Very fast | ~3% (32x compression) | ~85% |
+
+In practice these are combined: FAISS uses IVF+PQ for memory-constrained billion-scale search. Pinecone, Weaviate, Qdrant, and Milvus all use HNSW as their default. Rule of thumb: under 1M vectors use HNSW; 1M-100M use HNSW with PQ rescoring; 100M-1B+ use IVF-PQ.
+
+## Hybrid Search - Combining Keyword and Semantic
+
+Neither keyword search nor vector search is perfect alone. Each has blind spots the other covers:
+
+| Scenario | BM25 (Keyword) | Vector (Semantic) | Hybrid |
+|---|---|---|---|
+| Exact ID / code lookup | Excellent | Poor | Excellent |
+| Synonym-heavy query | Poor | Excellent | Excellent |
+| Mixed: technical term + concept | Partial | Partial | Excellent |
+| Rare domain-specific jargon | Good | Varies | Excellent |
+| Conversational / vague query | Poor | Good | Good |
+
+Hybrid search runs the query through two independent retrieval paths - BM25 on an inverted index and ANN on a vector index - then merges the results using **Reciprocal Rank Fusion (RRF)**.
+
+RRF is elegantly simple: for each document, compute score = sum(1 / (k + rank)) across all retrieval methods. The constant k (typically 60) smooths rankings so that rank #1 vs #2 isn't a dramatic difference. Documents ranked highly by both systems get the highest fused scores.
+
+This dual-retrieval approach is the current industry standard, used by Elasticsearch 8+, Weaviate, Pinecone, Vespa, and virtually every production RAG pipeline.
+
+```python
+def reciprocal_rank_fusion(ranked_lists, k=60):
+    """Combine multiple ranked lists using RRF."""
+    scores = {}
+    for ranked_list in ranked_lists:
+        for rank, doc_id in enumerate(ranked_list, start=1):
+            if doc_id not in scores:
+                scores[doc_id] = 0.0
+            scores[doc_id] += 1.0 / (k + rank)
+    return sorted(scores.items(), key=lambda x: x[1], reverse=True)
+
+bm25_results = ["doc_A", "doc_B", "doc_C", "doc_D"]
+vector_results = ["doc_C", "doc_A", "doc_E", "doc_B"]
+
+fused = reciprocal_rank_fusion([bm25_results, vector_results])
+print(fused)  # doc_A and doc_C rank highest (appear in both)
+```
+
+<PlaygroundAccordion title="Try it: Hybrid Search - Combining Keyword and Semantic">
+  <PlaygroundComponent name="hybrid-search-demo" />
+</PlaygroundAccordion>
+
+## Evaluation: Precision, Recall, and the F1 Trade-off
+
+How do you know if your search system is actually good? Two fundamental metrics:
+
+**Precision** = relevant results / total results returned. Of everything you showed the user, how much was actually useful?
+
+**Recall** = relevant results returned / total relevant docs in corpus. Of everything relevant that exists, how much did you find?
+
+These two metrics are always in tension. A tiny, fine fishing net catches only target fish (high precision) but misses most of them (low recall). A massive net catches everything (high recall) but also catches a lot of junk (low precision).
+
+**F1 Score** = 2 * (Precision * Recall) / (Precision + Recall) - the harmonic mean that balances both. The harmonic mean is used instead of the arithmetic mean because it penalizes extreme imbalance: if Precision = 1.0 and Recall = 0.01, the arithmetic mean is 0.505 (sounds fine!) but the harmonic mean is 0.0198 (correctly shows the system is terrible).
+
+| System | Prioritize | Why |
+|---|---|---|
+| Legal discovery | Recall | Missing a relevant document can lose a case |
+| E-commerce search | Precision | Top results must be relevant - users won't scroll past page 1 |
+| RAG retrieval | Balance | Need enough relevant chunks (recall) but too much noise confuses the LLM |
+| Medical diagnosis | Recall | Missing a disease is worse than a false alarm |
+
+```python
+def precision_at_k(relevant, retrieved, k):
+    """What fraction of the top-k results are relevant?"""
+    top_k = retrieved[:k]
+    return len(set(top_k) & set(relevant)) / k
+
+def recall_at_k(relevant, retrieved, k):
+    """What fraction of all relevant docs appear in top-k?"""
+    top_k = retrieved[:k]
+    return len(set(top_k) & set(relevant)) / len(relevant)
+
+relevant = {"doc1", "doc3", "doc5"}
+retrieved = ["doc1", "doc2", "doc3", "doc4", "doc5"]
+
+print(f"P@3: {precision_at_k(relevant, retrieved, 3):.2f}")  # 0.67
+print(f"R@3: {recall_at_k(relevant, retrieved, 3):.2f}")     # 0.67
+```
+
+<PlaygroundAccordion title="Try it: Evaluation: Precision, Recall, and the F1 Trade-off">
+  <PlaygroundComponent name="precision-recall-slider" />
+</PlaygroundAccordion>
+
+## NDCG - The Gold Standard Ranking Metric
+
+Precision and recall treat search as a set problem - a doc is either retrieved or not. But **ranking order matters**. NDCG (Normalized Discounted Cumulative Gain) handles graded relevance (not just relevant/irrelevant) and penalizes relevant documents that appear lower in the ranking.
+
+The formula works in steps:
+1. **DCG@K** = sum of (2^rel_i - 1) / log2(i + 1) for each result. The numerator exponentially rewards higher relevance grades. The log denominator discounts results at lower positions.
+2. **IDCG@K** = the ideal (best possible) DCG - sort all results by relevance descending.
+3. **NDCG@K** = DCG@K / IDCG@K, normalized to [0, 1]. A score of 1.0 means perfect ranking.
+
+Example: Results with graded relevance [3, 2, 0, 1] -> DCG = 7/1 + 3/1.585 + 0/2 + 1/2.322 = 9.324.
+
+| Metric | Graded Relevance? | Position-Aware? | Best For |
+|---|---|---|---|
+| Precision@K | No (binary) | Only via cutoff | Quick sanity check |
+| Recall@K | No (binary) | Only via cutoff | Retrieval stage evaluation |
+| MRR | No (binary) | Yes (first hit only) | Navigational / QA queries |
+| MAP | No (binary) | Yes (all hits) | General search evaluation |
+| NDCG | Yes (graded) | Yes (all positions) | Web search, recommendations - gold standard |
+
+NDCG@10 is the most commonly reported metric in search. Use the interactive calculator below to build intuition for how relevance grades and position affect the score.
+
+<PlaygroundAccordion title="Try it: NDCG - The Gold Standard Ranking Metric">
+  <PlaygroundComponent name="ndcg-calculator" />
+</PlaygroundAccordion>
+
+## Key Takeaway
+
+Search is fundamentally about trading storage and preprocessing time for query-time speed. Every technique in this series - from inverted indexes to vector embeddings - is a variation of this core idea: build smart data structures offline so you can answer queries in milliseconds.
+
+The modern search stack (2024+) combines: BM25 retrieval + Vector retrieval -> RRF fusion -> Cross-encoder rerank -> Top-k results. This multi-stage pipeline is used by virtually every production search and RAG system. Each stage narrows the candidate set while increasing the quality of ranking.
+

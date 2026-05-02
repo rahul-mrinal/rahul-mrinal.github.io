@@ -1,0 +1,97 @@
+---
+title: "Communication Patterns"
+description: "Five ways agents talk: direct messaging, broadcast, shared state, publish/subscribe, and streaming token-level communication."
+tags:
+  - "communication"
+  - "messaging"
+  - "pub-sub"
+  - "streaming"
+  - "broadcast"
+readTime: "10 min"
+publishDate: "2026-04-11"
+seriesOrder: 1
+headings:
+  - "Direct Messaging"
+  - "Broadcast"
+  - "Shared State (Blackboard)"
+  - "Publish/Subscribe"
+  - "Streaming / Token-Level"
+  - "Choosing a Communication Pattern"
+---
+## Direct Messaging
+
+Agents send messages to specific other agents. Each message has an explicit sender and receiver.
+
+**Used in:** Handoff, Debate, Hierarchical
+
+**Pros:** Clear communication paths, easy to trace and debug
+
+**Cons:** Agents need to know about each other, creating coupling
+
+This is the most intuitive pattern - it mirrors how humans communicate. One agent addresses another by name and sends a message. The receiving agent processes it and may respond.
+
+<PlaygroundAccordion title="Try it: Direct Messaging">
+  <PlaygroundComponent name="comm-pattern-switcher" />
+</PlaygroundAccordion>
+
+## Broadcast
+
+An agent sends a message to all other agents simultaneously.
+
+**Used in:** Ensemble, Market/Auction
+
+**Pros:** Simple to implement, ensures all agents receive information
+
+**Cons:** Every agent processes every message, even irrelevant ones. This creates noise and wastes compute.
+
+Broadcast works well when every agent genuinely needs to see the message (ensemble voting) or when you want competitive selection (auction bids). It fails when most messages are irrelevant to most agents.
+
+## Shared State (Blackboard)
+
+Agents read from and write to a shared data store. No direct messaging between agents.
+
+**Used in:** Blackboard, some Hierarchical implementations
+
+**Pros:** Fully decoupled agents (they only know about the data, not each other), persistent state that survives agent failures
+
+**Cons:** Coordination challenges when multiple agents write to the same section, potential for stale reads and write conflicts
+
+This is the most decoupled pattern. Agents don't even need to be running at the same time - they just read and write to a shared store.
+
+## Publish/Subscribe
+
+Agents subscribe to topics. Messages are published to topics, not to specific agents.
+
+**Used in:** Event-driven architectures, microservice-inspired agent systems
+
+**Pros:** Very decoupled - publishers don't know about subscribers, dynamic membership (agents can join/leave topics at runtime)
+
+**Cons:** Complex infrastructure, harder to debug (who received what?), message ordering guarantees can be tricky
+
+Pub/sub scales best when you have many agents with varied interests. A "code_ready" event might interest the test agent and the reviewer agent, but not the research agent.
+
+## Streaming / Token-Level
+
+Agent A streams its output token by token, and Agent B can begin processing before A finishes.
+
+**Used in:** Real-time collaborative generation, chain-of-thought monitoring
+
+**Pros:** Lower latency for downstream agents - they can start reasoning before the full message arrives
+
+**Cons:** Complex implementation, agents need to handle partial input gracefully, error handling becomes more difficult
+
+Streaming communication is increasingly important for real-time multi-agent systems. A monitoring agent can watch the chain-of-thought stream and intervene early if it detects problems, rather than waiting for the full output.
+
+## Choosing a Communication Pattern
+
+The communication pattern should match the architecture pattern:
+
+- **Pipeline** → Direct messaging (each agent sends to the next)
+- **Debate** → Direct messaging (proposer and critic exchange turns)
+- **Ensemble** → Broadcast (all agents receive the same input)
+- **Hierarchical** → Star (all communication through the manager)
+- **Blackboard** → Shared state (read/write to the board)
+- **Graph** → Varies (usually direct messaging along edges, but can use shared state)
+
+Mismatching these - for example, using broadcast in a pipeline - adds unnecessary complexity and noise.
+

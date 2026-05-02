@@ -1,0 +1,49 @@
+---
+title: "Multi-Stage Ranking - Millions to Top 10"
+description: "Design a ranking pipeline with candidate generation (L0), lightweight scoring (L1), and heavy re-ranking (L2) - the hiring funnel analogy."
+tags:
+  - "ranking"
+  - "re-ranking"
+  - "pipeline"
+  - "l0-l1-l2"
+readTime: "12 min"
+publishDate: "2026-01-09"
+seriesOrder: 1
+headings:
+  - "The Hiring Analogy"
+  - "The Three Layers"
+  - "Why Multi-Stage?"
+  - "Key Takeaway"
+---
+## The Hiring Analogy
+
+Think of ranking like a hiring pipeline. You don't give every applicant a 5-hour deep evaluation. Stage 1: resume screening (fast, low cost) narrows 10,000 -> 500. Stage 2: phone screen narrows 500 -> 50. Stage 3: final evaluation narrows 50 -> 5. Each stage is more expensive but more accurate, applied to fewer candidates.
+
+## The Three Layers
+
+**L0 - Candidate Generation**: Rapidly narrow the entire corpus to a manageable set. Input: millions-billions of documents. Output: ~1,000-10,000 candidates. Methods: inverted index (BM25), ANN search (HNSW). Latency: 1-20ms. Quality: high recall, moderate precision.
+
+**L1 - Lightweight Scoring**: Score candidates with a fast model using more features than L0. Input: ~1,000-10,000 candidates. Output: ~100-500. Methods: bi-encoder similarity, lightweight LTR (XGBoost). Features: BM25 score, cosine similarity, popularity, freshness.
+
+**L2 - Heavy Re-Ranking**: Maximize precision on the final result page. Input: ~100-500. Output: ~10-20. Methods: cross-encoder (BERT-based), GPT re-ranker, ColBERT. Cross-attention between query and doc captures token-level interactions that bi-encoders miss.
+
+A cross-encoder takes ~20ms per document. Scoring 1M documents = 5.5 hours. Scoring 100 candidates = 2 seconds. The funnel makes the expensive model tractable.
+
+## Why Multi-Stage?
+
+You can't run an expensive neural re-ranker on 10 million documents. But you can run BM25 on 10M docs in milliseconds to get 1,000 candidates, then re-rank those with a more sophisticated model.
+
+The total latency is approximately: L0 (corpus/throughput) + L1 (candidates x per-doc cost) + L2 (survivors x per-doc cost). Each stage uses progressively fewer documents but more expensive scoring.
+
+| Model | Type | Latency (10 docs) | Quality |
+|---|---|---|---|
+| ms-marco-MiniLM | Cross-encoder | ~50ms | Good baseline |
+| Cohere Rerank | API cross-encoder | ~100ms | Production-grade |
+| BGE Reranker v2 | Cross-encoder | ~80ms | Strong multilingual |
+| GPT-4 / Claude | LLM-as-judge | ~2000ms | Highest quality |
+| ColBERT v2 | Late interaction | ~30ms | Good speed/quality |
+
+## Key Takeaway
+
+Every production search system uses multi-stage ranking. The art is choosing the right model complexity and candidate set size at each stage to balance latency, cost, and quality. Start with BM25 + vector retrieval -> RRF fusion -> cross-encoder re-rank.
+

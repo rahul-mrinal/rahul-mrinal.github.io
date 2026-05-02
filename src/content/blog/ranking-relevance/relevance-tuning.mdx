@@ -1,0 +1,70 @@
+---
+title: "Relevance Tuning"
+description: "Field boosting, function scoring (recency, popularity), query-time boosting, and A/B testing for search relevance."
+tags:
+  - "boosting"
+  - "function-score"
+  - "tuning"
+  - "a-b-testing"
+readTime: "10 min"
+publishDate: "2026-01-19"
+seriesOrder: 3
+headings:
+  - "Why Tune?"
+  - "Field Boosting"
+  - "Function Scoring"
+  - "A/B Testing Relevance"
+  - "Key Takeaway"
+---
+## Why Tune?
+
+Default BM25 ranking treats all fields equally. In practice, a match in the title is far more valuable than a match deep in the description. Without tuning, a laptop accessory guide mentioning "wireless headphones" once in a long description ranks above actual wireless headphones products.
+
+| Metric | Before Tuning | After Tuning | Improvement |
+|---|---|---|---|
+| NDCG@10 | 0.42 | 0.67 | +59.5% |
+| Click-Through Rate | 12.3% | 18.7% | +52.0% |
+| Zero-Result Rate | 8.1% | 5.2% | -35.8% |
+
+## Field Boosting
+
+Weight different fields differently: score(d, q) = boost_title x BM25(d_title, q) + boost_body x BM25(d_body, q) + boost_tags x BM25(d_tags, q).
+
+| Field | Typical Boost | Why |
+|---|---|---|
+| Title | 3.0-5.0x | Concise summary - match here is strong signal |
+| Headers (H1-H3) | 2.0-3.0x | Section headers indicate topic structure |
+| Body | 1.0x (baseline) | Most content lives here - matches less targeted |
+| Tags/categories | 2.0-4.0x | Curated metadata - high signal |
+| Comments | 0.3-0.5x | User-generated, noisy - low signal |
+
+Field boosting is like an audio mixer. Each field is a track (vocals, bass, drums). The boost slider controls how loud that track is in the final mix.
+
+<PlaygroundAccordion title="Try it: Field Boosting">
+  <PlaygroundComponent name="field-boost-playground" />
+</PlaygroundAccordion>
+
+## Function Scoring
+
+Beyond text relevance, inject **business signals** directly into the score:
+
+**Recency boost**: boost = e^(-lambda x age_days). Exponential decay - recent docs score higher. News sites use aggressive decay; encyclopedias don't.
+
+**Popularity boost**: boost = log2(1 + views). Log-scaled to prevent viral content from dominating. 1000 views = 10x boost, not 1000x.
+
+**Query-time boosts**: Applied per-query. If query contains "buy" or "price" -> boost product pages. If user is on mobile -> boost mobile-friendly pages. Boost categories the user has clicked on before.
+
+In Elasticsearch, use `function_score` query with `score_mode: "sum"` for additive or `score_mode: "multiply"` for multiplicative. Additive nudges rankings; multiplicative amplifies relevant + popular docs.
+
+## A/B Testing Relevance
+
+Never ship relevance changes without measurement. The workflow: Define metrics (NDCG, CTR, dwell time) -> Randomize users into A/B -> Run experiment 1-2 weeks -> Statistical significance test (p < 0.05 with 1,000-10,000+ queries per variant) -> Ship or rollback.
+
+Common pitfalls: **Position bias** (users click position 1 regardless - use interleaving to eliminate), **Novelty effect** (new rankings get more clicks because they look different - run 2+ weeks).
+
+The tuning workflow: (1) Establish baseline, (2) Build 100-500 query-document judgment pairs, (3) Tune one variable at a time, (4) Offline evaluation against judgment set, (5) A/B test in production, (6) Monitor and re-evaluate monthly.
+
+## Key Takeaway
+
+Relevance tuning is not a one-time task - it's a continuous feedback loop. Start with field boosting (title > tags > description), add function scoring for business signals (recency, popularity), and validate every change with A/B tests. The goal is not perfect ranking - it's measurably better ranking than what you had yesterday.
+

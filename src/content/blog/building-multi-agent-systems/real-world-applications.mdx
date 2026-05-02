@@ -1,0 +1,98 @@
+---
+title: "Real-World Applications"
+description: "Multi-agent systems in practice: software development, customer support, research, financial analysis, content creation, and DevOps incident response."
+tags:
+  - "applications"
+  - "software-dev"
+  - "support"
+  - "finance"
+  - "devops"
+readTime: "12 min"
+publishDate: "2026-04-13"
+seriesOrder: 2
+headings:
+  - "Software Development"
+  - "Customer Support"
+  - "Research and Analysis"
+  - "Financial Analysis"
+  - "Content Creation"
+  - "DevOps and Incident Response"
+---
+## Software Development
+
+**Pattern:** Hierarchical + Debate
+
+- **PM Agent:** Breaks down requirements into tasks
+- **Architect Agent:** Designs the approach and identifies affected files
+- **Coder Agent:** Writes the implementation
+- **Reviewer Agent:** Critiques the code (debate with coder)
+- **Tester Agent:** Generates and runs tests
+
+**Examples:** ChatDev, MetaGPT, Devin-style systems
+
+The key insight is that software development naturally maps to specialized roles. The debate between coder and reviewer is where the most value comes from - it catches bugs, security issues, and design problems that a single code-generation agent would miss.
+
+<PlaygroundAccordion title="Try it: Software Development">
+  <PlaygroundComponent name="use-case-carousel" />
+</PlaygroundAccordion>
+
+## Customer Support
+
+**Pattern:** Selector or Handoff
+
+- **Triage Agent:** Classifies intent and urgency
+- **FAQ Agent:** Handles common questions from a knowledge base
+- **Technical Agent:** Troubleshoots issues, creates tickets
+- **Billing Agent:** Handles payment, invoicing, subscription changes
+- **Escalation Agent:** Hands off to human agents when needed
+
+Customer support is the canonical use case for the selector and handoff patterns because query types vary enormously. A billing question needs completely different tools and knowledge than a technical troubleshooting request.
+
+## Research and Analysis
+
+**Pattern:** Hierarchical + Ensemble
+
+- **Research Manager:** Decomposes the research question
+- **Web Researcher:** Searches the internet, reads papers
+- **Data Analyst:** Queries databases, produces charts
+- **Writer:** Synthesizes findings into a report
+- **Fact-Checker:** Verifies claims against sources
+
+The ensemble component is important here: running multiple research agents with different search strategies and combining their findings produces more comprehensive results than a single researcher.
+
+## Financial Analysis
+
+**Pattern:** Graph + Debate
+
+- **Data Collector:** Pulls market data, filings, news
+- **Quantitative Analyst:** Runs models, identifies patterns
+- **Risk Assessor:** Evaluates downside scenarios
+- **Bull/Bear Debate:** Two agents argue opposing investment theses
+- **Report Generator:** Produces the final analysis
+
+The graph ensures regulatory-compliant, auditable decision paths. The debate between bull and bear analysts forces the system to consider both sides of an investment thesis, reducing confirmation bias.
+
+## Content Creation
+
+**Pattern:** Sequential + Debate
+
+- **Topic Researcher:** Gathers background and source material
+- **Outline Agent:** Structures the content
+- **Writer Agent:** Produces the first draft
+- **Editor Agent:** Critiques and suggests improvements (debate with writer)
+- **SEO/Format Agent:** Optimizes for platform and audience
+
+The sequential pipeline ensures every piece of content goes through all necessary stages, while the debate between writer and editor improves quality through iteration.
+
+## DevOps and Incident Response
+
+**Pattern:** Graph (deterministic triage) + Hierarchical (investigation)
+
+- **Alert Classifier:** Receives alert, classifies severity and type
+- **Log Analyst:** Searches logs for correlated events
+- **Root Cause Investigator:** Analyzes recent deployments, config changes
+- **Remediation Agent:** Suggests or executes fixes
+- **Communication Agent:** Drafts status updates for stakeholders
+
+The graph pattern is critical here because incident response needs to be deterministic and auditable. You can't have an LLM randomly deciding to skip the severity classification step. The hierarchical component kicks in once the alert is classified and a lead investigator agent coordinates the analysis.
+

@@ -1,0 +1,69 @@
+---
+title: "Metadata and Fields"
+description: "Structure your index with field types - text, keyword, numeric, boolean, date - and understand when to search vs filter."
+tags:
+  - "metadata"
+  - "fields"
+  - "filtering"
+  - "schema"
+readTime: "8 min"
+publishDate: "2025-12-12"
+seriesOrder: 3
+headings:
+  - "Why Fields Matter"
+  - "The Five Fundamental Field Types"
+  - "Search vs Filter: Two Different Operations"
+  - "Multi-Field Mappings and Analyzers"
+  - "Schema Design Rules and Anti-Patterns"
+  - "Key Takeaway"
+---
+## Why Fields Matter
+
+A search index isn't a blob of text - it's a structured collection of **fields**, each with its own type and behavior. Just like a database table has columns with specific data types, a search index has fields that determine how data is stored, analyzed, and queried.
+
+Metadata is like the label on a jar. The text content is the stuff inside (the actual food). The label tells you the brand, price, expiration date, and ingredients - you don't need to taste the food to filter by these attributes. Similarly, metadata lets you filter, sort, and facet without full-text searching the content.
+
+## The Five Fundamental Field Types
+
+| Type | Stored As | Operations Supported | Use Cases |
+|---|---|---|---|
+| **Text (Analyzed)** | Tokenized, lowercased, stemmed terms in inverted index | Full-text search with BM25 scoring | Titles, descriptions, body content |
+| **Keyword** | Exact string, not analyzed | Exact match, filtering, sorting, faceting, aggregation | Categories, tags, IDs, status values |
+| **Numeric** | Integer or float in BKD tree | Range queries, sorting, aggregations | Price, rating, counts, scores |
+| **Boolean** | Single bit | Exact match filtering | in_stock, is_active, has_discount |
+| **Date** | Timestamp in BKD tree | Date range queries, sorting by recency | created_at, published_date, last_modified |
+
+Keyword fields are stored as-is. "New York City" only matches the exact string "New York City" - not "new york" or "York". Text fields are tokenized: "New York City" becomes ["new", "york", "city"] and matches any of those terms. Vector (dense) fields store float arrays from embedding models for semantic similarity via ANN search.
+
+## Search vs Filter: Two Different Operations
+
+**Full-text search** finds relevant documents using text analysis and scoring. The engine tokenizes the query, looks up terms in the inverted index, and scores documents by relevance (BM25). Results are ranked.
+
+**Filtering** includes or excludes documents using exact criteria - no scoring involved. The engine uses metadata indexes (keyword, numeric, boolean) for fast exact filtering.
+
+The real power is combining both: "wireless headphones" with filters brand=Sony, price < $400, in_stock=true. The engine first applies the filter (cheap bitset operation), then runs BM25 only on the filtered subset - dramatically faster than scoring all documents first.
+
+## Multi-Field Mappings and Analyzers
+
+Sometimes you need the same content indexed in multiple ways. A product name should be *searchable* (text field with analysis) and also *sortable* (keyword field for exact alphabetical sorting). Multi-field mappings solve this by indexing a single source field into multiple internal representations.
+
+Text fields pass through an **analysis pipeline**: Raw Text -> Character Filter -> Tokenizer -> Token Filter -> Indexed Terms. Common analyzers: `standard` (tokenize + lowercase), `language` (language-aware stemming + stop words), `edge_ngram` (prefix n-grams for autocomplete), `pattern` (split on regex).
+
+| Use Case | Primary Type | Sub-field | Purpose |
+|---|---|---|---|
+| Search + Sort | text | keyword (.raw) | Sort by exact name |
+| Search + Autocomplete | text | text (.autocomplete, edge_ngram) | Type-ahead |
+| Facet + Search | text | keyword (.facet) | Term aggregations |
+
+## Schema Design Rules and Anti-Patterns
+
+**The Five Questions** for every field: (1) Will users search it? -> `text`, (2) Will users filter it? -> `keyword`/`numeric`/`boolean`/`date`, (3) Will users sort by it? -> `keyword` or `numeric`/`date`, (4) Will users aggregate it? -> `keyword` for term aggs, `numeric` for stats, (5) Does it need to be stored at all?
+
+**Common anti-patterns:** Putting everything in one text field (lose ability to boost title over body), using text type for IDs (analyzer breaks exact match), over-indexing every field (doubles index size), ignoring null values (breaks aggregations).
+
+**Rule of thumb:** If users *type free-form queries* -> `text`. If users *select from a dropdown* -> `keyword` or `boolean`. If users *drag a range slider* -> `numeric` or `date`.
+
+## Key Takeaway
+
+Your schema defines what operations are possible on your index. Choose field types intentionally: text for full-text search, keywords for exact filtering and facets, numerics for ranges, booleans for toggles, and dates for temporal queries. Get the schema right, and everything downstream falls into place.
+

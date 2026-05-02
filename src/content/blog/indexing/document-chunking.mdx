@@ -1,0 +1,65 @@
+---
+title: "Document Chunking Strategies"
+description: "Break large documents into optimal chunks for indexing - fixed-size, sentence-based, paragraph-based, and semantic chunking."
+tags:
+  - "chunking"
+  - "indexing"
+  - "preprocessing"
+readTime: "10 min"
+publishDate: "2025-12-07"
+seriesOrder: 2
+headings:
+  - "Why Chunk?"
+  - "Chunking Strategies Compared"
+  - "Overlap: Preventing Information Loss"
+  - "Chunk Size Trade-off"
+  - "Content-Specific Recommendations"
+  - "Key Takeaway"
+---
+## Why Chunk?
+
+Modern language models and embedding models have **finite context windows** - typically 512 to 8,192 tokens. A 50-page research paper doesn't fit. Even if it did, cramming everything in dilutes relevance. Chunking solves both problems.
+
+Four reasons to chunk: (1) **Token limits** - embedding models truncate beyond their max tokens, silently losing content, (2) **Relevance dilution** - if a relevant paragraph is buried in 50 pages of unrelated text, the overall document score gets diluted, (3) **Better retrieval precision** - returning a specific chunk lets the reader or LLM find the exact answer faster, (4) **Memory & speed** - processing smaller chunks is faster at query time, especially for reranking.
+
+## Chunking Strategies Compared
+
+| Strategy | How It Splits | Best For | Watch Out For |
+|---|---|---|---|
+| **Fixed-size** | Every N characters/tokens | Uniform-length docs, fast prototyping | Mid-word/mid-sentence breaks |
+| **Sentence-based** | Sentence boundaries (. ? !) | Prose, articles, documentation | Run-on sentences, abbreviations |
+| **Paragraph-based** | Double newlines | Structured writing, reports | Wildly varying paragraph sizes |
+| **Semantic** | Embedding similarity drops | Multi-topic documents | High cost, threshold tuning |
+| **Recursive** | Hierarchical separators (paragraph -> sentence -> char) | Code, markdown, structured text | More complex implementation |
+
+The recursive approach (used by LangChain) tries a hierarchy of separators - first double newlines, then single newlines, then sentences, then characters - and only falls back to the next level when chunks exceed the maximum size.
+
+## Overlap: Preventing Information Loss
+
+When you split text at a boundary, context at the edges is lost. **Overlap** solves this by including some text from the previous chunk at the start of the next chunk. The total number of chunks with overlap is approximately ceil((N - O) / (C - O)) where C is chunk size, O is overlap, and N is total text length.
+
+Overlap duplicates text, increasing storage and embedding costs. At 20% overlap the overhead is ~25%. At 50% overlap it doubles. Recommended overlap by chunk size: 128 tokens -> 20-30 tokens (15-25%), 256 tokens -> 30-50 tokens (12-20%), 512 tokens -> 50-80 tokens (10-15%).
+
+A better approach: **sentence-aware overlap**. Instead of overlapping by a fixed character count, overlap by whole sentences. The last 1-2 sentences of chunk N become the first 1-2 sentences of chunk N+1.
+
+## Chunk Size Trade-off
+
+Chunk size creates a fundamental trade-off between retrieval precision and context preservation. Small chunks (< 100 tokens) lack context and produce poor embeddings. Large chunks (> 2000 tokens) cause relevance dilution and may exceed model limits. Most practitioners find 200-500 tokens works best. Use the slider below to explore how the two metrics move in opposite directions.
+
+<PlaygroundAccordion title="Try it: Chunk Size Trade-off">
+  <PlaygroundComponent name="chunk-size-tradeoff" />
+</PlaygroundAccordion>
+
+## Content-Specific Recommendations
+
+| Content Type | Strategy | Chunk Size | Notes |
+|---|---|---|---|
+| **Technical Documentation** | Split by headings/sections, then sentence-based within | 256-512 tokens | Include heading text in every chunk for context |
+| **Legal / Regulatory Text** | Split by clause or article number | 512-1024 tokens | High overlap (20-30%) to preserve cross-references |
+| **Source Code** | Split by function/class/method | Varies | Use AST-aware chunking when possible, include imports |
+| **Chat / Conversation Logs** | Split by turn or time gap | 100-300 tokens | Keep speaker attribution with each chunk |
+
+## Key Takeaway
+
+Every downstream component - embedding, indexing, retrieval, and generation - is affected by your chunking decisions. Start with sentence-based chunking at 200-400 tokens with 10-15% overlap, measure retrieval quality on your real queries, and iterate. The best chunking strategy is the one you've tested against your data.
+

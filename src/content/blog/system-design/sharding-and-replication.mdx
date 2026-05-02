@@ -1,0 +1,65 @@
+---
+title: "Sharding & Replication"
+description: "Split data across shards for throughput, replicate for availability - the pizza kitchen analogy for distributed search."
+tags:
+  - "sharding"
+  - "replication"
+  - "distributed"
+  - "scaling"
+readTime: "12 min"
+publishDate: "2026-02-02"
+seriesOrder: 2
+headings:
+  - "The Pizza Kitchen Analogy"
+  - "Sharding Strategies"
+  - "Scatter-Gather: The Cost of Distribution"
+  - "Shard Calculator"
+  - "Replica Types and Failover"
+  - "Key Takeaway"
+---
+## The Pizza Kitchen Analogy
+
+Sharding is like having multiple pizza ovens - each handles a portion of the orders. Replication is like having a backup oven - if one breaks, the others keep serving. For search, shards split the index across machines; replicas copy shards for redundancy and read scaling.
+
+The combined capacity formula: Capacity = Shards × QPS per shard × (Replicas + 1). Sharding multiplies data capacity; replication multiplies read capacity.
+
+## Sharding Strategies
+
+How you distribute data across shards determines query patterns and performance:
+
+| Strategy | How | Pros | Cons | Best For |
+|---|---|---|---|---|
+| **Hash-based** | hash(doc_id) % N | Even distribution, no hotspots | Range queries hit all shards | General eCommerce |
+| **Range-based** | A-M on shard 0, N-Z on shard 1 | Range queries target one shard | Uneven distribution, hotspots | Time-series, alphabetical |
+| **Custom routing** | Route by tenant_id or category | Co-locate related docs | Requires domain knowledge, can create skew | Multi-tenant, category-heavy |
+
+Elasticsearch defaults to hash-based routing on `_id`. Override with the `routing` parameter when queries always filter by a specific field - this converts scatter-gather into single-shard queries.
+
+## Scatter-Gather: The Cost of Distribution
+
+Every distributed search query fans out to all shards, then merges results. Total latency = max(shard latencies) + merge time. A single slow shard (straggler) sets the floor for every query - this is why tail latency (p99) matters most.
+
+The probability of at least one slow shard: P(straggler) = 1 - (1 - p)^N where p is the per-shard straggler rate and N is the number of shards. With 20 shards and a 2% straggler rate, there's a 33% chance of a slow shard on any given query.
+
+Optimization strategies: adaptive replica selection (route to least-loaded replica), hedged requests (send to two replicas, use first response), shard pruning (skip shards that can't match), and custom routing (single-shard queries when possible).
+
+## Shard Calculator
+
+Size your cluster based on data volume, document size, and redundancy needs. Adjust the sliders to see how shard count, total copies, and cluster storage change with different configurations.
+
+<PlaygroundAccordion title="Try it: Shard Calculator">
+  <PlaygroundComponent name="shard-calculator" />
+</PlaygroundAccordion>
+
+## Replica Types and Failover
+
+Replicas serve reads and provide fault tolerance. The write path goes to the primary shard only, which replicates to replicas (sync or async). The read path can go to any replica - more replicas = more read throughput.
+
+Read QPS capacity = QPS per node × (replicas + 1) × shards. With 2 replicas and 3 availability zones, you survive an entire zone failure. Elasticsearch uses sync replication by default - a write isn't acknowledged until all in-sync replicas confirm.
+
+Cross-zone replica placement ensures no shard and its replica share a failure domain. This is the standard setup for production search clusters.
+
+## Key Takeaway
+
+Shard for throughput and capacity. Replicate for availability and read scaling. Scatter-gather is the cost: total latency = max(shard latencies). Minimize shard count where possible, watch tail latency religiously, and use hedged requests to tame stragglers.
+

@@ -1,0 +1,68 @@
+---
+title: "Capacity Estimation for Search Systems"
+description: "Back-of-envelope math for QPS, storage, memory, and bandwidth - the restaurant analogy for search capacity planning."
+tags:
+  - "capacity"
+  - "qps"
+  - "storage"
+  - "estimation"
+readTime: "10 min"
+publishDate: "2026-01-28"
+seriesOrder: 1
+headings:
+  - "Why Estimate?"
+  - "The Core Formulas"
+  - "Scale Estimation Example"
+  - "QPS and Bandwidth Planning"
+  - "Key Takeaway"
+---
+## Why Estimate?
+
+Before building anything, you need to know: How many queries per second? How much data? How much memory for indexes? How many machines? Capacity estimation is the foundation of every architecture decision and the first thing to discuss in a system design interview.
+
+Get capacity wrong and everything downstream falls apart. Under-provision and you hit latency walls during peak traffic. Over-provision and you burn budget on idle hardware. The goal is a principled estimate backed by simple math.
+
+## The Core Formulas
+
+Four key calculations drive every search system design:
+
+| Formula | Purpose |
+|---|---|
+| **Storage** = Documents × Avg Size × Index Overhead (1.5×) | How much disk you need per replica |
+| **Cluster Storage** = Storage × Replication Factor | Total disk across the cluster |
+| **Shards** = ceil(Storage / Max Shard Size) | How many primary shards to create |
+| **Nodes** = (Shards × Replication Factor) / Shards per Node | Minimum cluster size |
+
+Index overhead (1.5×) accounts for the inverted index, doc values, norms, and stored fields that Lucene maintains alongside raw data. For dense vector indexes add another ~150 GB per 50M documents at 768 dimensions.
+
+## Scale Estimation Example
+
+For a large eCommerce system (50M products, 5 KB avg doc, 10K peak QPS):
+
+| Metric | Estimate | Rationale |
+|---|---|---|
+| Raw data | 250 GB | 50M × 5 KB |
+| With index overhead | 375 GB | 250 × 1.5 |
+| Vector embeddings | 150 GB | 50M × 768 dims × 4 bytes |
+| Total per replica | ~525 GB | Text index + vectors |
+| With 2 replicas | ~1.6 TB | 3 copies total |
+| Primary shards | 18 | 525 GB / 30 GB target |
+| Total shard copies | 54 | 18 × 3 |
+| Data nodes | 8-12 | Headroom for rolling upgrades |
+
+Use the interactive capacity estimator to plug in your own numbers and see how storage, shard count, and node requirements scale.
+
+<PlaygroundAccordion title="Try it: Scale Estimation Example">
+  <PlaygroundComponent name="capacity-estimator" />
+</PlaygroundAccordion>
+
+## QPS and Bandwidth Planning
+
+Read throughput drives replica count: Required shard-copies = Peak QPS / QPS per shard. A typical Elasticsearch shard handles 100-500 QPS depending on query complexity and hardware. With 18 shards and 300 QPS/shard, a single replica set handles 5,400 QPS - you need at least 2 replica sets for 10K QPS.
+
+Bandwidth = QPS × Avg Response Size. At 10K QPS with 5 KB responses, that's 50 MB/s outbound - well within a 10 Gbps network but worth tracking. Autocomplete multiplies this by 5× (one request per keystroke).
+
+## Key Takeaway
+
+Always start system design with capacity estimation. Show your math: "50M products × 5 KB = 250 GB raw. With 1.5× index overhead = 375 GB. At 30 GB/shard = 13 primary shards. With 2 replicas = 39 shard copies across ~10 nodes." Concrete numbers backed by reasoning demonstrate deep expertise and guide every downstream decision.
+

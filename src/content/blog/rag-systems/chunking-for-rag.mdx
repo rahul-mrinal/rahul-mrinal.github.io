@@ -1,0 +1,54 @@
+---
+title: "Chunking for RAG"
+description: "Why chunk size and overlap matter enormously for RAG quality - the index card analogy and five chunking strategies."
+tags:
+  - "chunking"
+  - "rag"
+  - "overlap"
+  - "strategies"
+readTime: "10 min"
+publishDate: "2026-03-09"
+seriesOrder: 2
+headings:
+  - "The Index Card Analogy"
+  - "Chunking Strategies"
+  - "Interactive Chunking"
+  - "Overlap and the Edge Problem"
+  - "Key Takeaway"
+---
+## The Index Card Analogy
+
+Imagine writing a cheat sheet for an exam on index cards. Too small (one sentence per card) and you lose context - you can't understand the answer without surrounding information. Too large (entire chapters per card) and you can't find specific answers quickly - the relevant sentence is buried in noise.
+
+RAG chunking has the same trade-off. The chunk size determines retrieval granularity: small chunks offer precision, large chunks offer context. Most embedding models have a 512-token limit, so documents must be split.
+
+## Chunking Strategies
+
+| Strategy | How It Splits | Best For | Watch Out For |
+|---|---|---|---|
+| **Fixed-size** | Every N tokens with overlap | Uniform docs, fast prototyping | Mid-sentence breaks |
+| **Sentence-based** | Sentence boundaries (. ? !) | Prose, articles, documentation | Run-on sentences |
+| **Paragraph-based** | Double newlines | Structured writing, reports | Wildly varying sizes |
+| **Recursive** | Hierarchy: paragraph → sentence → char | Code, markdown, structured text | More complex implementation |
+| **Semantic** | Embedding similarity drops | Multi-topic documents | High cost, threshold tuning |
+
+The recursive approach (used by LangChain) tries a hierarchy of separators - first double newlines, then single newlines, then sentences - and only falls back when chunks exceed the maximum size.
+
+## Interactive Chunking
+
+Paste text and experiment with different chunking strategies, sizes, and overlap. Watch how the same document splits differently depending on your configuration.
+
+<PlaygroundAccordion title="Try it: Interactive Chunking">
+  <PlaygroundComponent name="chunking-playground" />
+</PlaygroundAccordion>
+
+## Overlap and the Edge Problem
+
+When you split text at a boundary, context at the edges is lost. Overlap includes text from the previous chunk at the start of the next chunk. Recommended overlap by chunk size: 128 tokens → 20-30 tokens (15-25%), 256 tokens → 30-50 tokens (12-20%), 512 tokens → 50-80 tokens (10-15%).
+
+A better approach: sentence-aware overlap. Instead of overlapping by a fixed token count, overlap by whole sentences. The last 1-2 sentences of chunk N become the first 1-2 sentences of chunk N+1.
+
+## Key Takeaway
+
+Start with 256-512 token chunks with 10-15% overlap. Test different sizes against your actual queries. The best chunking strategy is the one you've measured against your data - there's no universal answer. Content-specific tuning matters: technical docs use heading-based splitting, legal text uses clause-based, code uses AST-aware chunking.
+

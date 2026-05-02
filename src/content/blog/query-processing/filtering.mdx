@@ -1,0 +1,65 @@
+---
+title: "Filtering in Search"
+description: "Understand ranking vs filtering, pre-filter vs post-filter, faceted search, and the performance implications of each approach."
+tags:
+  - "filtering"
+  - "facets"
+  - "pre-filter"
+  - "post-filter"
+readTime: "10 min"
+publishDate: "2025-12-30"
+seriesOrder: 3
+headings:
+  - "Ranking vs Filtering"
+  - "Filter Types and Data Structures"
+  - "Pre-filter vs Post-filter"
+  - "Faceted Search and the Zero-Results Problem"
+  - "Key Takeaway"
+---
+## Ranking vs Filtering
+
+These are fundamentally different operations. **Ranking** assigns a continuous score to every document - all documents survive, they're just reordered. **Filtering** makes a binary decision: include or exclude. No middle ground. A filtered-out document is invisible regardless of how relevant it might be.
+
+| Property | Ranking | Filtering |
+|---|---|---|
+| Output type | Continuous score | Boolean (yes/no) |
+| Effect on results | Reorders | Removes |
+| Reversibility | Trivial (re-sort) | Must re-query |
+| Impact on recall | None - all docs survive | Decreases (docs removed) |
+| User expectation | "Show me the best" | "Exclude everything that isn't X" |
+
+## Filter Types and Data Structures
+
+| Type | Operator | Example | Data Structure |
+|---|---|---|---|
+| **Category** | = / IN | category IN ("shoes", "boots") | Bitmap index |
+| **Range** | BETWEEN | price BETWEEN 50 AND 200 | Sorted array / B-tree |
+| **Boolean** | = true/false | in_stock = true | Bitset (1 bit per doc) |
+| **Date Range** | >, < | created_at > 2024-01-01 | Range tree / sorted |
+| **Multi-value** | CONTAINS | tags CONTAINS "organic" | Inverted index on tags |
+| **Geo** | WITHIN | location WITHIN 10km | Geohash / R-tree |
+
+For low-cardinality fields (&lt;100 values), bitmap indexes work best - combine with bitwise AND/OR at billions of bits per second. For high-cardinality fields (>10K values), use hash indexes or B-trees. Elasticsearch maintains a filter cache of frequently used filters as Roaring Bitmaps - reusing a cached filter is microseconds even on billions of docs.
+
+## Pre-filter vs Post-filter
+
+**Pre-filtering** narrows the search space before retrieval: faster (smaller search space), exact top-k from filtered set, but may degrade ANN recall if too many HNSW nodes are filtered out.
+
+**Post-filtering** retrieves first, then removes non-matching results: simple to implement, full recall, but wastes compute on filtered-out docs and may return fewer results than expected.
+
+The **HNSW graph problem**: if you pre-filter 80% of nodes, the remaining graph is sparse and disconnected - ANN search can't navigate. Solutions include partition indexes (separate HNSW per category), filterable HNSW (skip non-matching nodes during traversal), or over-retrieve + post-filter (retrieve 5x candidates).
+
+**Best practice**: Apply hard filters pre-retrieval (security, language, tenant) and soft filters post-retrieval (availability, recency preference).
+
+## Faceted Search and the Zero-Results Problem
+
+Facets show users how many results are available for each filter value, helping them navigate without dead ends. The biggest danger of aggressive filtering: **zero results**. An empty result page is worse than showing slightly wrong results.
+
+Fallback strategies: (1) **Progressive relaxation** - remove filters one at a time until results appear, (2) **Show near-misses** - "No exact matches. Showing results that match 3 of 4 filters", (3) **Suggest alternatives** - "Try removing the price filter", (4) **Soft filters** - convert some filters to ranking signals (prefer in-stock, don't require it).
+
+Track your zero-result rate as a KPI. If more than 5% of filtered queries return zero results, your filter UX needs work.
+
+## Key Takeaway
+
+Filtering is a binary gate; ranking is a continuous spectrum. The critical design decision is *when* to filter (pre vs post) and *what* to filter vs rank. Apply hard constraints as filters, soft preferences as ranking signals. Always show facet counts so users can self-navigate without hitting dead ends.
+

@@ -1,0 +1,190 @@
+---
+title: "Implementation Frameworks"
+description: "AutoGen, LangGraph, CrewAI, and OpenAI Swarm compared - APIs, pattern support, production readiness, and code examples for each."
+tags:
+  - "autogen"
+  - "langgraph"
+  - "crewai"
+  - "swarm"
+  - "frameworks"
+readTime: "14 min"
+publishDate: "2026-04-13"
+seriesOrder: 1
+headings:
+  - "AutoGen (Microsoft)"
+  - "LangGraph (LangChain)"
+  - "CrewAI"
+  - "OpenAI Swarm"
+  - "Framework Comparison"
+---
+## AutoGen (Microsoft)
+
+**Version:** 0.4+ (AgentChat API)
+
+**Patterns supported:** Sequential (`RoundRobinGroupChat`), Selector (`SelectorGroupChat`), Custom (Swarm, MagenticOne)
+
+**Strengths:**
+- Clean Python API for agent definitions
+- Built-in tool execution
+- Flexible model client abstraction (OpenAI, Azure, Anthropic, LiteLLM)
+- Team-based orchestration with termination conditions
+
+**Best for:** Rapid prototyping, conversational multi-agent systems
+
+```python
+from autogen_agentchat.teams import SelectorGroupChat, RoundRobinGroupChat
+from autogen_agentchat.agents import AssistantAgent
+from autogen_agentchat.conditions import MaxMessageTermination
+
+# Define agents
+researcher = AssistantAgent(
+    name="Researcher",
+    system_message="You research topics thoroughly.",
+    model_client=model_client,
+)
+
+writer = AssistantAgent(
+    name="Writer",
+    system_message="You write clear, engaging content.",
+    model_client=model_client,
+)
+
+# Sequential team
+pipeline = RoundRobinGroupChat(
+    participants=[researcher, writer],
+    termination_condition=MaxMessageTermination(max_messages=4),
+)
+```
+
+<PlaygroundAccordion title="Try it: AutoGen (Microsoft)">
+  <PlaygroundComponent name="framework-tabs" />
+</PlaygroundAccordion>
+
+## LangGraph (LangChain)
+
+**Patterns supported:** Graph (primary), all others composable within graph nodes
+
+**Strengths:**
+- Explicit state machine with typed state
+- Built-in persistence, streaming, and human-in-the-loop
+- Conditional edges, parallel branches, subgraphs
+- LangSmith integration for observability
+
+**Best for:** Production systems requiring deterministic control flow
+
+```python
+from langgraph.graph import StateGraph, END
+from langgraph.checkpoint import MemorySaver
+from typing import TypedDict
+
+class AgentState(TypedDict):
+    messages: list
+    next_agent: str
+
+workflow = StateGraph(AgentState)
+workflow.add_node("researcher", research_node)
+workflow.add_node("writer", writer_node)
+workflow.add_node("reviewer", reviewer_node)
+
+workflow.set_entry_point("researcher")
+workflow.add_edge("researcher", "writer")
+workflow.add_conditional_edges("writer", should_review, {
+    "needs_review": "reviewer",
+    "approved": END,
+})
+workflow.add_edge("reviewer", "writer")
+
+app = workflow.compile(checkpointer=MemorySaver())
+```
+
+## CrewAI
+
+**Patterns supported:** Sequential (`Process.sequential`), Hierarchical (`Process.hierarchical`)
+
+**Strengths:**
+- High-level "crew" abstraction (agents, tasks, process)
+- Built-in delegation between agents
+- Memory and caching support
+- Rapid prototyping with minimal code
+
+**Best for:** Team-simulation use cases, rapid prototyping
+
+```python
+from crewai import Agent, Task, Crew, Process
+
+researcher = Agent(
+    role="Researcher",
+    goal="Research topics thoroughly",
+    backstory="You are an expert researcher.",
+    tools=[search_tool],
+)
+
+writer = Agent(
+    role="Writer",
+    goal="Write engaging content",
+    backstory="You are a skilled technical writer.",
+)
+
+research_task = Task(description="Research {topic}", agent=researcher)
+write_task = Task(description="Write article on {topic}", agent=writer)
+
+crew = Crew(
+    agents=[researcher, writer],
+    tasks=[research_task, write_task],
+    process=Process.sequential,
+)
+```
+
+## OpenAI Swarm
+
+**Patterns supported:** Handoff (primary)
+
+**Strengths:**
+- Extremely lightweight (educational framework)
+- Clean handoff model with transfer functions
+- Context variables for state passing
+- Minimal abstraction, easy to understand
+
+**Best for:** Learning handoff patterns, simple multi-agent applications
+
+**Note:** Swarm is explicitly labeled as educational and not production-ready. It's excellent for understanding the handoff pattern, but you'll want AutoGen or LangGraph for production.
+
+```python
+from swarm import Swarm, Agent
+
+def transfer_to_sales():
+    return sales_agent
+
+triage_agent = Agent(
+    name="Triage",
+    instructions="Route to the right department.",
+    functions=[transfer_to_sales, transfer_to_support],
+)
+
+sales_agent = Agent(
+    name="Sales",
+    instructions="Handle sales inquiries.",
+)
+
+client = Swarm()
+response = client.run(
+    agent=triage_agent,
+    messages=[{"role": "user", "content": "I want to buy the pro plan"}],
+)
+```
+
+## Framework Comparison
+
+| Framework | Primary Pattern | Production Ready? | State Management | Learning Curve |
+|---|---|---|---|---|
+| AutoGen 0.4 | Selector, Sequential | Moderate | Team-internal | Medium |
+| LangGraph | Graph | Yes | Built-in persistence | High |
+| CrewAI | Sequential, Hierarchical | Moderate | Built-in memory | Low |
+| OpenAI Swarm | Handoff | No (educational) | Context variables | Very Low |
+
+**Pick LangGraph** when you need production reliability, deterministic control flow, and auditability. **Pick AutoGen** when you want flexible conversational multi-agent systems with rapid iteration. **Pick CrewAI** when you want the simplest possible API for team-simulation patterns. **Pick Swarm** when you're learning.
+
+<PlaygroundAccordion title="Try it: Framework Comparison">
+  <PlaygroundComponent name="framework-picker" />
+</PlaygroundAccordion>
+

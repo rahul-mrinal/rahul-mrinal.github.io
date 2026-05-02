@@ -1,0 +1,82 @@
+---
+title: "Inverted Index - Heart of Every Search Engine"
+description: "Build an inverted index from scratch - the data structure that makes sub-second search across billions of documents possible."
+tags:
+  - "inverted-index"
+  - "data-structure"
+  - "posting-list"
+readTime: "12 min"
+publishDate: "2025-12-03"
+seriesOrder: 1
+headings:
+  - "What is Indexing?"
+  - "Types of Indexes in Search"
+  - "Forward Index vs Inverted Index"
+  - "Positional Indexes for Phrase Queries"
+  - "Build an Inverted Index"
+  - "Key Takeaway"
+---
+## What is Indexing?
+
+Imagine you have 10 million documents and a user types a query. You *could* open every single document, read every single word, and check for matches. But that's insane. **Indexing** is the process of building data structures *ahead of time* so that queries can be answered in milliseconds instead of hours.
+
+Think of the index at the back of a textbook. When you want to learn about "binary search," you don't read the entire 800-page book. You flip to the index, find "binary search -> page 247," and go directly there. A search index does the same thing for every word across millions of documents.
+
+Without an index, the time complexity is O(N x M) where N is the number of documents and M is the average tokens per document. With 10 million documents averaging 1,000 tokens each, every query scans **10 billion tokens**. With an index, you look up 2-3 query terms in a hash map and intersect posting lists - **microseconds**, not seconds.
+
+## Types of Indexes in Search
+
+| Index Type | What It Stores | Used For |
+|---|---|---|
+| **Inverted Index** | Term -> list of documents | Full-text keyword search (BM25) |
+| **Vector Index** | Document -> dense embedding | Semantic / similarity search (ANN) |
+| **Columnar Index** | Field -> sorted values | Filtering, faceting, sorting |
+| **Geospatial Index** | Coordinates -> regions | Location-based queries |
+| **B-Tree / LSM** | Key -> value | Exact key lookups, range queries |
+
+## Forward Index vs Inverted Index
+
+A **forward index** maps *documents to terms*. An **inverted index** flips this - it maps *terms to documents*. The inverted index is the single most important data structure in information retrieval.
+
+To find "cat" in a forward index, you must scan ALL documents - slow! In an inverted index, you look up "cat" and immediately get back [Doc 1, Doc 2, Doc 3] - instant!
+
+The inverted index is built in steps: (1) **Tokenize** - split raw text into individual tokens, (2) **Normalize** - lowercase, stem/lemmatize, remove stop words so "Running" and "run" map to the same entry, (3) **Build posting lists** - for each unique term, record which documents it appeared in and the term frequency, (4) **Store & compress** - persist the index to disk with compression.
+
+```python
+# Forward index: doc -> terms
+forward = {
+    "doc1": ["python", "is", "great"],
+    "doc2": ["java", "is", "popular"],
+    "doc3": ["python", "and", "java"],
+}
+
+# Inverted index: term -> docs
+inverted = {}
+for doc_id, terms in forward.items():
+    for term in terms:
+        if term not in inverted:
+            inverted[term] = []
+        inverted[term].append(doc_id)
+
+# "python" -> ["doc1", "doc3"] - O(1) lookup!
+print(inverted["python"])
+```
+
+## Positional Indexes for Phrase Queries
+
+If a user searches for "machine learning" (in quotes - a phrase query), we need to know not just *which* documents contain both words, but *where* they appear. A positional index stores token positions alongside each posting.
+
+To verify the phrase "machine learning", we check: does any document have `machine` at position *p* and `learning` at position *p+1*? This enables exact phrase matching, proximity queries, and highlighted snippets.
+
+## Build an Inverted Index
+
+Type documents below and watch the inverted index build live. Toggle positional indexing and stop word removal to see how they affect the index structure and statistics.
+
+<PlaygroundAccordion title="Try it: Build an Inverted Index">
+  <PlaygroundComponent name="inverted-index-builder" />
+</PlaygroundAccordion>
+
+## Key Takeaway
+
+The inverted index is the backbone of every search system - from Elasticsearch and Apache Lucene to Pinecone and modern RAG pipelines. It's what makes full-text search fast: O(1) term lookup instead of O(N) document scan. Master this data structure and every search technology becomes intuitive.
+

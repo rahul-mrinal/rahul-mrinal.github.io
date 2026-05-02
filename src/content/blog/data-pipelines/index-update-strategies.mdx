@@ -1,0 +1,50 @@
+---
+title: "Index Update Strategies"
+description: "Full reindex, partial update, upsert, and zero-downtime reindexing with alias swaps - keeping the index fresh."
+tags:
+  - "reindex"
+  - "upsert"
+  - "alias-swap"
+  - "freshness"
+readTime: "10 min"
+publishDate: "2026-02-25"
+seriesOrder: 3
+headings:
+  - "Four Update Strategies"
+  - "Zero-Downtime Reindexing with Aliases"
+  - "Optimistic Concurrency and Refresh Intervals"
+  - "Key Takeaway"
+---
+## Four Update Strategies
+
+| Strategy | Mechanism | Latency | Consistency | When to Use |
+|---|---|---|---|---|
+| **Full Reindex** | Build new index, swap alias | High | Perfect | Schema changes, major migrations |
+| **Partial Update** | Update specific fields of existing docs | Low | Good | Price changes, stock updates |
+| **Upsert** | Insert if new, update if exists | Low | Good | Real-time CDC streams |
+| **Delete + Reinsert** | Remove old doc, add new version | Low | Risk of gap | Simple systems, small indexes |
+
+## Zero-Downtime Reindexing with Aliases
+
+The most important operational pattern in search engineering. Never point your application directly at an index name - always use an alias.
+
+The workflow: (1) Create new index with updated mapping (products-v3), (2) Run full reindex into the new index, (3) Validate document counts and sample queries, (4) Atomic alias swap - remove alias from v2, add to v3 in a single API call, (5) Keep v2 for rollback, then delete.
+
+Your app always references the alias ("products"), never the versioned index name. Infrastructure change, zero code change.
+
+## Optimistic Concurrency and Refresh Intervals
+
+When multiple pipeline workers update the same document concurrently, use version-based concurrency: specify "only apply this update if the current version is X." Elasticsearch supports this via `if_seq_no` and `if_primary_term` parameters.
+
+Refresh intervals control when indexed documents become searchable:
+
+| Setting | Throughput | Visibility | Use Case |
+|---|---|---|---|
+| 1s (default) | Good | ~1s | Normal operations |
+| 30s | Better | ~30s | Heavy indexing |
+| -1 (disabled) | Best | Manual only | Bulk reindex |
+
+## Key Takeaway
+
+Use upsert for real-time updates and alias swap for schema changes or full rebuilds. Always have a rollback plan - keep the previous index version until the new one is verified. Optimistic concurrency prevents stale writes in concurrent pipelines.
+

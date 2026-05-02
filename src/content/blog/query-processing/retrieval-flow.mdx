@@ -1,0 +1,63 @@
+---
+title: "Complete Retrieval Pipeline"
+description: "Trace a query end-to-end through preprocessing, BM25 retrieval, vector search, RRF fusion, filtering, and final ranking."
+tags:
+  - "retrieval"
+  - "pipeline"
+  - "end-to-end"
+readTime: "12 min"
+publishDate: "2025-12-26"
+seriesOrder: 2
+headings:
+  - "The Big Picture"
+  - "Stage-by-Stage Breakdown"
+  - "Latency Budget"
+  - "Design Trade-offs"
+  - "Key Takeaway"
+---
+## The Big Picture
+
+A modern retrieval pipeline is a **funnel**: each stage narrows the candidate set while increasing the quality of scoring. The philosophy is simple - use cheap methods on many documents, expensive methods on few.
+
+The pipeline: User Query -> Preprocess -> Dual Retrieval (BM25 + Vector) -> Score Fusion (RRF) -> Filtering -> Re-Ranking (Cross-encoder) -> Top-K Results.
+
+## Stage-by-Stage Breakdown
+
+**Stages 1-2: Query Understanding** - The raw query is preprocessed and converted to both a set of tokens for BM25 lookup and a dense vector embedding for ANN search.
+
+**Stage 3: Dual Retrieval** - Two parallel paths: BM25 (inverted index lookup, ~1-5ms, great for exact matches) and Vector Search (ANN search via HNSW/IVF, ~5-20ms, great for conceptual matches).
+
+**Stage 4: Score Fusion** - Merge the two candidate sets via RRF or linear interpolation.
+
+**Stage 5: Re-Ranking** - A cross-encoder (BERT-based) re-scores the merged candidates by processing the query-document pair *together*, capturing fine-grained interactions. 100-1000x slower per document, but the most impactful stage.
+
+**Stages 6-7: Filter & Return** - Apply hard constraints (in-stock, permissions, geo), return top-k with metadata and snippets.
+
+## Latency Budget
+
+| Stage | Latency | Candidates |
+|---|---|---|
+| Preprocessing | 1-3ms | - |
+| BM25 retrieval | 1-5ms | ~1000 |
+| Vector retrieval | 5-20ms | ~1000 |
+| Merge (RRF) | &lt;1ms | ~200-1000 |
+| Cross-encoder re-rank | 20-100ms | ~50-100 |
+| Filtering | 1-5ms | ~10-50 |
+| **Total** | **30-130ms** | **10-20 returned** |
+
+Different use cases have different budgets: Autocomplete (50ms, no re-ranking), Full Search (200-500ms, standard pipeline), RAG Pipeline (1-3s, can afford expensive re-ranking), Batch/Analytics (minutes, use most accurate models).
+
+## Design Trade-offs
+
+**Recall vs Precision** - Early stages maximize recall (include everything possibly relevant). Later stages maximize precision (show only the best).
+
+**Latency vs Quality** - Better scoring models produce higher quality rankings but cost more time. The pipeline exists to apply expensive methods only where they matter most.
+
+**The 80/20 Rule** - Re-ranking typically uses 80% of the latency budget but processes only 1% of the documents.
+
+Metrics to track per stage: Recall@K (>95% after retrieval), NDCG@10 (>0.6 after re-ranking), P50/P99 latency (total &lt;300ms P99), empty result rate (&lt;2%), candidate overlap between BM25 and vector (30-60% - too high means redundant).
+
+## Key Takeaway
+
+Modern retrieval is a multi-stage funnel. Start broad and cheap, progressively narrow and score more expensively. The key design decision is where to draw each boundary - too aggressive early filtering kills recall, too much re-ranking blows the latency budget. When in doubt, retrieve more candidates and let re-ranking sort them out.
+

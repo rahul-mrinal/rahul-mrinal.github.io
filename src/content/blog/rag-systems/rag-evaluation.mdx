@@ -1,0 +1,40 @@
+---
+title: "RAG Evaluation"
+description: "Measure RAG quality with four metrics - context relevance, faithfulness, answer relevance, and chunk utilization."
+tags:
+  - "evaluation"
+  - "faithfulness"
+  - "relevance"
+  - "metrics"
+readTime: "10 min"
+publishDate: "2026-03-17"
+seriesOrder: 4
+headings:
+  - "The Four Metrics"
+  - "Evaluation Frameworks"
+  - "Key Takeaway"
+---
+## The Four Metrics
+
+RAG evaluation requires measuring both retrieval and generation quality independently:
+
+1. **Context relevance** - are the retrieved chunks actually relevant to the question? Measured by comparing retrieved chunks to gold-standard relevant passages.
+2. **Faithfulness** - does the answer stick to what's in the retrieved context? Checks for hallucinated facts not present in the chunks.
+3. **Answer relevance** - does the answer actually address the question? A faithful answer about the wrong topic is still wrong.
+4. **Chunk utilization** - how much of the retrieved context is actually used? Low utilization means you're wasting tokens on irrelevant chunks.
+
+## Evaluation Frameworks
+
+| Framework | What It Measures | How |
+|---|---|---|
+| **RAGAS** | Faithfulness, answer relevance, context precision/recall | LLM-as-judge with structured rubrics |
+| **TruLens** | Groundedness, relevance, context quality | LLM evaluation + tracing |
+| **Human eval** | Overall quality, correctness, helpfulness | Gold-standard but expensive and slow |
+| **Retrieval metrics** | Recall@K, NDCG@K, MRR | Traditional IR metrics on retrieved chunks |
+
+The key insight: evaluate retrieval and generation as separate components. If retrieval Recall@5 is low, fix chunking/embedding before touching the prompt. If faithfulness is low, the LLM is hallucinating despite good context - fix the prompt or model.
+
+## Key Takeaway
+
+Evaluate retrieval and generation separately. Bad retrieval + good generation = hallucinated answers that sound confident. Good retrieval + bad generation = wasted context. Build automated evaluation pipelines with 50-100 golden question-answer pairs from your domain.
+

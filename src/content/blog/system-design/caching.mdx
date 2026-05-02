@@ -1,0 +1,60 @@
+---
+title: "Caching for Search Systems"
+description: "LRU, LFU, and TTL caching strategies for search - what to cache, when to invalidate, and the librarian analogy."
+tags:
+  - "caching"
+  - "lru"
+  - "lfu"
+  - "invalidation"
+readTime: "12 min"
+publishDate: "2026-02-06"
+seriesOrder: 3
+headings:
+  - "The Librarian's Desk"
+  - "What to Cache in Search"
+  - "LRU vs LFU vs W-TinyLFU"
+  - "Cache Invalidation and Zipf's Law"
+  - "Key Takeaway"
+---
+## The Librarian's Desk
+
+Imagine a librarian who keeps the most requested books on their desk instead of walking to the stacks. When someone asks for "Harry Potter," it's right there (cache hit, ~0.1ms). When someone asks for an obscure book, the librarian walks to the shelves (cache miss, ~50-200ms). The desk has limited space, so the librarian removes the book that hasn't been asked for the longest time. That's LRU caching.
+
+Caching is the single most impactful optimization for search latency and cost. A well-designed cache can reduce search engine load by 40-60%.
+
+## What to Cache in Search
+
+Not all data is equal. Cache the expensive-to-compute, frequently-accessed layers:
+
+| Cache Layer | What | TTL | Hit Rate Target |
+|---|---|---|---|
+| **Query result cache** | Full serialized response for (query, filters, sort, page) | 5-15 min | 30-50% |
+| **Filter cache** | Pre-computed bitsets for common filters (brand, in_stock) | 5 min | 80-95% |
+| **Embedding cache** | Pre-computed query embeddings | 24 hours | 20-40% |
+| **Autocomplete cache** | Suggestions for popular prefixes | 1 hour | 60-80% |
+| **Field data cache** | Uninverted field values for sorting/aggregations | Until evicted | ~100% |
+
+Effective QPS on ES = Total QPS × (1 - Cache Hit Ratio). At 40% cache hit ratio: 10K QPS × 0.6 = 6K QPS reaching Elasticsearch.
+
+## LRU vs LFU vs W-TinyLFU
+
+| Strategy | Best For | Weakness | Complexity |
+|---|---|---|---|
+| **LRU** | General-purpose, changing workloads | Frequency-blind - one-time queries evict popular ones | O(1) |
+| **LFU** | Stable popularity distribution | Slow to adapt - once-popular items clog the cache | O(log n) |
+| **W-TinyLFU** | Production caches (Caffeine) | Requires tuning window size | Sketch-based |
+
+W-TinyLFU (used by Caffeine in the JVM world) combines a small LRU admission window with frequency-based eviction. It adapts to workload shifts while maintaining near-optimal hit rates.
+
+## Cache Invalidation and Zipf's Law
+
+Cache invalidation strategies: TTL-based (simple, bounded staleness), event-driven (Kafka consumer invalidates on product change), tag-based (tag entries with product IDs, invalidate all containing a changed product), and write-through (update cache simultaneously with index).
+
+Zipf's law makes caching powerful: the frequency of the n-th most common query is proportional to 1/n. The top 1% of queries account for ~30% of traffic. The top 10K queries cover ~60-70% of traffic. Caching these gives disproportionate benefit.
+
+Always warm the cache after deployments, restarts, or reindexing. Pre-load the top 10K queries from yesterday's analytics to avoid cold-start latency spikes.
+
+## Key Takeaway
+
+Cache popular queries aggressively (Zipf's law means a small cache handles most traffic). Layer caches: Client → CDN → Application (Redis) → Search Engine internal. Use TTL + event-driven invalidation as a hybrid. Warm caches proactively after deploys. Effective Latency = (1 - hit_rate) × miss_latency + hit_rate × hit_latency.
+

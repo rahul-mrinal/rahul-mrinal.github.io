@@ -1,0 +1,120 @@
+---
+title: "Design Principles & Anti-Patterns"
+description: "Six principles (single responsibility, fail gracefully, observability) and six anti-patterns (god agent, echo chamber, infinite loop) for multi-agent design."
+tags:
+  - "design-principles"
+  - "anti-patterns"
+  - "best-practices"
+  - "observability"
+readTime: "10 min"
+publishDate: "2026-04-14"
+seriesOrder: 3
+headings:
+  - "Principle 1: Single Responsibility per Agent"
+  - "Principle 2: Define Interfaces, Not Implementations"
+  - "Principle 3: Fail Gracefully"
+  - "Principle 4: Minimize Shared State"
+  - "Principle 5: Design for Observability"
+  - "Principle 6: Start Simple, Add Complexity Only When Measured"
+  - "Anti-Pattern: The God Agent"
+  - "Anti-Pattern: The Echo Chamber"
+  - "Anti-Pattern: The Infinite Loop"
+  - "Anti-Pattern: The Token Black Hole"
+  - "Anti-Pattern: The Premature Subagent"
+  - "Anti-Pattern: The Invisible Handoff"
+  - "System Health Assessment"
+---
+## Principle 1: Single Responsibility per Agent
+
+Each agent should have one clear role. If you can't describe what an agent does in one sentence, it's too broad. Split it.
+
+Bad: "This agent handles all customer interactions, including sales, support, billing, and escalation."
+
+Good: "This agent classifies customer intent and routes to the appropriate specialist."
+
+The test is simple: if removing any part of the agent's responsibilities would leave a coherent, useful agent, it should be split.
+
+<PlaygroundAccordion title="Try it: Principle 1: Single Responsibility per Agent">
+  <PlaygroundComponent name="principle-cards" />
+</PlaygroundAccordion>
+
+## Principle 2: Define Interfaces, Not Implementations
+
+Specify what each agent receives as input and what it must produce as output. Don't dictate how it reasons internally.
+
+This makes agents swappable - you can replace a slow, expensive agent with a faster one as long as the interface contract is maintained. It also makes testing easier: you can unit-test each agent by providing mock inputs and checking outputs.
+
+## Principle 3: Fail Gracefully
+
+Every agent should handle "I don't know" and "I can't do this." An agent that guesses rather than admitting uncertainty poisons the system.
+
+Design explicit failure modes: what does the agent do when it can't parse the input? When its tools fail? When it's unsure about the answer? The answer should never be "make something up."
+
+## Principle 4: Minimize Shared State
+
+The more state agents share, the more coordination bugs you'll have. Prefer explicit message passing over implicit shared state.
+
+If you must use shared state, make writes append-only (immutable history), add versioning, and log every mutation with the agent name and timestamp. Treat shared state like a database - with transactions, not free-form writes.
+
+## Principle 5: Design for Observability
+
+Log every agent turn, every tool call, every routing decision. Without traces, debugging multi-agent systems is nearly impossible.
+
+At minimum, capture: which agent ran, what input it received, what tools it called, what output it produced, how long it took, and how many tokens it used. This data is essential for debugging, optimization, and cost management.
+
+## Principle 6: Start Simple, Add Complexity Only When Measured
+
+Begin with two agents. Measure where the bottleneck is. Add a third agent only when you can articulate what problem it solves.
+
+Every additional agent adds latency (more LLM calls), cost (more tokens), and complexity (more coordination logic). The burden of proof is on the new agent to justify its existence with measurable improvement.
+
+## Anti-Pattern: The God Agent
+
+One agent that does everything, with other agents as glorified tool wrappers. This defeats the purpose of multi-agent architecture.
+
+Symptom: one agent has a 2000-word system prompt covering 10 different responsibilities, while other agents have 2-line prompts that just wrap a single tool call.
+
+<PlaygroundAccordion title="Try it: Anti-Pattern: The God Agent">
+  <PlaygroundComponent name="anti-pattern-quiz" />
+</PlaygroundAccordion>
+
+## Anti-Pattern: The Echo Chamber
+
+Agents that only confirm each other's outputs without genuine critique. Debate patterns need agents with genuinely different perspectives or evaluation criteria.
+
+Symptom: the "critic" agent always approves after one round. Fix: give the critic a different model, different system prompt, or specific evaluation criteria that force it to look for problems.
+
+## Anti-Pattern: The Infinite Loop
+
+Agent A delegates to B, B determines A should handle it, A delegates back. Every system needs a maximum message count or cycle detection.
+
+Symptom: token costs spike unexpectedly, or the system hangs. Fix: hard maximum on rounds/messages, explicit cycle detection in routing logic.
+
+## Anti-Pattern: The Token Black Hole
+
+A manager agent that ingests every worker's full output, blowing through context limits. Summarize or truncate worker outputs before feeding them to the manager.
+
+Symptom: the manager's context grows linearly with the number of workers, eventually hitting token limits or degrading quality. Fix: require workers to produce structured, concise summaries.
+
+## Anti-Pattern: The Premature Subagent
+
+Creating an agent for a task that a single tool call could handle. Not every function needs its own agent.
+
+Symptom: an "agent" whose system prompt is "call the search API and return results" - that's a tool, not an agent. Use agents for tasks requiring reasoning, judgment, or multi-step decision-making.
+
+## Anti-Pattern: The Invisible Handoff
+
+Transferring between agents without informing the user or preserving context. Every handoff should carry a summary of what was discussed and why the transfer is happening.
+
+Symptom: the user repeats information after every transfer, or the receiving agent has no idea what was already discussed. Fix: include a handoff summary in the transfer context.
+
+## System Health Assessment
+
+Before deploying a multi-agent system, run it through a health check against all six design principles. Each principle you've implemented strengthens the system; each one you've skipped is a potential failure mode in production.
+
+Toggle each principle below to see how your system's health score changes - and what risks you're accepting for any principle you haven't addressed.
+
+<PlaygroundAccordion title="Try it: System Health Assessment">
+  <PlaygroundComponent name="system-health-checker" />
+</PlaygroundAccordion>
+

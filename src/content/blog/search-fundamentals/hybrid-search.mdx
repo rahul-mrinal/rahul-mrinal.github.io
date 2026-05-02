@@ -1,0 +1,117 @@
+---
+title: "Hybrid Search - Best of Both Worlds"
+description: "Combine BM25 and vector search using Reciprocal Rank Fusion (RRF) to get the precision of keywords with the recall of semantics."
+tags:
+  - "hybrid"
+  - "rrf"
+  - "bm25"
+  - "vectors"
+readTime: "10 min"
+publishDate: "2025-11-22"
+seriesOrder: 5
+headings:
+  - "Why Hybrid?"
+  - "The Score Fusion Challenge"
+  - "Reciprocal Rank Fusion (RRF)"
+  - "Weighted Linear Combination"
+  - "Production Architecture"
+  - "Key Takeaway"
+---
+## Why Hybrid?
+
+Neither keyword search nor semantic search is perfect alone. Each has blind spots the other covers.
+
+Keyword search is like a librarian who only finds books by matching exact words in the title. Semantic search is like a librarian who understands what you *mean* but sometimes grabs a book about a related topic instead of the exact one you need. The best library uses both.
+
+| Query | BM25 (Keyword) | Vector (Semantic) |
+|---|---|---|
+| "React useEffect cleanup" | Exact match - nails it | May drift to hooks in general |
+| "how to make code faster" | Misses "performance optimization" | Understands intent |
+| "error code 0x80070005" | Exact match | Codes lost in embedding space |
+| "alternatives to kubernetes" | Needs "kubernetes" in doc | Finds Docker Swarm, Nomad |
+
+BM25 excels at exact keyword matching - search for "error code 404" and it nails it. Vector search excels at semantic understanding - search for "page not found" and it finds the same content. Hybrid search combines both to cover all cases.
+
+## The Score Fusion Challenge
+
+You can't simply add BM25 and vector scores - they live on completely different scales. BM25 scores range from 0 to ~25+, are unbounded, and depend on corpus size and term rarity. Vector cosine similarity ranges from -1 to 1, is bounded, and depends on embedding model quality.
+
+A BM25 score of 12.4 and a cosine similarity of 0.91 are not comparable. Two principled approaches have emerged to solve this:
+
+1. **Reciprocal Rank Fusion (RRF)** - uses only ranks, not scores. Score-agnostic and robust.
+2. **Linear Combination** - normalize scores to [0,1] and blend with a weight alpha. More control but requires tuning.
+
+## Reciprocal Rank Fusion (RRF)
+
+RRF elegantly sidesteps the score calibration problem by using only **ranks**, not scores.
+
+**RRF(d) = sum over rankers: 1 / (k + rank_r(d))**
+
+Where k is a smoothing constant (default 60) and rank_r(d) is the position of document d in ranker r.
+
+Why RRF works:
+- **Score-agnostic**: Only uses position, not raw scores. BM25 of 12.4 and cosine of 0.91 aren't compared - only their ranks.
+- **Robust to outliers**: The k constant prevents top-ranked documents from dominating. With k=60, rank 1 gets 1/61 vs rank 2's 1/62 - a tiny difference.
+- **Rewards consensus**: Documents ranked highly by *both* rankers get the highest fused scores.
+
+Step-by-step: get top-100 from BM25, get top-100 from vector search, for each unique doc compute score = 1/(k + rank_bm25) + 1/(k + rank_vector), sort by combined score. A doc ranked #1 in both gets: 1/(60+1) + 1/(60+1) = 0.0328. A doc ranked #1 in BM25 but #50 in vector gets: 1/(60+1) + 1/(60+50) = 0.0255.
+
+The k=60 value was found empirically in the original paper (Cormack et al., 2009) to work well - it smooths out the difference between high ranks.
+
+```python
+def reciprocal_rank_fusion(ranked_lists, k=60):
+    """Combine multiple ranked lists using RRF."""
+    scores = {}
+    for ranked_list in ranked_lists:
+        for rank, doc_id in enumerate(ranked_list, start=1):
+            if doc_id not in scores:
+                scores[doc_id] = 0.0
+            scores[doc_id] += 1.0 / (k + rank)
+    return sorted(scores.items(), key=lambda x: x[1], reverse=True)
+
+bm25_results = ["doc_A", "doc_B", "doc_C", "doc_D"]
+vector_results = ["doc_C", "doc_A", "doc_E", "doc_B"]
+
+fused = reciprocal_rank_fusion([bm25_results, vector_results])
+print(fused)  # doc_A and doc_C rank highest (appear in both)
+```
+
+<PlaygroundAccordion title="Try it: Reciprocal Rank Fusion (RRF)">
+  <PlaygroundComponent name="hybrid-search-demo" />
+</PlaygroundAccordion>
+
+## Weighted Linear Combination
+
+An alternative to RRF is a weighted linear combination of normalized scores:
+
+**Score(d) = alpha x normalized_BM25(d) + (1 - alpha) x normalized_vector(d)**
+
+Where alpha controls the balance: alpha=0 means all vector, alpha=1 means all BM25. This approach uses actual score values and is tunable per-domain, but requires score normalization (typically min-max to [0,1]) and careful tuning of alpha.
+
+| Approach | Pros | Cons |
+|---|---|---|
+| RRF | No score normalization needed, no tuning, robust | Ignores score magnitude - rank #1 with score 0.99 and rank #1 with score 0.51 treated the same |
+| Weighted | Uses actual score values, tunable per-domain | Requires score normalization, needs tuning of alpha |
+
+Different query types benefit from different weights: exact match queries ("error code 0x80070005") favor BM25-heavy (alpha ~0.7), semantic queries ("how to make website faster") favor vector-heavy (alpha ~0.3), and ambiguous queries work best with balanced fusion or RRF.
+
+## Production Architecture
+
+A real hybrid search pipeline involves indexing, retrieval, fusion, and optional re-ranking:
+
+**Indexing**: Raw documents -> Tokenizer (inverted index) + Embedding Model (vector index/HNSW)
+
+**Query-time**: User Query -> BM25 retrieval (top-100 by keyword) in parallel with ANN retrieval (top-100 by embedding) -> Score Fusion (RRF) -> Cross-encoder re-ranker (optional, high-quality rescoring) -> Final results
+
+Systems that support this natively: Elasticsearch 8+ (kNN + BM25), Weaviate (hybrid search), Pinecone (sparse + dense vectors), Qdrant (hybrid queries), and Vespa (multi-phase ranking). Most RAG pipelines use hybrid search as the retrieval layer - BM25 catches exact matches (code snippets, error messages) while vectors catch semantic matches (concepts, paraphrases).
+
+## Key Takeaway
+
+Hybrid search consistently outperforms either method alone. Research and production experience both confirm this. The fusion method matters less than the decision to combine.
+
+1. **RRF** is the go-to choice - no hyperparameters to tune (k=60 works great), score-agnostic, robust
+2. **Linear combination** gives more control but requires tuning alpha per use case
+3. **Cross-encoder re-ranking** on top of hybrid retrieval gives the best quality when latency allows
+
+The modern stack: BM25 Retrieval + Vector Retrieval -> RRF Fusion -> Re-Rank (optional). This pipeline is the industry standard.
+

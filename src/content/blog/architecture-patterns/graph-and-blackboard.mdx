@@ -1,0 +1,157 @@
+---
+title: "Graph & Blackboard Patterns"
+description: "Graph/State Machine - deterministic edges, typed state, LangGraph-style. Blackboard - decoupled agents writing to a shared workspace."
+tags:
+  - "graph"
+  - "state-machine"
+  - "langgraph"
+  - "blackboard"
+  - "shared-memory"
+readTime: "15 min"
+publishDate: "2026-04-10"
+seriesOrder: 4
+headings:
+  - "Graph / State Machine"
+  - "Graph - Strengths & Weaknesses"
+  - "Graph - LangGraph Implementation"
+  - "Blackboard / Shared Memory"
+  - "Blackboard - Strengths & Weaknesses"
+  - "Blackboard - Implementation"
+---
+## Graph / State Machine
+
+You define an explicit directed graph where:
+- **Nodes** are agents, functions, or processing steps
+- **Edges** are transitions with conditions
+- **State** is a shared object that flows through the graph and accumulates results
+
+The flow follows the edges deterministically based on conditions evaluated against the current state. There is no LLM deciding who goes next - the transitions are programmatic.
+
+1. Define a state schema (TypedDict, Pydantic model, or dataclass)
+2. Define nodes (functions or agent calls that read/write state)
+3. Define edges with conditions (e.g., "if state['intent'] == 'billing', go to billing_node")
+4. The runtime executes nodes, evaluates conditions, and follows edges
+5. Branching, looping, and parallel paths are all supported
+
+<PlaygroundAccordion title="Try it: Graph / State Machine">
+  <PlaygroundComponent name="state-machine-viz" />
+</PlaygroundAccordion>
+
+## Graph - Strengths & Weaknesses
+
+**Strengths:**
+- **Fully deterministic.** The same input always follows the same path.
+- **Auditable.** You can inspect the graph, log every transition, and replay executions.
+- **Testable.** Each node can be unit-tested independently. Edge conditions can be verified.
+- **No routing LLM cost.** Transitions are programmatic, not LLM-decided.
+- **Complex control flow.** Supports loops, branches, parallel execution, error handling, and human-in-the-loop interrupts.
+
+**Weaknesses:**
+- **Requires upfront design.** You must anticipate all possible paths through the graph.
+- **Rigid for novel scenarios.** If a query doesn't fit any anticipated path, the system can't adapt.
+- **More code to maintain.** The graph definition is separate from the agents themselves.
+- **Complexity at scale.** Large graphs with many conditional edges become hard to reason about.
+
+**When to use:** Production systems where reliability and auditability matter, regulated industries, complex workflows with branches and loops, any system that will be maintained by a team.
+
+## Graph - LangGraph Implementation
+
+LangGraph is the primary framework for graph-based multi-agent systems. It uses a `StateGraph` with typed state, conditional edges, and built-in persistence.
+
+```python
+from langgraph.graph import StateGraph, END
+from typing import TypedDict
+
+class State(TypedDict):
+    query: str
+    intent: str
+    response: str
+
+workflow = StateGraph(State)
+
+workflow.add_node("classify", classify_intent)
+workflow.add_node("faq", faq_agent)
+workflow.add_node("technical", technical_agent)
+workflow.add_node("escalation", escalation_agent)
+
+workflow.set_entry_point("classify")
+workflow.add_conditional_edges("classify", route_by_intent, {
+    "faq": "faq",
+    "technical": "technical",
+    "escalation": "escalation",
+})
+workflow.add_edge("faq", END)
+workflow.add_conditional_edges("technical", check_escalation, {
+    "resolved": END,
+    "escalate": "escalation",
+})
+workflow.add_edge("escalation", END)
+
+app = workflow.compile()
+```
+
+## Blackboard / Shared Memory
+
+A shared data structure (the "blackboard") is accessible to all agents. Agents watch the blackboard for changes relevant to their expertise. When they see something they can contribute to, they activate, read what they need, do their work, and write results back to the blackboard.
+
+Unlike pipelines or handoffs, there is no explicit message passing between agents. All communication happens through the shared state.
+
+1. The user's request is written to the blackboard
+2. A controller checks which agents should activate based on the current blackboard state
+3. An activated agent reads relevant sections of the blackboard
+4. The agent does its work and writes results to the blackboard
+5. The updated blackboard may trigger other agents
+6. This continues until a completion condition is met
+
+<PlaygroundAccordion title="Try it: Blackboard / Shared Memory">
+  <PlaygroundComponent name="blackboard-demo" />
+</PlaygroundAccordion>
+
+## Blackboard - Strengths & Weaknesses
+
+**Strengths:**
+- **Decoupled agents.** Agents don't need to know about each other - they only know about the blackboard.
+- **Flexible composition.** Adding a new agent just requires defining what it reads and writes.
+- **Incremental progress.** The blackboard accumulates knowledge over time.
+- **Natural for multi-phase problems.** Research → plan → implement → review, with each phase building on the blackboard.
+
+**Weaknesses:**
+- **Coordination complexity.** Multiple agents writing to the same section can conflict.
+- **State management.** The blackboard can grow large and messy.
+- **Ordering challenges.** Without explicit control, agents may activate in suboptimal order.
+- **Debugging difficulty.** Tracing which agent wrote what and when requires careful logging.
+
+**When to use:** Collaborative document creation, complex problem-solving where multiple experts contribute different knowledge, systems where agents contribute incrementally, scenarios where the interaction pattern isn't predictable.
+
+## Blackboard - Implementation
+
+A blackboard is a structured key-value store with logging. Each write records the agent name and timestamp for auditability.
+
+```python
+class Blackboard:
+    def __init__(self):
+        self.state = {
+            "requirements": None,
+            "architecture": None,
+            "code": {},
+            "test_results": None,
+            "review_comments": [],
+        }
+        self.log = []
+
+    def read(self, key):
+        return self.state.get(key)
+
+    def write(self, key, value, agent_name):
+        self.state[key] = value
+        self.log.append({
+            "agent": agent_name,
+            "key": key,
+            "timestamp": now(),
+        })
+
+# Real-world analogy: A team war room with a large whiteboard.
+# Team members walk up, read what's been written, add their
+# contribution, and step away.
+```
+

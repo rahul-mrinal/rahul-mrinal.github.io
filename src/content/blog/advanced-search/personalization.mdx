@@ -1,0 +1,42 @@
+---
+title: "Search Personalization"
+description: "Same query, different results - user profiles, collaborative filtering, contextual personalization, and the filter bubble problem."
+tags:
+  - "personalization"
+  - "collaborative-filtering"
+  - "user-profiles"
+readTime: "12 min"
+publishDate: "2026-03-31"
+seriesOrder: 3
+headings:
+  - "Three Personalization Approaches"
+  - "The Filter Bubble Problem"
+  - "Key Takeaway"
+---
+## Three Personalization Approaches
+
+Personalization tailors search results to individual users, improving relevance for ambiguous queries:
+
+1. **Profile boosting** - boost results matching user preferences. Track preferred brands, categories, and price ranges from past behavior. Score: base_score + Σ(preference_weight × match_score).
+
+2. **Collaborative filtering** - "users like you also searched for..." Build user-user or item-item similarity matrices. When user A's profile is similar to user B's, surface items B engaged with.
+
+3. **Contextual personalization** - time of day (morning → coffee, evening → dinner), device (mobile → local results), location (geo-boost nearby items), session history (3 blue shirts clicked → boost blue).
+
+| Signal | Collection Method | Ranking Use | Privacy Risk |
+|---|---|---|---|
+| Browse history | Page views, click events | Boost preferred categories/brands | Medium |
+| Purchase history | Order events | Complementary products, price range | Medium |
+| Collaborative | User similarity matrix | Cohort-based recommendations | Low |
+| Real-time session | Current session clicks | Immediate intent signals | Low |
+
+## The Filter Bubble Problem
+
+Over-personalization creates filter bubbles: users only see content matching their past behavior, missing new interests and serendipitous discoveries. The antidote is balancing personalization with diversity.
+
+Strategies: apply personalization only to the top 50% of results, keep exploratory results in positions 6-10, cap the maximum personalization boost at 30% of the base score, decay preference weights over time (interests change), and expose all users to some unpersonalized baseline results.
+
+## Key Takeaway
+
+Personalization improves relevance but creates filter bubbles. Always balance personalization with diversity. A good rule: personalize within the top results, keep exploratory results in the mix. Measure personalization impact via A/B tests on CTR and conversion, but also monitor diversity metrics.
+

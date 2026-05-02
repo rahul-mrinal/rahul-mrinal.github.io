@@ -1,0 +1,96 @@
+---
+title: "eCommerce Search Architecture Walkthrough"
+description: "Full system design deep-dive walkthrough - requirements, high-level design, query flow, ingestion pipeline, and failure modes."
+tags:
+  - "system-design"
+  - "architecture"
+  - "ecommerce"
+  - "walkthrough"
+readTime: "18 min"
+publishDate: "2026-02-11"
+seriesOrder: 4
+headings:
+  - "Requirements Gathering"
+  - "Capacity Estimation"
+  - "High-Level Architecture"
+  - "Query Flow and Latency Budget"
+  - "Failure Modes and Graceful Degradation"
+  - "Monitoring and the Feedback Loop"
+  - "Key Takeaway"
+---
+## Requirements Gathering
+
+Start every system design with requirements. Functional: product search, autocomplete, filters, faceted navigation, sorting, spell correction, synonyms, pagination. Non-functional: &lt;200ms p99 latency, 10K QPS, 50M products, 99.9% availability, price/stock updates within 5 minutes.
+
+Define the API early - it anchors the discussion:
+
+`GET /api/v1/search?q=wireless+headphones&brand=Sony&price_max=200&sort=relevance&page=1&size=20`
+
+Response includes results, facets, spell suggestions, and metadata. Mention versioning (/v1/) to show you think about backward compatibility.
+
+## Capacity Estimation
+
+Use the interactive calculator to size your cluster. Plug in your product count, QPS target, and average document size to see storage, shard count, and estimated nodes.
+
+The key formulas: Storage = Products × Avg Size × 1.5 (index overhead). Shards = ceil(Index Size / 30 GB). Nodes = Total Shard Copies / Shards per Node. Always add 30-50% headroom for traffic spikes.
+
+<PlaygroundAccordion title="Try it: Capacity Estimation">
+  <PlaygroundComponent name="capacity-estimator" />
+</PlaygroundAccordion>
+
+## High-Level Architecture
+
+Two main data flows: the query path (read) and the ingestion path (write).
+
+**Query path:** Client → API Gateway (rate limiting, auth) → Query Service (parse, spell check, synonym expansion) → Redis Cache → Search Cluster (BM25 + kNN) → Re-Ranker → Response
+
+**Ingestion path:** Product DB → CDC (Debezium) → Kafka → Enrichment Service (taxonomy, embeddings) → Index Writer → Search Cluster
+
+| Component | Responsibility | Technology |
+|---|---|---|
+| API Gateway | Rate limiting, auth, routing | Kong, Envoy, AWS ALB |
+| Query Service | Parse, enrich, classify queries | Custom service |
+| Search Cluster | Inverted index + vector index | Elasticsearch, OpenSearch |
+| Cache | Query results, embeddings, filters | Redis Cluster |
+| Message Queue | Decouple ingestion, buffering | Apache Kafka |
+| Monitoring | Metrics, alerting, dashboards | Prometheus + Grafana |
+
+## Query Flow and Latency Budget
+
+The query service processes each request through a multi-stage pipeline with a strict 200ms p99 budget:
+
+| Stage | Latency | % of Budget |
+|---|---|---|
+| Network + Gateway | 10ms | 5% |
+| Cache check | 1ms | 0.5% |
+| Query parsing + understanding | 15ms | 7.5% |
+| L1 Retrieval (BM25 + kNN) | 80ms | 40% |
+| L2 Re-ranking | 50ms | 25% |
+| Business rules + formatting | 10ms | 5% |
+| Buffer | 34ms | 17% |
+
+L1 retrieval is the bottleneck (~40% of latency). Caching eliminates it entirely for repeated queries. The re-ranking layer uses 25% of the budget but processes only the top 200 candidates - expensive per-doc but applied to few docs.
+
+## Failure Modes and Graceful Degradation
+
+Design for failure at every layer:
+
+| Failure | Impact | Mitigation | Recovery |
+|---|---|---|---|
+| ES node dies | Shards unavailable | Replicas promoted, auto-rebalance | ~30s |
+| Redis cache down | All queries hit ES directly | Circuit breaker, bypass cache | ~5s |
+| Kafka broker failure | Ingestion stalls | Replication factor 3, producer retries | ~30s |
+| Bad ranking model | Quality degradation | Canary deploy (5% traffic), auto-rollback | ~2 min |
+
+Graceful degradation priority: (1) disable re-ranking, (2) disable vector search (BM25 only), (3) disable facets, (4) serve from cache only, (5) show trending products. A degraded search experience is always better than an error page.
+
+## Monitoring and the Feedback Loop
+
+End your design with monitoring - it shows maturity. Track: p50/p95/p99 latency, QPS, error rate, zero-result rate, index freshness, cache hit ratio. Alert on: latency > 200ms, error rate > 0.5%, zero-result rate > 10%, index lag > 15 min.
+
+The feedback loop: Deploy ranking model → Collect click/purchase data → Analyze quality metrics → Train improved model → A/B test → Ship. The best search teams run 50+ A/B tests per year.
+
+## Key Takeaway
+
+Structure your approach: requirements → capacity estimation → API design → high-level architecture → deep dive on query flow → deep dive on ingestion → failure modes → monitoring. This demonstrates senior-level thinking. Always show your math, discuss trade-offs, and end with observability.
+

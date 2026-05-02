@@ -1,0 +1,43 @@
+---
+title: "Advanced RAG Patterns"
+description: "HyDE, multi-query retrieval, parent-child chunking, and self-RAG - patterns that push beyond basic retrieve-and-generate."
+tags:
+  - "hyde"
+  - "multi-query"
+  - "self-rag"
+  - "advanced"
+readTime: "14 min"
+publishDate: "2026-03-21"
+seriesOrder: 5
+headings:
+  - "Four Advanced Patterns"
+  - "When to Use Each Pattern"
+  - "Key Takeaway"
+---
+## Four Advanced Patterns
+
+When basic RAG fails, these patterns address specific failure modes:
+
+1. **HyDE (Hypothetical Document Embeddings)** - generate a hypothetical answer first, then use it as the search query. The hypothetical answer is closer in embedding space to relevant documents than the original short question. Helps when queries are vague.
+
+2. **Multi-query** - rephrase the question 3-5 different ways, retrieve for each variant, deduplicate and union the results. Captures different aspects of ambiguous questions.
+
+3. **Parent-child retrieval** - index small chunks (sentences) for precise matching, but when a match is found, retrieve the parent chunk (full paragraph or section) for context. Best of both worlds: precision in matching + context in generation.
+
+4. **Self-RAG** - the model decides *when* to retrieve (not every query needs it) and *critiques its own answers* for faithfulness. Reduces unnecessary retrieval and catches hallucinations.
+
+## When to Use Each Pattern
+
+| Pattern | Addresses | Complexity | When to Add |
+|---|---|---|---|
+| HyDE | Vague queries, vocabulary mismatch | Low | Queries are short/ambiguous |
+| Multi-query | Complex multi-aspect questions | Low | Single retrieval misses relevant context |
+| Parent-child | Context loss from small chunks | Medium | Answers lack surrounding context |
+| Self-RAG | Unnecessary retrieval, hallucination | High | Need production-grade quality control |
+
+Start with basic RAG, measure performance on your evaluation set, then add patterns one at a time to address specific failure modes you observe.
+
+## Key Takeaway
+
+Don't over-engineer. Start with basic RAG (chunk → embed → retrieve → generate), measure performance, then add advanced patterns to address specific failure modes. Each pattern adds complexity - only add it when you have evidence it helps your use case.
+

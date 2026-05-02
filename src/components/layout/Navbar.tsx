@@ -164,7 +164,7 @@ export default function Navbar() {
                   : "text-text-secondary hover:text-white hover:bg-white/5"
                 }`}
             >
-              {id.replace("-", " ")}
+              {id.replaceAll("-", " ")}
             </button>
           ))}
         </div>
@@ -172,9 +172,12 @@ export default function Navbar() {
         {/* Mobile toggle */}
         <button
           onClick={() => setMobileOpen(!mobileOpen)}
+          aria-label={mobileOpen ? "Close menu" : "Open menu"}
+          aria-expanded={mobileOpen}
+          aria-controls="mobile-nav"
           className="md:hidden p-2 text-text-secondary hover:text-white transition-colors"
         >
-          {mobileOpen ? <FiX size={22} /> : <FiMenu size={22} />}
+          {mobileOpen ? <FiX size={22} aria-hidden /> : <FiMenu size={22} aria-hidden />}
         </button>
       </div>
 
@@ -185,7 +188,8 @@ export default function Navbar() {
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
-            className="md:hidden bg-bg-secondary/95 backdrop-blur-xl border-b border-border overflow-hidden"
+            id="mobile-nav"
+          className="md:hidden bg-bg-secondary/95 backdrop-blur-xl border-b border-border overflow-hidden"
           >
             <div className="px-6 py-4 flex flex-col gap-1">
               {NAV_ITEMS.map((item) => {
@@ -217,7 +221,7 @@ export default function Navbar() {
                       : "text-text-secondary hover:text-white hover:bg-white/5"
                     }`}
                 >
-                  {id.replace("-", " ")}
+                  {id.replaceAll("-", " ")}
                 </button>
               ))}
             </div>

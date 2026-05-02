@@ -1,0 +1,136 @@
+---
+title: "Debate & Ensemble Patterns"
+description: "Debate/Critic - adversarial pressure catches errors. Broadcast/Ensemble - run N agents in parallel and aggregate the best output."
+tags:
+  - "debate"
+  - "critic"
+  - "ensemble"
+  - "voting"
+  - "best-of-n"
+readTime: "14 min"
+publishDate: "2026-04-10"
+seriesOrder: 3
+headings:
+  - "Debate / Critic"
+  - "Debate - Strengths & Weaknesses"
+  - "Debate - Implementation"
+  - "Broadcast / Ensemble"
+  - "Ensemble - Strengths & Weaknesses"
+  - "Ensemble - Variants"
+  - "Cost-Quality Trade-offs"
+---
+## Debate / Critic
+
+Two or more agents engage in structured argumentation about the same problem. One agent proposes a solution, another challenges it, and they iterate until convergence. Optionally, a judge agent arbitrates disagreements or decides when the debate is over.
+
+**Two-Agent Debate:**
+1. Agent A (Proposer) generates an initial solution
+2. Agent B (Critic) evaluates and identifies weaknesses
+3. Agent A revises its solution based on the critique
+4. Agent B re-evaluates
+5. This continues until Agent B approves or a max-round limit is hit
+
+**Multi-Agent Debate:**
+1. Multiple agents independently propose solutions
+2. Each agent reads all other proposals and critiques them
+3. Agents revise based on critiques
+4. A judge agent selects the best solution or synthesizes from all
+
+<PlaygroundAccordion title="Try it: Debate / Critic">
+  <PlaygroundComponent name="debate-simulator" />
+</PlaygroundAccordion>
+
+## Debate - Strengths & Weaknesses
+
+**Strengths:**
+- **Higher quality output.** Adversarial pressure catches errors, gaps, and weak reasoning.
+- **Diverse perspectives.** Different agents with different system prompts bring different viewpoints.
+- **Self-correction.** Errors are caught before they reach the user.
+- **Reduced hallucination.** Claims are challenged, forcing agents to ground their reasoning.
+
+**Weaknesses:**
+- **Expensive.** Multiple rounds of back-and-forth, each an LLM call.
+- **Slow.** Latency compounds with each debate round.
+- **Possible deadlock.** Agents may never agree, requiring a hard cutoff.
+- **Sycophancy risk.** The critic may too easily agree after revision rather than finding remaining issues.
+
+**When to use:** Code review, decision analysis, fact-checking, creative work evaluation, high-stakes outputs where correctness is critical.
+
+## Debate - Implementation
+
+A debate can be implemented as a `RoundRobinGroupChat` with a text-based termination condition. The critic says "APPROVE" when satisfied.
+
+```python
+from autogen_agentchat.teams import RoundRobinGroupChat
+from autogen_agentchat.conditions import TextMentionTermination
+
+proposer = AssistantAgent(
+    name="Proposer",
+    system_message="Generate the best solution. Revise based on feedback.",
+)
+critic = AssistantAgent(
+    name="Critic",
+    system_message="Find flaws, edge cases, and risks. Be rigorous. "
+                   "Say APPROVE only when there are no remaining issues.",
+)
+
+debate = RoundRobinGroupChat(
+    participants=[proposer, critic],
+    termination_condition=TextMentionTermination("APPROVE"),
+)
+
+# Real-world analogy: Peer review in academic publishing.
+# A researcher submits, reviewers find issues, the researcher
+# revises, reviewers re-evaluate.
+```
+
+## Broadcast / Ensemble
+
+The same task is broadcast to multiple agents simultaneously. Each agent works independently on the full problem using its own approach, expertise, or model. An aggregation step then combines or selects from their outputs.
+
+1. The user's request is sent to all agents in parallel
+2. Each agent produces its own independent response
+3. An aggregator receives all responses and applies a strategy:
+   - **Voting/Majority:** Select the answer most agents agree on
+   - **Best-of-N:** Rate each response and pick the best one
+   - **Merge:** Combine the best parts of each response
+   - **Weighted:** Weight responses by agent confidence or historical accuracy
+
+<PlaygroundAccordion title="Try it: Broadcast / Ensemble">
+  <PlaygroundComponent name="ensemble-voting" />
+</PlaygroundAccordion>
+
+## Ensemble - Strengths & Weaknesses
+
+**Strengths:**
+- **Robustness.** Any single agent failure is mitigated by the others.
+- **Diverse solutions.** Different approaches surface different insights.
+- **Naturally parallel.** All agents run simultaneously - wall-clock time equals one agent's time.
+- **Reduced variance.** Aggregation smooths out individual LLM inconsistencies.
+
+**Weaknesses:**
+- **Very expensive.** N parallel LLM calls for every query.
+- **Aggregation complexity.** The aggregator needs to understand and compare different response formats.
+- **Diminishing returns.** Going from 1 to 3 agents helps a lot; going from 5 to 7 helps very little.
+- **Wasted work.** Most agent outputs are partially or fully discarded.
+
+**When to use:** Code generation where correctness is critical (generate 3 solutions, run tests, pick the one that passes), creative brainstorming, classification where consensus improves accuracy, any task where the cost of failure exceeds the cost of redundancy.
+
+## Ensemble - Variants
+
+**Mixture of Agents (MoA):** A layered approach where Layer 1 agents each generate a response, and Layer 2 agents each receive all Layer 1 outputs and produce refined versions. This creates progressive improvement through rounds.
+
+**Best-of-N with Verifier:** N agents generate solutions, a separate verifier agent scores each one, and the highest-scoring solution is selected. Common in math and coding tasks.
+
+The key design decision is the aggregation strategy. Voting works for classification-style problems. Best-of-N works when you have a reliable verifier. Merging works for creative tasks where different agents contribute different strengths.
+
+## Cost-Quality Trade-offs
+
+The choice between single-agent, debate, and ensemble approaches comes down to cost, latency, and quality. A single agent is cheapest and fastest but produces the lowest quality. Debate multiplies cost linearly with rounds but yields the highest quality. Ensemble costs scale with the number of parallel agents but keeps latency low since agents run simultaneously.
+
+Use the calculator below to model your specific cost profile - adjust the number of agents, debate rounds, and per-call cost to see how the three strategies compare for your workload.
+
+<PlaygroundAccordion title="Try it: Cost-Quality Trade-offs">
+  <PlaygroundComponent name="cost-calculator" />
+</PlaygroundAccordion>
+

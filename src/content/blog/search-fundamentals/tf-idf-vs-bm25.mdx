@@ -1,0 +1,96 @@
+---
+title: "TF-IDF vs BM25 - Side by Side"
+description: "Compare TF-IDF and BM25 on keyword stuffing, long documents, and rare terms to see exactly where and why BM25 wins."
+tags:
+  - "tf-idf"
+  - "bm25"
+  - "comparison"
+  - "ranking"
+readTime: "10 min"
+publishDate: "2025-11-13"
+seriesOrder: 3
+headings:
+  - "The Contenders"
+  - "TF-IDF Formula"
+  - "BM25 Formula"
+  - "Keyword Stuffing: Where BM25 Shines"
+  - "Long Document Bias"
+  - "Side-by-Side Comparison"
+  - "Key Takeaway"
+---
+## The Contenders
+
+Two algorithms dominate keyword-based search. TF-IDF, born in the 1970s, is the elegant foundation: how often a term appears in a doc times how rare it is across all docs. BM25, developed in the 1990s by Robertson & Sparck Jones, is the probabilistically motivated upgrade that fixes TF-IDF's biggest weaknesses.
+
+Think of it this way: TF-IDF is like counting how many times a student mentions a topic in their essay. BM25 is like a smarter grader who knows that mentioning "machine learning" 50 times doesn't make an essay twice as good as one that mentions it 25 times - and who also adjusts for essay length.
+
+| Property | TF-IDF | BM25 |
+|---|---|---|
+| Term frequency | Linear (unbounded) | Saturating (approaches a maximum) |
+| Length normalization | None | Built-in via parameter b |
+| Tunable parameters | None | k1 (saturation speed) and b (length penalty) |
+| Era | 1970s | 1990s |
+| Used by | Feature extraction, ML pipelines | Elasticsearch, Lucene, Solr |
+
+## TF-IDF Formula
+
+TF-IDF multiplies two components: how frequent a term is locally, and how rare it is globally.
+
+**TF-IDF(t, d) = f(t,d) x ln(N / df(t))**
+
+Where f(t,d) is the count of term t in document d, N is total documents, and df(t) is documents containing t.
+
+The **Term Frequency (TF)** component counts raw occurrences. More mentions = higher score. It grows linearly - this is the weakness BM25 fixes.
+
+The **Inverse Document Frequency (IDF)** component measures rarity. "the" appears everywhere (low IDF). "eigenvalue" appears rarely (high IDF). Rare terms are more discriminative.
+
+Some implementations use log-TF: 1 + ln(f(t,d)) to slightly dampen growth, but it still doesn't saturate like BM25.
+
+## BM25 Formula
+
+BM25 adds two critical improvements: TF saturation and length normalization.
+
+**BM25(q, d) = sum over t in q: IDF(t) x f(t,d) x (k1 + 1) / (f(t,d) + k1 x (1 - b + b x |d| / avgdl))**
+
+**Saturation**: The TF component f*(k1+1)/(f+k1) approaches a maximum as frequency increases. The 10th mention of "python" adds far less than the 1st. This prevents keyword stuffing from gaming rankings.
+
+**Length Normalization**: The denominator includes |d|/avgdl, which penalizes documents longer than average. A 10,000-word doc mentioning "python" 50 times gets a lower score than a focused 200-word doc mentioning it 10 times.
+
+## Keyword Stuffing: Where BM25 Shines
+
+What happens when a term is repeated more and more? TF-IDF grows linearly forever - a document repeating "python" 100 times scores twice as high as one repeating it 50 times. BM25 saturates: after a certain point, additional repetitions yield almost no score gain.
+
+This is why BM25 is resistant to keyword stuffing. In the playground, watch the TF-IDF line keep climbing while BM25 flattens out. The k1 parameter controls how quickly saturation happens: lower k1 means faster saturation (the first few mentions dominate), higher k1 means repetition still helps somewhat.
+
+## Long Document Bias
+
+Longer documents naturally contain more term occurrences. TF-IDF rewards them unfairly - a 10,000-word document mentioning "machine learning" 8 times beats a 200-word focused tutorial mentioning it 5 times, even though the short doc is clearly more relevant.
+
+BM25's b parameter controls length normalization strength: b=0 means no normalization (ignore document length), b=0.75 (default) gives moderate length penalty, and b=1.0 applies full normalization that strongly penalizes long documents. Try setting b=0 in the playground to see BM25 behave more like TF-IDF.
+
+## Side-by-Side Comparison
+
+Run both algorithms on the same query and corpus to see how rankings differ. BM25's saturation and length normalization consistently produce better rankings for real-world search:
+
+| Scenario | TF-IDF | BM25 | Winner |
+|---|---|---|---|
+| General web search | Biased toward long pages | Normalizes for length | BM25 |
+| Short uniform docs (tweets, titles) | Works fine | Slight advantage | BM25 |
+| Feature extraction for ML | Standard choice | Less common | TF-IDF |
+| Spam / keyword stuffing | Easily gamed | Saturates - resistant | BM25 |
+| Mixed-length corpora | Poor - long docs dominate | Length-normalized | BM25 |
+| Simplicity / teaching | Simpler to understand | More parameters | TF-IDF |
+| Production search engines | Outdated for ranking | Industry standard | BM25 |
+
+<PlaygroundAccordion title="Try it: Side-by-Side Comparison">
+  <PlaygroundComponent name="tfidf-vs-bm25-compare" />
+</PlaygroundAccordion>
+
+## Key Takeaway
+
+BM25 = TF-IDF + Saturation + Length Normalization. It isn't a completely different algorithm - it's a principled refinement. The two key improvements are: (1) term frequency saturation preventing keyword stuffing, and (2) document length normalization for fair comparison between short focused docs and long unfocused ones.
+
+Use TF-IDF for feature engineering in ML pipelines and for educational purposes. Use BM25 for any production search or ranking system. Every modern search engine defaults to BM25 - and understanding the *why* behind each component makes you a better search engineer.
+
+TF-IDF (1970s) -> BM25 (1990s) -> Hybrid Search (2020s). The evolution continues, but BM25 remains a critical building block.
+

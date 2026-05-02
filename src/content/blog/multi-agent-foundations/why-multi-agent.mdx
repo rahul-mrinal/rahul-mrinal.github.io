@@ -1,0 +1,69 @@
+---
+title: "Why Multi-Agent Over Single-Agent?"
+description: "Context window management, role clarity, parallel execution, adversarial quality, and tool isolation - the five reasons to go multi-agent."
+tags:
+  - "multi-agent"
+  - "context-window"
+  - "parallelism"
+  - "tool-isolation"
+readTime: "10 min"
+publishDate: "2026-04-07"
+seriesOrder: 2
+headings:
+  - "Context Window Management"
+  - "Role Clarity"
+  - "Parallel Execution"
+  - "Quality Through Adversarial Pressure"
+  - "Tool Isolation"
+  - "When a Single Agent Is Enough"
+---
+## Context Window Management
+
+A single agent doing research, planning, coding, and review accumulates enormous context. By step 15, the early research is either truncated or crowding out the current task. Separate agents keep their context focused and relevant.
+
+This isn't just a theoretical concern. In practice, long-context degradation means the model pays less attention to information in the middle of the window. By giving each agent a focused context, you avoid this "lost in the middle" problem entirely.
+
+<PlaygroundAccordion title="Try it: Context Window Management">
+  <PlaygroundComponent name="context-window-sim" />
+</PlaygroundAccordion>
+
+## Role Clarity
+
+When an LLM has one clear role - "you are a security auditor" - it performs that role significantly better than when asked to wear multiple hats simultaneously. The system prompt stays focused, and the model doesn't need to context-switch between reviewer and implementer mindsets.
+
+This is analogous to how human teams work. A developer writing code and simultaneously reviewing their own code will miss bugs that a dedicated reviewer would catch.
+
+## Parallel Execution
+
+Independent subtasks can run simultaneously. While one agent researches the codebase, another can analyze requirements, and a third can review related PRs. This is impossible with a serial single-agent loop.
+
+The wall-clock time for a parallel multi-agent system is determined by the slowest agent, not the sum of all agents. For a three-agent parallel step where each takes 5 seconds, total time is 5 seconds - not 15.
+
+<PlaygroundAccordion title="Try it: Parallel Execution">
+  <PlaygroundComponent name="parallel-execution-gantt" />
+</PlaygroundAccordion>
+
+## Quality Through Adversarial Pressure
+
+When one agent generates and another critiques, the output quality improves. A single agent reviewing its own work tends to confirm its own biases.
+
+This is the foundation of the Debate pattern (covered later in this series). Research consistently shows that multi-agent debate reduces hallucination and improves factual accuracy compared to single-agent generation.
+
+## Tool Isolation
+
+Different agents can have different tool access. A read-only research agent can't accidentally modify files. A code-writing agent doesn't have access to deployment tools. This provides natural guardrails.
+
+In a single-agent system, every tool is one bad reasoning step away from being misused. Multi-agent architectures let you apply the principle of least privilege at the agent level.
+
+## When a Single Agent Is Enough
+
+Not every task needs multiple agents. A single agent is sufficient when:
+
+- The task is linear and well-defined
+- The context fits comfortably in one window
+- There's no meaningful specialization to exploit
+- Latency is more important than quality
+- The tool set is small and coherent
+
+The overhead of multi-agent coordination (extra LLM calls for routing, message passing, context assembly) only pays off when the task complexity justifies it.
+

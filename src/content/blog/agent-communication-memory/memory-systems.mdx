@@ -1,0 +1,86 @@
+---
+title: "Memory in Multi-Agent Systems"
+description: "Working memory, long-term episodic, semantic knowledge, procedural how-to, and inter-agent shared memory - the five memory types that separate demos from production."
+tags:
+  - "memory"
+  - "working-memory"
+  - "episodic"
+  - "semantic"
+  - "procedural"
+readTime: "12 min"
+publishDate: "2026-04-12"
+seriesOrder: 2
+headings:
+  - "Why Memory Matters"
+  - "Working Memory (Short-Term)"
+  - "Long-Term / Episodic Memory"
+  - "Semantic / Knowledge Memory"
+  - "Procedural Memory"
+  - "Inter-Agent Shared Memory"
+---
+## Why Memory Matters
+
+Memory is a critical differentiator between toy demos and production multi-agent systems. Without memory, every conversation starts from zero. Every past decision is forgotten. Every user preference is lost. Different memory types serve different purposes, and production systems typically need multiple types working together.
+
+<PlaygroundAccordion title="Try it: Why Memory Matters">
+  <PlaygroundComponent name="memory-type-explorer" />
+</PlaygroundAccordion>
+
+## Working Memory (Short-Term)
+
+The current conversation context - what was said, what was decided, what's in progress.
+
+- **Full buffer** - Keep all messages in context. Simple but hits token limits on long conversations.
+- **Sliding window** - Keep only last N messages. Loses early context that may be important.
+- **Summary + recent** - Summarize old messages, keep recent verbatim. Good balance, but requires a summarization LLM call.
+- **Token-aware truncation** - Drop oldest messages when approaching limit. Automatic but unpredictable.
+
+For multi-agent systems, working memory also includes the conversation history between agents - not just the user-facing messages.
+
+<PlaygroundAccordion title="Try it: Working Memory (Short-Term)">
+  <PlaygroundComponent name="context-strategy" />
+</PlaygroundAccordion>
+
+## Long-Term / Episodic Memory
+
+What happened in previous sessions. Allows the system to remember past interactions with the same user, prior decisions, and historical patterns.
+
+- **Vector store** - Embed and store session summaries, retrieve by similarity. Flexible but requires good embedding models.
+- **Entity store** - Extract and store structured facts about users/topics. Precise but needs extraction logic.
+- **Full session logs** - Store raw conversation logs, search when needed. Complete but expensive to search at scale.
+- **Reflection summaries** - After each session, generate "lessons learned." Compact but lossy.
+
+Episodic memory is what makes agents feel like they "remember" you. Without it, every interaction is a first meeting.
+
+## Semantic / Knowledge Memory
+
+The system's domain knowledge - documentation, FAQs, procedures, reference material.
+
+- **RAG (vector store)** - Embed documents, retrieve relevant chunks per query. The standard approach, well-understood.
+- **Knowledge graph** - Structured relationships between entities. Rich but complex to build and maintain.
+- **Fine-tuned model** - Bake knowledge into model weights. Fast retrieval but hard to update.
+- **Hybrid RAG + graph** - Use both for different query types. Best quality, most complex.
+
+In a multi-agent system, different agents may have different knowledge bases. A billing agent's semantic memory contains pricing docs, while a technical agent's contains troubleshooting guides.
+
+## Procedural Memory
+
+How to do things - runbooks, standard operating procedures, proven tool-call sequences.
+
+- **System prompt** - Hardcode procedures in agent instructions. Simple but static, doesn't learn.
+- **Retrieval-augmented** - Store procedures in a vector store, retrieve when relevant. Dynamic but requires good retrieval.
+- **Learned from history** - Track which tool sequences solved problems, replay successful patterns. Adaptive but needs data.
+
+Procedural memory is what makes agents get better over time. Instead of reasoning from scratch, they can recall: "Last time I saw this error, the solution was X."
+
+## Inter-Agent Shared Memory
+
+The communication substrate between agents - how information produced by one agent becomes available to others.
+
+- **Conversation stream** - All messages visible to all agents (group chat). Simple but noisy.
+- **Blackboard** - Structured shared workspace. Organized but needs a schema.
+- **Direct passing** - Output of one agent is input to the next. Clean but limited.
+- **Scoped sharing** - Agents only see messages tagged for them. Focused but complex.
+
+The choice of inter-agent memory directly shapes the architecture. A blackboard implies a blackboard pattern. A conversation stream implies a group chat. Design the memory to match the coordination pattern, not the other way around.
+

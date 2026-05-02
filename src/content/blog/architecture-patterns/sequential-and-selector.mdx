@@ -1,0 +1,124 @@
+---
+title: "Sequential & Selector Patterns"
+description: "The pipeline - fixed order, zero routing cost, cumulative latency. The selector - an LLM picks the next speaker, dynamic but one extra call per turn."
+tags:
+  - "sequential"
+  - "pipeline"
+  - "selector"
+  - "router"
+  - "autogen"
+readTime: "14 min"
+publishDate: "2026-04-09"
+seriesOrder: 1
+headings:
+  - "Sequential / Pipeline"
+  - "Sequential - Strengths & Weaknesses"
+  - "Sequential - Implementation"
+  - "Selector / Router"
+  - "Selector - Strengths & Weaknesses"
+  - "Selector - Implementation"
+---
+## Sequential / Pipeline
+
+Agents execute in a fixed, predetermined order. Each agent's complete output becomes the next agent's input. There is no branching, no skipping, and no decision-making about who goes next.
+
+1. The user's request enters Agent A
+2. Agent A completes its work and passes its full output to Agent B
+3. Agent B processes and passes to Agent C
+4. Agent C produces the final output
+
+Each agent sees only its predecessor's output plus the original request - not the outputs of all prior agents (though this varies by implementation).
+
+```text
+# Sequential: User → Agent A → Agent B → Agent C → Response
+#                  Research    Draft      Review
+```
+
+<PlaygroundAccordion title="Try it: Sequential / Pipeline">
+  <PlaygroundComponent name="pipeline-animator" />
+</PlaygroundAccordion>
+
+## Sequential - Strengths & Weaknesses
+
+**Strengths:**
+- **Predictable and debuggable.** You always know exactly what ran and in what order.
+- **No routing overhead.** No extra LLM calls to decide who goes next.
+- **Easy to build.** The simplest multi-agent pattern to implement.
+- **Clear responsibility.** Each stage has one job.
+
+**Weaknesses:**
+- **Inflexible.** Every query goes through every agent, even if some stages are irrelevant.
+- **No feedback loops.** If Agent C finds a problem, it can't send work back to Agent A without explicit retry logic.
+- **Cumulative latency.** Total time = sum of all agent times. No parallelism.
+- **Error propagation.** A bad output from Agent A corrupts everything downstream.
+
+**When to use:** Content pipelines (research → draft → edit → format), ETL workflows, code generation (spec → code → test → review). Any workflow where the stages are always needed and always in order.
+
+## Sequential - Implementation
+
+In AutoGen, a `RoundRobinGroupChat` runs agents in a fixed order. Each agent takes one turn, then the next agent goes. The cycle continues until a termination condition is met.
+
+```python
+from autogen_agentchat.teams import RoundRobinGroupChat
+from autogen_agentchat.conditions import MaxMessageTermination
+
+team = RoundRobinGroupChat(
+    participants=[researcher, writer, editor],
+    termination_condition=MaxMessageTermination(max_messages=6),
+)
+
+# Real-world analogy: An assembly line. Each station does its
+# specific job on every unit, in order, regardless of what
+# the unit needs.
+```
+
+## Selector / Router
+
+A dedicated LLM - the "selector" - examines the conversation state after every agent turn and picks which agent should speak next. The selector is separate from all participating agents. It reads each agent's description (role, capabilities) along with the conversation history and makes a routing decision.
+
+1. User sends a message
+2. The selector LLM reads the message plus all agent descriptions
+3. It picks the most appropriate agent (e.g., "FAQAgent")
+4. That agent takes a turn (possibly calling tools)
+5. The selector reads the updated conversation and picks the next speaker
+6. This continues until a termination condition is met
+
+<PlaygroundAccordion title="Try it: Selector / Router">
+  <PlaygroundComponent name="selector-simulator" />
+</PlaygroundAccordion>
+
+## Selector - Strengths & Weaknesses
+
+**Strengths:**
+- **Dynamic routing.** The system adapts to the query - a billing question goes to the billing agent, a technical question to the technical agent.
+- **Self-correcting.** If one agent's response is insufficient, the selector can route to a different agent or back to a coordinator.
+- **Flexible membership.** Adding a new specialist only requires adding it to the participant list with a good description.
+
+**Weaknesses:**
+- **Extra LLM call per turn.** Every routing decision costs latency and tokens.
+- **Routing errors.** The selector can pick the wrong agent, wasting a full agent turn.
+- **Non-deterministic.** The same query might get routed differently on different runs.
+- **Description sensitivity.** Agent descriptions must be well-written for good routing. Vague descriptions lead to poor decisions.
+
+**When to use:** Customer support systems where query types vary widely, general-purpose assistants with multiple specialist capabilities, scenarios where the right agent depends on context, not just keywords.
+
+## Selector - Implementation
+
+In AutoGen, a `SelectorGroupChat` uses a model client to pick the next speaker. The `selector_prompt` template receives `{roles}`, `{history}`, and `{participants}`.
+
+```python
+from autogen_agentchat.teams import SelectorGroupChat
+
+team = SelectorGroupChat(
+    participants=[orchestrator, faq, knowledge, technical, escalation],
+    model_client=model_client,
+    selector_prompt=SELECTOR_PROMPT,
+    termination_condition=termination,
+    allow_repeated_speaker=True,
+)
+
+# Real-world analogy: A hospital triage nurse who assesses
+# each patient's symptoms and routes them to the appropriate
+# specialist - cardiology, orthopedics, neurology.
+```
+

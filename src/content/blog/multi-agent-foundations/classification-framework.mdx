@@ -1,0 +1,71 @@
+---
+title: "Classification Framework"
+description: "Classify any multi-agent system along three independent axes: control structure, communication topology, and agent relationships."
+tags:
+  - "classification"
+  - "topology"
+  - "centralized"
+  - "decentralized"
+readTime: "10 min"
+publishDate: "2026-04-08"
+seriesOrder: 3
+headings:
+  - "Three Independent Axes"
+  - "Axis 1: Control Structure"
+  - "Axis 2: Communication Topology"
+  - "Axis 3: Agent Relationships"
+  - "Using the Framework"
+---
+## Three Independent Axes
+
+Multi-agent systems can be classified along three independent axes. Any real system is a combination of one choice from each axis - understanding this framework lets you reason about any MAS you encounter, even novel ones.
+
+<PlaygroundAccordion title="Try it: Three Independent Axes">
+  <PlaygroundComponent name="classification-axis" />
+</PlaygroundAccordion>
+
+## Axis 1: Control Structure
+
+How decisions about "what happens next" are made.
+
+- **Centralized** - A single coordinator/manager agent decides. Examples: Hierarchical, Selector.
+- **Decentralized** - Each agent decides independently. Examples: Handoff/Swarm, Market.
+- **Hybrid** - Central planning with autonomous execution. Examples: Graph with agent nodes.
+
+Centralized systems are easier to debug but have a single point of failure. Decentralized systems are more resilient but harder to reason about.
+
+## Axis 2: Communication Topology
+
+How information flows between agents.
+
+- **Star** - All agents communicate through a central hub. Example: Manager-Worker.
+- **Mesh** - Any agent can communicate with any other. Example: Debate, Swarm.
+- **Pipeline** - Information flows linearly A → B → C. Example: Sequential.
+- **Broadcast** - One-to-many communication. Example: Ensemble, Voting.
+- **Blackboard** - Agents read/write to a shared workspace. Example: Blackboard.
+
+The topology determines latency characteristics. Star and pipeline add sequential hops; broadcast and mesh enable parallelism.
+
+<PlaygroundAccordion title="Try it: Axis 2: Communication Topology">
+  <PlaygroundComponent name="topology-visualizer" />
+</PlaygroundAccordion>
+
+## Axis 3: Agent Relationships
+
+How agents relate to each other in terms of authority.
+
+- **Peer** - Equal status, collaborative. Example: Debate, Ensemble.
+- **Hierarchical** - Manager → Worker authority. Example: Hierarchical.
+- **Competitive** - Agents compete for selection. Example: Market/Auction.
+- **Mixed** - Different relationships for different interactions. Example: Real-world systems.
+
+Most production systems use mixed relationships - a manager delegates to peer workers who may compete for subtask assignment.
+
+## Using the Framework
+
+When you see a new multi-agent system, classify it: What's the control structure? What's the communication topology? What are the agent relationships?
+
+For example, AutoGen's `SelectorGroupChat` is centralized (selector LLM decides) + star (all agents talk through the selector) + peer (agents have equal authority). LangGraph is hybrid (graph structure is predetermined, but nodes can be autonomous) + varies by graph design + varies.
+
+This framework will help you compare the architecture patterns covered in the next series.
+

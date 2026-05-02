@@ -1,0 +1,129 @@
+---
+title: "Putting It All Together"
+description: "End-to-end design of a multi-agent customer support system - choosing patterns, defining agents, wiring communication, and adding guardrails."
+tags:
+  - "end-to-end"
+  - "system-design"
+  - "customer-support"
+  - "capstone"
+readTime: "15 min"
+publishDate: "2026-04-14"
+seriesOrder: 4
+headings:
+  - "The Scenario"
+  - "Step 1: Choose the Architecture Pattern"
+  - "Step 2: Define the Agents"
+  - "Step 3: Design the Graph"
+  - "Step 4: Add Observability and Guardrails"
+  - "What We Applied"
+---
+## The Scenario
+
+Let's design a complete multi-agent customer support system from scratch, applying everything from this series. The system needs to handle FAQ questions, technical troubleshooting, billing inquiries, and escalation to humans - with high quality and full auditability.
+
+We'll make design decisions at each step and justify them using the frameworks and principles we've covered.
+
+## Step 1: Choose the Architecture Pattern
+
+Using our decision framework:
+
+- **Predictability?** Somewhat predictable - known query categories, but varied handling within each. → Selector or Handoff
+- **Quality vs speed?** Balanced - fast enough for real-time chat, good enough to resolve issues. → Selector or Hierarchical
+- **Auditability?** Yes - we need to trace why the system routed to a particular agent. → Graph or Selector
+
+**Decision:** A **Graph** with a selector at the entry point. The graph gives us auditable, deterministic transitions for the known flow (classify → route → handle → close). The selector within the classification node handles the dynamic routing to specialists.
+
+<PlaygroundAccordion title="Try it: Step 1: Choose the Architecture Pattern">
+  <PlaygroundComponent name="system-design-wizard" />
+</PlaygroundAccordion>
+
+## Step 2: Define the Agents
+
+Following the single-responsibility principle:
+
+- **Classifier Agent** - Classifies intent (FAQ, technical, billing, escalation) and extracts key entities. *No tools.*
+- **FAQ Agent** - Answers common questions from a knowledge base. *Tools:* vector search over FAQ docs.
+- **Technical Agent** - Troubleshoots issues step by step. *Tools:* log search, ticket creation, system status API.
+- **Billing Agent** - Handles payment and subscription questions. *Tools:* billing API (read-only), subscription API.
+- **Escalation Agent** - Prepares a handoff summary for human agents. *No tools.*
+- **Quality Agent** - Reviews the final response before sending. *No tools.*
+
+Notice: every agent has one clear job, and tool access follows the principle of least privilege.
+
+## Step 3: Design the Graph
+
+The state object carries the conversation through the graph:
+
+1. **Entry** → Classifier Agent (determines intent)
+2. **Conditional edge** based on `state.intent`:
+   - `faq` → FAQ Agent
+   - `technical` → Technical Agent
+   - `billing` → Billing Agent
+   - `escalation` → Escalation Agent
+3. **Each specialist** → Quality Agent (reviews response)
+4. **Quality Agent** → Conditional edge:
+   - `approved` → END (send response)
+   - `needs_revision` → Back to the specialist
+5. **Max revision count** of 2 to prevent infinite loops
+
+```python
+workflow = StateGraph(SupportState)
+
+workflow.add_node("classify", classifier_agent)
+workflow.add_node("faq", faq_agent)
+workflow.add_node("technical", technical_agent)
+workflow.add_node("billing", billing_agent)
+workflow.add_node("escalation", escalation_agent)
+workflow.add_node("quality", quality_agent)
+
+workflow.set_entry_point("classify")
+workflow.add_conditional_edges("classify", route_by_intent, {
+    "faq": "faq",
+    "technical": "technical",
+    "billing": "billing",
+    "escalation": "escalation",
+})
+
+for node in ["faq", "technical", "billing"]:
+    workflow.add_edge(node, "quality")
+
+workflow.add_conditional_edges("quality", check_quality, {
+    "approved": END,
+    "needs_revision": "route_back",
+})
+workflow.add_edge("escalation", END)
+```
+
+<PlaygroundAccordion title="Try it: Step 3: Design the Graph">
+  <PlaygroundComponent name="query-simulator" />
+</PlaygroundAccordion>
+
+## Step 4: Add Observability and Guardrails
+
+Following the design principles:
+
+**Observability:** Every node logs: agent name, input state, output state, tool calls, token count, and latency. This feeds into a dashboard for monitoring routing accuracy and response quality.
+
+**Guardrails:**
+- The classifier has a confidence threshold - low confidence routes to escalation
+- Each specialist has a max turn count (prevents runaway reasoning)
+- The quality agent has specific evaluation criteria (accuracy, tone, completeness)
+- All tool calls are logged and rate-limited
+
+**Failure modes:**
+- LLM API timeout → Retry once, then escalate to human
+- Tool failure → Agent reports the failure; doesn't guess
+- Low-confidence classification → Route to escalation with explanation
+
+## What We Applied
+
+This design used concepts from across the entire series:
+
+- **Classification framework:** Hybrid control (graph structure + LLM classification), star topology (all specialists connect through the quality node), mixed relationships (classifier is authoritative, specialists are peers)
+- **Architecture patterns:** Graph for the overall flow, with elements of Selector at the classification node and Debate between specialists and the quality agent
+- **Communication:** Direct messaging along graph edges, with structured state passing
+- **Memory:** Working memory within each node's context, semantic memory (RAG) for the FAQ agent, procedural memory (system prompts) for all agents
+- **Principles:** Single responsibility, fail gracefully, observability, tool isolation
+
+This is how the pieces fit together in practice. Start with the decision framework, choose patterns, define agents with clear boundaries, wire the communication, and add guardrails.
+
