@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
 import { useSearchParams, Link } from "react-router-dom";
+import { usePageMeta } from "../hooks/usePageMeta";
 import { motion } from "framer-motion";
 import { FiArrowRight, FiSearch, FiX } from "react-icons/fi";
 import BlogCard from "../components/blog/BlogCard";
@@ -7,7 +8,56 @@ import { blogPosts } from "../data/blogPosts";
 import { CATEGORIES, SERIES, getSeriesByCategory } from "../data/series";
 import { CATEGORY_ICONS } from "../data/categoryIcons";
 
+const BLOG_JSON_LD = [
+  {
+    "@context": "https://schema.org",
+    "@type": "CollectionPage",
+    "name": "Rahul Mrinal — Technical Blog",
+    "url": "https://rahul-mrinal.github.io/blog",
+    "description": "Deep-dive technical blog posts by Rahul Mrinal on search engineering, multi-agent AI systems, agentic AI, RAG, and distributed architecture.",
+    "author": {
+      "@type": "Person",
+      "name": "Rahul Mrinal",
+      "url": "https://rahul-mrinal.github.io"
+    },
+    "publisher": {
+      "@type": "Person",
+      "name": "Rahul Mrinal"
+    },
+    "inLanguage": "en-US"
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    "itemListElement": [
+      {
+        "@type": "ListItem",
+        "position": 1,
+        "name": "Home",
+        "item": "https://rahul-mrinal.github.io/"
+      },
+      {
+        "@type": "ListItem",
+        "position": 2,
+        "name": "Blog",
+        "item": "https://rahul-mrinal.github.io/blog"
+      }
+    ]
+  }
+];
+
 export default function Blog() {
+  usePageMeta({
+    title: "Blog — Rahul Mrinal | Search Engineering, Agentic AI & LLM Technical Writing",
+    description:
+      "Rahul Mrinal's technical blog on GitHub. Deep-dive posts on search engineering, multi-agent systems, agentic AI, RAG, LLM, and distributed architecture. 50+ in-depth articles.",
+    keywords:
+      "Rahul Mrinal blog, rahul mrinal blog github, rahul mrinal technical writing, search engineering blog, agentic AI blog, multi-agent systems, RAG systems, LLM blog, AI engineer blog, GitHub blog rahul mrinal, rahul mrinal github, distributed systems blog",
+    canonical: "https://rahul-mrinal.github.io/blog",
+    ogType: "website",
+    jsonLd: BLOG_JSON_LD,
+  });
+
   const [searchParams, setSearchParams] = useSearchParams();
   const activeCategory = searchParams.get("category");
   const activeSeries = searchParams.get("series");
@@ -61,7 +111,6 @@ export default function Blog() {
 
   return (
     <main className="min-h-screen pt-24 pb-16 px-6">
-      <title>Blog - Rahul Mrinal</title>
       <div className="max-w-6xl mx-auto">
         {/* Header */}
         <motion.div

@@ -1,4 +1,11 @@
 User-agent: *
 Allow: /
 
+# High-value pages for crawlers
+Allow: /blog
+Allow: /blog/
+
+Disallow: /src/
+Disallow: /*.json$
+
 Sitemap: https://rahul-mrinal.github.io/sitemap.xml

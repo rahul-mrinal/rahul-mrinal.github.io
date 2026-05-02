@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { useParams, Link, Navigate } from "react-router-dom";
+import { usePageMeta } from "../hooks/usePageMeta";
 import { motion } from "framer-motion";
 import { FiClock, FiCalendar, FiArrowLeft } from "react-icons/fi";
 import type { ComponentType } from "react";
@@ -140,9 +141,59 @@ export default function BlogPost() {
 
   if (notFound) return <Navigate to="/blog" replace />;
 
+  const BASE = "https://rahul-mrinal.github.io";
+  const postUrl = `${BASE}/blog/${series}/${slug}`;
+  const blogPostJsonLd = [
+    {
+      "@context": "https://schema.org",
+      "@type": "BlogPosting",
+      "headline": post.title,
+      "description": post.description,
+      "url": postUrl,
+      "datePublished": post.publishDate,
+      "dateModified": post.publishDate,
+      "author": {
+        "@type": "Person",
+        "name": "Rahul Mrinal",
+        "url": BASE,
+      },
+      "publisher": {
+        "@type": "Person",
+        "name": "Rahul Mrinal",
+        "url": BASE,
+      },
+      "keywords": post.tags.join(", "),
+      "inLanguage": "en-US",
+      "isPartOf": {
+        "@type": "Blog",
+        "name": "Rahul Mrinal — Technical Blog",
+        "url": `${BASE}/blog`,
+      },
+    },
+    {
+      "@context": "https://schema.org",
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        { "@type": "ListItem", "position": 1, "name": "Home", "item": `${BASE}/` },
+        { "@type": "ListItem", "position": 2, "name": "Blog", "item": `${BASE}/blog` },
+        { "@type": "ListItem", "position": 3, "name": seriesInfo?.title ?? series, "item": `${BASE}/blog?series=${series}` },
+        { "@type": "ListItem", "position": 4, "name": post.title, "item": postUrl },
+      ],
+    },
+  ];
+
+  usePageMeta({
+    title: `${post.title} — Rahul Mrinal`,
+    description: post.description,
+    keywords: `${post.tags.join(", ")}, Rahul Mrinal, ${seriesInfo?.title ?? ""}, blog, GitHub`,
+    canonical: postUrl,
+    ogType: "article",
+    publishDate: post.publishDate,
+    jsonLd: blogPostJsonLd,
+  });
+
   return (
     <main className="min-h-screen pt-24 pb-16 px-6">
-      <title>{`${post.title} - Rahul Mrinal`}</title>
       <ReadingProgress />
       <TableOfContents headings={headings} />
       <article className="max-w-3xl mx-auto">
