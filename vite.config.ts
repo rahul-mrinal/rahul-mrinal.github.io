@@ -5,11 +5,12 @@ import tailwindcss from '@tailwindcss/vite'
 import mdx from '@mdx-js/rollup'
 import remarkFrontmatter from 'remark-frontmatter'
 import remarkMdxFrontmatter from 'remark-mdx-frontmatter'
+import remarkGfm from 'remark-gfm'
 import path from 'path'
 
 export default defineConfig({
   plugins: [
-    mdx({ remarkPlugins: [remarkFrontmatter, remarkMdxFrontmatter] }),
+    mdx({ remarkPlugins: [remarkFrontmatter, remarkMdxFrontmatter, remarkGfm] }),
     react(),
     tailwindcss(),
   ],

@@ -91,13 +91,19 @@ function buildComponents(headings: string[]): MdxComponents {
     thead: ({ children }: { children?: React.ReactNode }) => (
       <thead className="border-b border-border">{children}</thead>
     ),
+    tbody: ({ children }: { children?: React.ReactNode }) => (
+      <tbody className="divide-y divide-border/30">{children}</tbody>
+    ),
+    tr: ({ children }: { children?: React.ReactNode }) => (
+      <tr className="hover:bg-white/[0.02] transition-colors">{children}</tr>
+    ),
     th: ({ children }: { children?: React.ReactNode }) => (
-      <th className="text-left text-white font-semibold px-3 py-2 text-xs uppercase tracking-wider">
+      <th className="text-left text-white font-semibold px-3 py-2 text-xs uppercase tracking-wider whitespace-nowrap">
         {children}
       </th>
     ),
     td: ({ children }: { children?: React.ReactNode }) => (
-      <td className="px-3 py-2 border-b border-border/50">{children}</td>
+      <td className="px-3 py-2 text-text-secondary text-sm">{children}</td>
     ),
     /* eslint-disable @typescript-eslint/no-explicit-any */
     PlaygroundAccordion: PlaygroundAccordion as ComponentType<any>,

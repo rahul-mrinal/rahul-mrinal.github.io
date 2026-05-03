@@ -33,7 +33,7 @@ export default function InvertedIndexBuilder() {
       stats: { docs: lines.length, terms: sorted.length, tokens: totalTokens,
         avgPL: sorted.length ? (sorted.reduce((s, e) => s + Object.keys(e[1].docs).length, 0) / sorted.length).toFixed(1) : "0" },
     };
-  }, [docs, showPos, removeStops]);
+  }, [docs, removeStops]);
 
   return (
     <div>

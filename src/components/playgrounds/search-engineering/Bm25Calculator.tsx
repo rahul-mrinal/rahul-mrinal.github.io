@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useMemo } from "react";
 import "../ChartTheme";
 
 const DEFAULT_DOCS = [
@@ -48,7 +48,7 @@ export default function Bm25Calculator() {
   const [k1, setK1] = useState(1.2);
   const [b, setB] = useState(0.75);
 
-  const results = useCallback(() => {
+  const ranked = useMemo(() => {
     const docs = docsText.split("\n").filter(Boolean);
     const corpus = docs.map((d) => d.toLowerCase().split(/\s+/));
     const queryTerms = query.toLowerCase().split(/\s+/).filter(Boolean);
@@ -60,8 +60,6 @@ export default function Bm25Calculator() {
       }))
       .sort((a, bv) => bv.score - a.score);
   }, [query, docsText, k1, b]);
-
-  const ranked = results();
   const queryTerms = query.toLowerCase().split(/\s+/).filter(Boolean);
 
   return (
@@ -122,7 +120,7 @@ export default function Bm25Calculator() {
       </div>
 
       <div className="space-y-2">
-        {ranked.map((r, i) => (
+        {ranked.map((r: { text: string; score: number }, i: number) => (
           <div
             key={i}
             className="flex items-center gap-3 bg-[#0d0e14] border border-border rounded-lg px-4 py-3"

@@ -35,11 +35,11 @@ These are fundamentally different operations. **Ranking** assigns a continuous s
 | **Category** | = / IN | category IN ("shoes", "boots") | Bitmap index |
 | **Range** | BETWEEN | price BETWEEN 50 AND 200 | Sorted array / B-tree |
 | **Boolean** | = true/false | in_stock = true | Bitset (1 bit per doc) |
-| **Date Range** | >, < | created_at > 2024-01-01 | Range tree / sorted |
+| **Date Range** | &gt;, &lt; | created_at &gt; 2024-01-01 | Range tree / sorted |
 | **Multi-value** | CONTAINS | tags CONTAINS "organic" | Inverted index on tags |
 | **Geo** | WITHIN | location WITHIN 10km | Geohash / R-tree |
 
-For low-cardinality fields (&lt;100 values), bitmap indexes work best - combine with bitwise AND/OR at billions of bits per second. For high-cardinality fields (>10K values), use hash indexes or B-trees. Elasticsearch maintains a filter cache of frequently used filters as Roaring Bitmaps - reusing a cached filter is microseconds even on billions of docs.
+For low-cardinality fields (&lt;100 values), bitmap indexes work best - combine with bitwise AND/OR at billions of bits per second. For high-cardinality fields (&gt;10K values), use hash indexes or B-trees. Elasticsearch maintains a filter cache of frequently used filters as Roaring Bitmaps - reusing a cached filter is microseconds even on billions of docs.
 
 ## Pre-filter vs Post-filter
 

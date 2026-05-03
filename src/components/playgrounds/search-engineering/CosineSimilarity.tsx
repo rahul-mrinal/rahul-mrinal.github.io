@@ -1,11 +1,6 @@
 import { useState, useCallback } from "react";
 import "../ChartTheme";
 
-const STOPWORDS = new Set([
-  "the","a","an","is","was","were","are","on","in","at","to","for","of","and",
-  "or","but","it","this","that","with","from","by","as","be","has","had","have",
-]);
-
 const SYNONYMS: Record<string, string[]> = {
   cat: ["kitten","feline"], kitten: ["cat","feline"], dog: ["puppy","canine"],
   puppy: ["dog","canine"], car: ["automobile","vehicle"], automobile: ["car","vehicle"],
@@ -15,11 +10,30 @@ const SYNONYMS: Record<string, string[]> = {
   learning: ["training","studying"], house: ["home","dwelling"], home: ["house","dwelling"],
 };
 
-function stem(w: string) {
-  if (w.endsWith("ing") && w.length > 5) return w.slice(0, -3);
-  if (w.endsWith("ed") && w.length > 4) return w.slice(0, -2);
-  if (w.endsWith("s") && !w.endsWith("ss") && w.length > 3) return w.slice(0, -1);
-  return w;
+function tokenize(s: string) {
+  return s.toLowerCase().replace(/[^\w\s]/g, "").split(/\s+/).filter(Boolean);
+}
+
+// Expand each token with its synonyms so synonym pairs share vocabulary
+function expand(tokens: string[]): string[] {
+  const out = [...tokens];
+  tokens.forEach((w) => (SYNONYMS[w] ?? []).forEach((syn) => out.push(syn)));
+  return out;
+}
+
+// Build a term-frequency vector over a shared vocabulary
+function tfVector(tokens: string[], vocab: string[]): number[] {
+  const freq: Record<string, number> = {};
+  tokens.forEach((t) => { freq[t] = (freq[t] ?? 0) + 1; });
+  return vocab.map((v) => freq[v] ?? 0);
+}
+
+function cosineSimilarity(a: number[], b: number[]): number {
+  const dot = a.reduce((sum, v, i) => sum + v * b[i], 0);
+  const magA = Math.sqrt(a.reduce((sum, v) => sum + v * v, 0));
+  const magB = Math.sqrt(b.reduce((sum, v) => sum + v * v, 0));
+  if (magA === 0 || magB === 0) return 0;
+  return dot / (magA * magB);
 }
 
 export default function CosineSimilarity() {
@@ -28,31 +42,28 @@ export default function CosineSimilarity() {
   const [result, setResult] = useState<{ score: number; exact: number; syn: number } | null>(null);
 
   const compute = useCallback(() => {
-    const tokenize = (s: string) => s.toLowerCase().replace(/[^\w\s]/g, "").split(/\s+/).filter(Boolean);
-    const meaningful = (t: string[]) => t.filter((w) => !STOPWORDS.has(w));
-    const mA = meaningful(tokenize(sentA));
-    const mB = meaningful(tokenize(sentB));
-    const setB = new Set(mB);
-    const setBStem = new Set(mB.map(stem));
+    const tokA = tokenize(sentA);
+    const tokB = tokenize(sentB);
 
-    let exact = 0;
-    mA.forEach((w) => { if (setB.has(w)) exact++; });
+    const expA = expand(tokA);
+    const expB = expand(tokB);
 
-    let stemExtra = 0;
-    mA.map(stem).forEach((w) => { if (setBStem.has(w)) stemExtra++; });
-    stemExtra = Math.max(0, stemExtra - exact);
+    // Shared vocabulary = union of all expanded tokens
+    const vocab = [...new Set([...expA, ...expB])];
 
-    let syn = 0;
-    mA.forEach((wa) => {
-      (SYNONYMS[wa] || []).forEach((s) => { if (setB.has(s)) syn++; });
-    });
-    syn = Math.min(syn, mA.length);
+    const vecA = tfVector(expA, vocab);
+    const vecB = tfVector(expB, vocab);
 
-    const max = Math.max(mA.length, mB.length, 1);
-    const lenSim = 1 - Math.abs(mA.length - mB.length) / max;
-    let score = (exact / max) * 0.45 + (stemExtra / max) * 0.2 + (syn / max) * 0.25 + lenSim * 0.1;
-    score = Math.max(0.02, Math.min(0.98, score));
-    setResult({ score, exact, syn });
+    const score = cosineSimilarity(vecA, vecB);
+
+    // Count exact token overlaps (original tokens, for display)
+    const setB = new Set(tokB);
+    const exact = tokA.filter((w) => setB.has(w)).length;
+    const synCount = tokA.filter(
+      (w) => (SYNONYMS[w] ?? []).some((s) => setB.has(s))
+    ).length;
+
+    setResult({ score, exact, syn: synCount });
   }, [sentA, sentB]);
 
   const color = result
@@ -80,7 +91,7 @@ export default function CosineSimilarity() {
       {result && (
         <div className="bg-[#0d0e14] border border-border rounded-lg p-4">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs text-text-secondary">Simulated Cosine Similarity</span>
+            <span className="text-xs text-text-secondary">Cosine Similarity (bag-of-words + synonyms)</span>
             <span className={`text-2xl font-bold font-mono ${color}`}>{result.score.toFixed(3)}</span>
           </div>
           <div className="w-full h-2 bg-border rounded-full overflow-hidden">

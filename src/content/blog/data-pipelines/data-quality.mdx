@@ -41,7 +41,7 @@ Run automated quality checks at every stage. A document that fails validation sh
 
 ## Post-Load Sanity Checks
 
-After reindexing, validate before swapping the alias: compare document counts between old and new index (abort if new < 95% of old), run canary queries ("shoes", "laptop") and verify non-zero results, check field statistics (avg price, null rates) for anomalies.
+After reindexing, validate before swapping the alias: compare document counts between old and new index (abort if new &lt; 95% of old), run canary queries ("shoes", "laptop") and verify non-zero results, check field statistics (avg price, null rates) for anomalies.
 
 Freshness monitoring: track the timestamp of the most recently indexed document. Data Freshness = t_now - max(t_source_updated). If the gap exceeds your SLA, fire an alert. A stale pipeline might still be "running" - just not processing new data.
 

@@ -53,7 +53,12 @@ export default function TfIdfVsBm25Compare() {
   }, [k1, b, corpus]);
 
   const chartData = useMemo(() => {
-    const idf = Math.log(DOCS.length / 3 + 1);
+    // Use average IDF across all query terms for a representative saturation curve
+    const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
+    const idf = terms.reduce((sum, t) => {
+      const df = corpus.filter((d) => d.includes(t)).length;
+      return sum + (df > 0 ? Math.log((corpus.length - df + 0.5) / (df + 0.5) + 1) : 0);
+    }, 0) / Math.max(terms.length, 1);
     const labels: number[] = [];
     const tfidfVals: number[] = [];
     const bm25Vals: number[] = [];
@@ -69,7 +74,7 @@ export default function TfIdfVsBm25Compare() {
         { label: "BM25", data: bm25Vals, borderColor: CHART_COLORS.teal, fill: false, tension: 0.3, pointRadius: 0, borderWidth: 2.5 },
       ],
     };
-  }, [k1]);
+  }, [k1, corpus]);
 
   const options = {
     ...CHART_DEFAULTS,

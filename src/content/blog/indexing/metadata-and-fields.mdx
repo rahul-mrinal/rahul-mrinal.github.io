@@ -41,7 +41,7 @@ Keyword fields are stored as-is. "New York City" only matches the exact string "
 
 **Filtering** includes or excludes documents using exact criteria - no scoring involved. The engine uses metadata indexes (keyword, numeric, boolean) for fast exact filtering.
 
-The real power is combining both: "wireless headphones" with filters brand=Sony, price < $400, in_stock=true. The engine first applies the filter (cheap bitset operation), then runs BM25 only on the filtered subset - dramatically faster than scoring all documents first.
+The real power is combining both: "wireless headphones" with filters brand=Sony, price &lt; $400, in_stock=true. The engine first applies the filter (cheap bitset operation), then runs BM25 only on the filtered subset - dramatically faster than scoring all documents first.
 
 ## Multi-Field Mappings and Analyzers
 

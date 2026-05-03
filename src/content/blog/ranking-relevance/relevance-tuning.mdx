@@ -58,7 +58,7 @@ In Elasticsearch, use `function_score` query with `score_mode: "sum"` for additi
 
 ## A/B Testing Relevance
 
-Never ship relevance changes without measurement. The workflow: Define metrics (NDCG, CTR, dwell time) -> Randomize users into A/B -> Run experiment 1-2 weeks -> Statistical significance test (p < 0.05 with 1,000-10,000+ queries per variant) -> Ship or rollback.
+Never ship relevance changes without measurement. The workflow: Define metrics (NDCG, CTR, dwell time) -> Randomize users into A/B -> Run experiment 1-2 weeks -> Statistical significance test (p &lt; 0.05 with 1,000-10,000+ queries per variant) -> Ship or rollback.
 
 Common pitfalls: **Position bias** (users click position 1 regardless - use interleaving to eliminate), **Novelty effect** (new rankings get more clicks because they look different - run 2+ weeks).
 
@@ -66,5 +66,5 @@ The tuning workflow: (1) Establish baseline, (2) Build 100-500 query-document ju
 
 ## Key Takeaway
 
-Relevance tuning is not a one-time task - it's a continuous feedback loop. Start with field boosting (title > tags > description), add function scoring for business signals (recency, popularity), and validate every change with A/B tests. The goal is not perfect ranking - it's measurably better ranking than what you had yesterday.
+Relevance tuning is not a one-time task - it's a continuous feedback loop. Start with field boosting (title &gt; tags &gt; description), add function scoring for business signals (recency, popularity), and validate every change with A/B tests. The goal is not perfect ranking - it's measurably better ranking than what you had yesterday.
 
